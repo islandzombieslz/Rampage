@@ -1,0 +1,64 @@
+name: Atualizar economia do modo Guerra
+
+on:
+  push:
+    paths:
+      - '.github/workflows/update-economy-limits.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar novos valores
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          replacements={
+            'Mago 250 • Golem 350 gemas.':'Mago 550 • Golem 350 gemas.',
+            '<button id="buyMage">250 💎</button>':'<button id="buyMage">550 💎</button>',
+            "state.gems=clamp(state.gems+dir*100,300,5000);":"state.gems=clamp(state.gems+dir*100,300,3000);",
+            'p.gems=state.gems+(p.bonusGems||0);':'p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);',
+            "else if(p.gems>=250 && roll<.58)buyMageForPlayer(p,true);":"else if(p.gems>=550 && roll<.58)buyMageForPlayer(p,true);",
+            'if(p.gems<250)return false;p.gems-=250;p.troops++;':'if(p.gems<550)return false;p.gems-=550;p.troops++;',
+            "$('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<250;":"$('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<550;"
+          }
+          missing=[old for old in replacements if old not in s]
+          if missing:
+            raise SystemExit('Trechos esperados não encontrados: '+repr(missing))
+          for old,new in replacements.items():
+            s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+
+      - name: Validar
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Mago 550 • Golem 350 gemas.' index.html
+          grep -q 'id="buyMage">550 💎' index.html
+          grep -q 'state.gems=clamp(state.gems+dir\*100,300,3000)' index.html
+          grep -q 'p.gems=clamp(state.gems+(p.bonusGems||0),0,3000)' index.html
+          grep -q 'p.gems>=550' index.html
+          grep -q 'p.gems<550' index.html
+          grep -q "buyMage').disabled=.*<550" index.html
+          ! grep -q 'Mago 250' index.html
+          ! grep -q 'id="buyMage">250' index.html
+
+      - name: Publicar
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Update mage cost and gem cap'
+          git push
