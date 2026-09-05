@@ -1918,7 +1918,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <div class="config">
         <div class="label">Gemas iniciais por jogador</div>
         <div class="counter"><button class="minus" data-target="gems">−</button><b id="gemsVal">500</b><button class="plus" data-target="gems">+</button></div>
-        <div class="small">Guerreiro 75 • Mago 250 • Golem 350 gemas.</div>
+        <div class="small">Guerreiro 75 • Mago 550 • Golem 350 gemas.</div>
         <div class="small">O vencedor de cada rodada recebe +200 gemas extras na rodada seguinte.</div>
       </div>
     </div>
@@ -2010,7 +2010,7 @@ window.dispatchEvent(new Event('firebase-ready'));
             <div class="small">200 vida + 50 escudo • fogo 5 por pulso</div>
             <div class="small">Especial 100 + cura 30 na área: cercado ou com ≤50% de vida</div>
           </div>
-          <button id="buyMage">250 💎</button>
+          <button id="buyMage">550 💎</button>
         </div>
 
         <div class="shop-unit">
@@ -2412,7 +2412,7 @@ function applyStepperButton(b){
   const dir=b.classList.contains('plus')?1:-1;
 
   if(b.dataset.target==='rounds') state.rounds=clamp(state.rounds+dir,2,10);
-  if(b.dataset.target==='gems') state.gems=clamp(state.gems+dir*100,300,5000);
+  if(b.dataset.target==='gems') state.gems=clamp(state.gems+dir*100,300,3000);
 
   if(b.dataset.target==='npcs'){
     if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
@@ -3577,7 +3577,7 @@ function territoryFor(i,n){
 function setupWarRound(){
  state.entities=[];state.particles=[];clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
-   p.gems=state.gems+(p.bonusGems||0);
+   p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);
    p.troops=0;
    p.territory=territoryFor(i,state.players.length);
    // Cada rodada começa: Guerreiro -> Guerreira -> Guerreiro -> Guerreira...
@@ -3588,7 +3588,7 @@ function setupWarRound(){
    while(p.gems>=75){
      const roll=Math.random();
      if(p.gems>=350 && roll<.25)buyGolemForPlayer(p,true);
-     else if(p.gems>=250 && roll<.58)buyMageForPlayer(p,true);
+     else if(p.gems>=550 && roll<.58)buyMageForPlayer(p,true);
      else buyForPlayer(p,true);
    }
   });
@@ -3627,7 +3627,7 @@ function buyGolemForPlayer(p,bot){
  return true;
 }
 function buyMageForPlayer(p,bot){
- if(p.gems<250)return false;p.gems-=250;p.troops++;
+ if(p.gems<550)return false;p.gems-=550;p.troops++;
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*84;
  spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female');
  return true;
@@ -4766,7 +4766,7 @@ function updateHUD(){
     $('#aliveCount').textContent='';
     $('#buyWarrior').disabled=state.phase!=='prep'||(me?.gems??0)<75;
     $('#buyGolem').disabled=state.phase!=='prep'||(me?.gems??0)<350;
-    $('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<250;
+    $('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<550;
   }
 }
 function finishGame(msg){
