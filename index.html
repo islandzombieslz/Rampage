@@ -10,6 +10,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Guerra de Clãs — Protótipo</title>
+<!-- ASSET-LOADING-OPTIMIZATION -->
+<link rel="preload" as="image" href="assets/ui/background-menu.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/ui/criar-partida.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/ui/usar-codigo.png" fetchpriority="high">
+<link rel="prefetch" as="image" href="assets/ui/botao-pvp.png">
+<link rel="prefetch" as="image" href="assets/ui/botao-mestre-da-guerra.png">
+<link rel="prefetch" as="image" href="assets/ui/pvp-menu.png">
+<link rel="prefetch" as="image" href="assets/ui/mestre-da-guerra-menu.png">
+
 <style>
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#21262d; --text:#f0f6fc;
@@ -1801,7 +1810,7 @@ window.dispatchEvent(new Event('firebase-ready'));
 <div id="screenTransitionFade" aria-hidden="true"></div>
 
 <section id="menuScreen" class="screen active">
-  <img id="menuWallpaper" src="assets/ui/background-menu.png" alt="" draggable="false">
+  <img id="menuWallpaper" src="assets/ui/background-menu.png" alt="" draggable="false" loading="eager" decoding="async" fetchpriority="high">
   <div id="accountPanel">
     <button id="accountButton"><span id="accountName">Entrar</span> ▾</button>
     <div id="accountMenu">
@@ -1817,11 +1826,11 @@ window.dispatchEvent(new Event('firebase-ready'));
   </div>
   <div class="menu-sprite-actions">
     <button id="createBtn" class="menu-sprite-btn" type="button" aria-label="Criar partida">
-      <img src="assets/ui/criar-partida.png" alt="Criar partida" draggable="false">
+      <img src="assets/ui/criar-partida.png" alt="Criar partida" draggable="false" loading="eager" decoding="async" fetchpriority="high">
       <span class="menu-label">Criar partida</span>
     </button>
     <button id="joinBtn" class="menu-sprite-btn" type="button" aria-label="Usar código">
-      <img src="assets/ui/usar-codigo.png" alt="Usar código" draggable="false">
+      <img src="assets/ui/usar-codigo.png" alt="Usar código" draggable="false" loading="eager" decoding="async" fetchpriority="high">
       <span class="menu-label">Usar código</span>
     </button>
   </div>
@@ -1846,10 +1855,10 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div class="mode-menu-shell">
     <div class="mode-grid">
       <button class="mode-card selected" data-mode="pve" type="button" aria-label="Players vs Inimigos">
-        <img src="assets/ui/botao-pvp.png" alt="Players vs Inimigos" draggable="false">
+        <img src="assets/ui/botao-pvp.png" alt="Players vs Inimigos" draggable="false" loading="lazy" decoding="async">
       </button>
       <button class="mode-card" data-mode="war" type="button" aria-label="Mestre da Guerra">
-        <img src="assets/ui/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false">
+        <img src="assets/ui/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false" loading="lazy" decoding="async">
       </button>
     </div>
     <div class="mode-actions">
@@ -1950,7 +1959,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     <h2>Escolha seu clã</h2>
     <p class="sub">Por enquanto existe apenas o clã Guerreiros. Players podem escolher o mesmo clã; cada exército recebe um contorno próprio.</p>
     <div class="clan-option selected">
-      <img src="assets/ui/cla-guerreiros.png" alt="">
+      <img src="assets/ui/cla-guerreiros.png" alt="" loading="lazy" decoding="async">
       <div>
         <h3>Guerreiros</h3>
         <div class="small">Guerreiro/Guerreira • Mago/Maga • Golem</div>
@@ -1985,7 +1994,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <h3 style="margin-top:0">Loja</h3>
       <div class="shop-items">
         <div class="shop-unit">
-          <img src="assets/warrior/guerreiro-parado.gif">
+          <img src="assets/warrior/guerreiro-parado.gif" loading="lazy" decoding="async">
           <div class="shop-unit-info">
             <b>Guerreiro / Guerreira</b>
             <div class="small">100 vida + 50 escudo • 20 dano</div>
@@ -1995,7 +2004,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </div>
 
         <div class="shop-unit mage-shop-unit">
-          <img src="assets/mage/mago-parado.gif">
+          <img src="assets/mage/mago-parado.gif" loading="lazy" decoding="async">
           <div class="shop-unit-info">
             <b>Mago / Maga Guerreiros</b>
             <div class="small">200 vida + 50 escudo • fogo 5 por pulso</div>
@@ -2005,7 +2014,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </div>
 
         <div class="shop-unit">
-          <img src="assets/golem/golem-parado.gif">
+          <img src="assets/golem/golem-parado.gif" loading="lazy" decoding="async">
           <div class="shop-unit-info">
             <b>Golem Guerreiro</b>
             <div class="small">600 vida + 200 escudo • 40 dano • Especial 70</div>
