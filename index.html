@@ -109,7 +109,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   overflow:hidden;
   background:
     linear-gradient(rgba(3,6,10,.66),rgba(3,6,10,.72)),
-    url("https://i.postimg.cc/Hk5PzbCC/background-menu.png") center/cover no-repeat !important;
+    url("assets/ui/background-menu.png") center/cover no-repeat !important;
 }
 #joinScreen>.card{
   position:relative;z-index:2;
@@ -188,7 +188,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   overflow:hidden;
   background:
     linear-gradient(rgba(3,6,10,.68),rgba(3,6,10,.76)),
-    url("https://i.postimg.cc/Hk5PzbCC/background-menu.png") center/cover no-repeat !important;
+    url("assets/ui/background-menu.png") center/cover no-repeat !important;
 }
 #configScreen>.card{
   position:relative;
@@ -215,10 +215,10 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   gap:4px;
 }
 #configScreen.pve-config>.card{
-  background-image:url("https://i.postimg.cc/sxWsJvfB/pvp-menu.png");
+  background-image:url("assets/ui/pvp-menu.png");
 }
 #configScreen.war-config>.card{
-  background-image:url("https://i.postimg.cc/ydt79FHM/mestre-da-guerra-menu.png");
+  background-image:url("assets/ui/mestre-da-guerra-menu.png");
 }
 #configScreen #configTitle{
   position:absolute;
@@ -1445,7 +1445,7 @@ html,body{
   overflow:hidden;
   background:
     linear-gradient(rgba(3,6,10,.68),rgba(3,6,10,.76)),
-    url("https://i.postimg.cc/Hk5PzbCC/background-menu.png") center/cover no-repeat !important;
+    url("assets/ui/background-menu.png") center/cover no-repeat !important;
 }
 #lobbyScreen>.card{
   position:relative !important;
@@ -1468,10 +1468,10 @@ html,body{
   background-size:contain !important;
 }
 #lobbyScreen.pve-lobby>.card{
-  background-image:url("https://i.postimg.cc/sxWsJvfB/pvp-menu.png") !important;
+  background-image:url("assets/ui/pvp-menu.png") !important;
 }
 #lobbyScreen.war-lobby>.card{
-  background-image:url("https://i.postimg.cc/ydt79FHM/mestre-da-guerra-menu.png") !important;
+  background-image:url("assets/ui/mestre-da-guerra-menu.png") !important;
 }
 /* O próprio sprite já identifica o modo; mantemos o H2 apenas para acessibilidade/lógica. */
 #lobbyScreen #lobbyModeTitle{
@@ -1637,7 +1637,7 @@ html,body{
   overflow:hidden;
   background:
     linear-gradient(rgba(3,6,10,.68),rgba(3,6,10,.76)),
-    url("https://i.postimg.cc/Hk5PzbCC/background-menu.png") center/cover no-repeat !important;
+    url("assets/ui/background-menu.png") center/cover no-repeat !important;
 }
 #clanScreen>.card{
   position:relative !important;
@@ -1655,7 +1655,7 @@ html,body{
   box-shadow:none !important;
   backdrop-filter:none !important;
   background-color:transparent !important;
-  background-image:url("https://i.postimg.cc/ydt79FHM/mestre-da-guerra-menu.png") !important;
+  background-image:url("assets/ui/mestre-da-guerra-menu.png") !important;
   background-position:center !important;
   background-repeat:no-repeat !important;
   background-size:contain !important;
@@ -1796,12 +1796,12 @@ window.dispatchEvent(new Event('firebase-ready'));
 </head>
 <body>
 <div id="landscapeRoot" class="force-landscape">
-<div id="assetWarning">Não foi possível carregar os GIFs do guerreiro. Verifique a Internet ou o acesso ao i.postimg.cc.</div>
+<div id="assetWarning">Não foi possível carregar um ou mais assets locais do jogo.</div>
 <div id="mobileStartHint"><span>Toque para manter o jogo em tela cheia</span></div>
 <div id="screenTransitionFade" aria-hidden="true"></div>
 
 <section id="menuScreen" class="screen active">
-  <img id="menuWallpaper" src="https://i.postimg.cc/Hk5PzbCC/background-menu.png" alt="" draggable="false">
+  <img id="menuWallpaper" src="assets/ui/background-menu.png" alt="" draggable="false">
   <div id="accountPanel">
     <button id="accountButton"><span id="accountName">Entrar</span> ▾</button>
     <div id="accountMenu">
@@ -1817,11 +1817,11 @@ window.dispatchEvent(new Event('firebase-ready'));
   </div>
   <div class="menu-sprite-actions">
     <button id="createBtn" class="menu-sprite-btn" type="button" aria-label="Criar partida">
-      <img src="https://i.postimg.cc/fWFJBhzn/39fa9b22-f2cb-4ea6-ba64-27e2b0344f0b.png" alt="Criar partida" draggable="false">
+      <img src="assets/ui/criar-partida.png" alt="Criar partida" draggable="false">
       <span class="menu-label">Criar partida</span>
     </button>
     <button id="joinBtn" class="menu-sprite-btn" type="button" aria-label="Usar código">
-      <img src="https://i.postimg.cc/c1jrXNsp/db136e35-44fb-4780-ab43-209414c09962.png" alt="Usar código" draggable="false">
+      <img src="assets/ui/usar-codigo.png" alt="Usar código" draggable="false">
       <span class="menu-label">Usar código</span>
     </button>
   </div>
@@ -1846,10 +1846,10 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div class="mode-menu-shell">
     <div class="mode-grid">
       <button class="mode-card selected" data-mode="pve" type="button" aria-label="Players vs Inimigos">
-        <img src="https://i.postimg.cc/DfjDw2gs/botao-PVP.png" alt="Players vs Inimigos" draggable="false">
+        <img src="assets/ui/botao-pvp.png" alt="Players vs Inimigos" draggable="false">
       </button>
       <button class="mode-card" data-mode="war" type="button" aria-label="Mestre da Guerra">
-        <img src="https://i.postimg.cc/XNHhYV8p/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false">
+        <img src="assets/ui/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false">
       </button>
     </div>
     <div class="mode-actions">
@@ -1950,7 +1950,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     <h2>Escolha seu clã</h2>
     <p class="sub">Por enquanto existe apenas o clã Guerreiros. Players podem escolher o mesmo clã; cada exército recebe um contorno próprio.</p>
     <div class="clan-option selected">
-      <img src="https://i.postimg.cc/sXYvV6SD/Chat-GPT-Image-5-de-set-de-2026-14-31-31.png" alt="">
+      <img src="assets/ui/cla-guerreiros.png" alt="">
       <div>
         <h3>Guerreiros</h3>
         <div class="small">Guerreiro/Guerreira • Mago/Maga • Golem</div>
@@ -1985,7 +1985,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <h3 style="margin-top:0">Loja</h3>
       <div class="shop-items">
         <div class="shop-unit">
-          <img src="https://i.postimg.cc/7YtjGcbM/guerreiroparado-ezgif-com-crop.gif">
+          <img src="assets/warrior/guerreiro-parado.gif">
           <div class="shop-unit-info">
             <b>Guerreiro / Guerreira</b>
             <div class="small">100 vida + 50 escudo • 20 dano</div>
@@ -1995,7 +1995,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </div>
 
         <div class="shop-unit mage-shop-unit">
-          <img src="https://i.postimg.cc/kXySXpQL/mago-guerreiro-parado.gif">
+          <img src="assets/mage/mago-parado.gif">
           <div class="shop-unit-info">
             <b>Mago / Maga Guerreiros</b>
             <div class="small">200 vida + 50 escudo • fogo 5 por pulso</div>
@@ -2005,7 +2005,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </div>
 
         <div class="shop-unit">
-          <img src="https://i.postimg.cc/HsfdKGx1/golem-guerreiro-parado.gif">
+          <img src="assets/golem/golem-parado.gif">
           <div class="shop-unit-info">
             <b>Golem Guerreiro</b>
             <div class="small">600 vida + 200 escudo • 40 dano • Especial 70</div>
@@ -2061,31 +2061,31 @@ const NetworkAdapter = {
 
 /* ==================== CONFIGURAÇÃO ==================== */
 const ASSETS = {
-  idle:'https://i.postimg.cc/7YtjGcbM/guerreiroparado-ezgif-com-crop.gif',
-  walk:'https://i.postimg.cc/jd3Bw9CF/guerreiroandando-ezgif-com-crop.gif',
-  sword:'https://i.postimg.cc/RV1Nv7FF/espada-guerreiro.png',
+  idle:'assets/warrior/guerreiro-parado.gif',
+  walk:'assets/warrior/guerreiro-andando.gif',
+  sword:'assets/warrior/espada-guerreiro.png',
 
   // Variação feminina da tropa Guerreiro
-  femaleIdle:'https://i.postimg.cc/d0HKFgBj/guerreira-parada.gif',
-  femaleWalk:'https://i.postimg.cc/mr2G0TQD/guerreira-andando.gif',
+  femaleIdle:'assets/warrior/guerreira-parada.gif',
+  femaleWalk:'assets/warrior/guerreira-andando.gif',
 
   // Golem Guerreiro — clã Guerreiros
-  golemIdle:'https://i.postimg.cc/HsfdKGx1/golem-guerreiro-parado.gif',
-  golemWalk:'https://i.postimg.cc/YqJMVcSX/golem-guerreiro-andando.gif',
-  golemAttack:'https://i.postimg.cc/P5YTn6LR/golem-guerreiro-ataque.gif',
-  golemSpecial:'https://i.postimg.cc/7Z0wrBGk/golem-guerreiro-especial.gif',
-  golemRocks:'https://i.postimg.cc/Fs2NqtKC/pedras-golem-guerreiro.png',
+  golemIdle:'assets/golem/golem-parado.gif',
+  golemWalk:'assets/golem/golem-andando.gif',
+  golemAttack:'assets/golem/golem-ataque.gif',
+  golemSpecial:'assets/golem/golem-especial.gif',
+  golemRocks:'assets/golem/pedras-golem.png',
 
-  mageIdle:'https://i.postimg.cc/kXySXpQL/mago-guerreiro-parado.gif',
-  mageWalk:'https://i.postimg.cc/jdTNTbfT/mago-guerreiro-andando.gif',
-  mageSpecial:'https://i.postimg.cc/4xN9KQwS/mago-guerreiro-especial.gif',
-  magePower:'https://i.postimg.cc/zXNWNrg4/poder-mago-guerreiro.gif',
-  magePowerSpecial:'https://i.postimg.cc/tgFppLPV/0904-ezgif-com-remove-background.gif',
-  mageStaff:'https://i.postimg.cc/kMK8L4Bc/mao-com-cajado-guerreiro1.gif',
-  mageHand:'https://i.postimg.cc/44Vtjdmw/mao-magos.png',
-  femaleMageIdle:'https://i.postimg.cc/jjyttGNH/maga-guerreira-parada.gif',
-  femaleMageWalk:'https://i.postimg.cc/4xDXCJKK/maga-guerreira-andando.gif',
-  femaleMageSpecial:'https://i.postimg.cc/wM4dwHKP/maga-guerreira-especial.gif'
+  mageIdle:'assets/mage/mago-parado.gif',
+  mageWalk:'assets/mage/mago-andando.gif',
+  mageSpecial:'assets/mage/mago-especial.gif',
+  magePower:'assets/mage/poder-mago.gif',
+  magePowerSpecial:'assets/mage/poder-mago-especial.gif',
+  mageStaff:'assets/mage/mao-cajado.gif',
+  mageHand:'assets/mage/mao-magos.png',
+  femaleMageIdle:'assets/mage/maga-parada.gif',
+  femaleMageWalk:'assets/mage/maga-andando.gif',
+  femaleMageSpecial:'assets/mage/maga-especial.gif'
 };
 const state = {
   mode:'pve', pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
