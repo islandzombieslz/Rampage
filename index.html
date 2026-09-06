@@ -4285,20 +4285,23 @@ function beginDragonTakeoff(e){
 }
 
 
-function tryWarriorFleeFlyingDragon(e,dt,hasAttackableTargets=false){
+function tryWarriorFleeFlyingDragon(e,dt){
  if(e.type!=='warrior'||state.mode!=='war'||state.phase!=='combat'||!e.alive)return false;
- // Quando restam apenas um ou dois Guerreiros do time, eles passam a preservar distância do Dragão.
- const livingWarriors=state.entities.filter(t=>t.alive&&t.team===e.team&&t.type==='warrior').length;
- if(livingWarriors>2)return false;
- const dragons=state.entities.filter(t=>t.alive&&t.team!==e.team&&t.type==='dragon'&&t.dragonFlightState==='flying');
+
+ // Fuga é uma regra de fim de combate, não uma preferência de alvo:
+ // se existir QUALQUER tropa inimiga que não seja Dragão, o Guerreiro luta normalmente.
+ const enemies=state.entities.filter(t=>t.alive&&t.team!==e.team&&isRealCombatTarget(t));
+ if(!enemies.length||enemies.some(t=>t.type!=='dragon'))return false;
+
+ // Quando só restam Dragões, foge do Dragão voando mais próximo em vez de ficar parado.
+ const dragons=enemies.filter(t=>t.dragonFlightState==='flying');
  if(!dragons.length)return false;
  let dragon=dragons[0],best=dist(e,dragon);
  for(let i=1;i<dragons.length;i++){const d=dist(e,dragons[i]);if(d<best){best=d;dragon=dragons[i]}}
- // Se ainda existem alvos terrestres atacáveis, só abandona a luta quando o Dragão realmente ameaça de perto.
- if(hasAttackableTargets&&best>380)return false;
+
  let mx=e.x-dragon.x,my=e.y-dragon.y;
  if(best<.001){mx=e.x<state.world.w/2?-1:1;my=e.y<state.world.h/2?-1:1}
- // Evita ficar pressionando a mesma borda do mapa: adiciona componente lateral para continuar escapando.
+ // Nas bordas, adiciona componente lateral para não ficar preso no mesmo canto.
  const edge=135;
  if(e.x<edge)mx+=.9;
  else if(e.x>state.world.w-edge)mx-=.9;
@@ -4317,7 +4320,7 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
  if(!e.alive||e.knockTime>0){e.moving=false;return;}
  const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
- if(tryWarriorFleeFlyingDragon(e,dt,candidates.length>0))return;
+ if(tryWarriorFleeFlyingDragon(e,dt))return;
  if(!candidates.length){e.moving=false;return}
  let target=candidates[0],best=dist(e,target);
  for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
@@ -4822,7 +4825,7 @@ function syncDragonProjectileEffects(left,top,zoom){
              active.add(p.id);let img=dragonProjectileNodes.get(p.id);
              if(!img){img=document.createElement('img');img.className='dragon-fireball-projectile';img.draggable=false;restartGif(img,'dragonFireball',p.serial||p.id);layer.appendChild(img);dragonProjectileNodes.set(p.id,img)}
              const angle=Math.atan2(Number(p.vy)||0,Number(p.vx)||1),size=48*zoom;
-             img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=size+'px';img.style.height=size+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle+Math.PI/2}rad)`;img.style.visibility='visible';
+             img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=size+'px';img.style.height=size+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle-Math.PI/2}rad)`;img.style.visibility='visible';
            }
            for(const [id,img] of dragonProjectileNodes)if(!active.has(id)){releaseGifObjectUrl(img);img.remove();dragonProjectileNodes.delete(id)}
           }
