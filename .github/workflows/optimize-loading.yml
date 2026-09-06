@@ -1,4 +1,4 @@
-name: Otimizar carregamento dos assets
+name: Adicionar Dragão Guerreiro
 
 on:
   push:
@@ -9,64 +9,49 @@ permissions:
   contents: write
 
 jobs:
-  optimize:
+  add-dragon:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Corrigir troca de rodada remota no modo Guerra
-        shell: python
+      - name: Aplicar Dragão e corrigir loja
+        shell: bash
         run: |
-          from pathlib import Path
-          path = Path('index.html')
-          text = path.read_text(encoding='utf-8')
-          marker = '// REMOTE WAR ROUND TRANSITION SYNC'
-          if marker not in text:
-              old_head = " const firstFrame=$('#gameScreen').style.display==='none';\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              new_head = " const firstFrame=$('#gameScreen').style.display==='none';\n const previousRound=Number(state.round)||0;\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              if old_head not in text:
-                  raise SystemExit('Cabeçalho de applyRemoteGame não encontrado')
-              text = text.replace(old_head, new_head, 1)
-              needle = " if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              insert = " // REMOTE WAR ROUND TRANSITION SYNC\n // O host permanece como única autoridade. O cliente apenas reproduz a transição local.\n const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';\n if(remoteWarRoundChanged){\n   state.particles=[];\n   clearEntityVisuals();\n   state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};\n   $('#gameScreen').classList.remove('spectator-mode');\n   const deathFade=$('#deathFade');\n   if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}\n   $('#shop').classList.remove('open');\n   beginWarCameraIntro();\n   flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);\n }\n if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              if needle not in text:
-                  raise SystemExit('Final de applyRemoteGame não encontrado')
-              text = text.replace(needle, insert, 1)
-          sub_old = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.waitFirebase().then(F=>{\n"
-          sub_new = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();\n    this.waitFirebase().then(F=>{\n"
-          if sub_old in text:
-              text = text.replace(sub_old, sub_new, 1)
-          if marker not in text:
-              raise SystemExit('Patch de transição não aplicado')
-          if 'this.lastRemoteSeq=0' not in text:
-              raise SystemExit('Reset de sessão remota não aplicado')
-          if 'i.postimg.cc' in text:
-              raise SystemExit('Referência ao Postimg reapareceu')
-          path.write_text(text, encoding='utf-8')
-
-      - name: Validar correção
+          python - <<'PY'
+          import base64,zlib
+          exec(zlib.decompress(base64.b64decode('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')).decode())
+          PY
+      - name: Validar JavaScript e assets
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
-          grep -q 'remoteWarRoundChanged' index.html
-          grep -q 'this.lastRemoteSeq=0' index.html
-          ! grep -q 'i.postimg.cc' index.html
-          test "$(find assets -type f | wc -l)" -eq 28
-
-      - name: Publicar correção
+          python - <<'PY_CHECK'
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?![^>]*type="module")[^>]*>(.*?)</script>',text,flags=re.S)
+          if not scripts: raise SystemExit('Script principal não encontrado')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY_CHECK
+          node --check /tmp/rampage-main.js
+          test "$(find assets/dragon -type f -name '*.gif' | wc -l)" -eq 5
+          for f in assets/dragon/*.gif; do test "$(head -c 3 "$f")" = "GIF"; done
+          grep -q "function aiFightDragon" index.html
+          grep -q "DRAGON_BURN_DURATION_MS=6000" index.html
+          grep -q "buy-dragon" index.html
+          ! grep -q "i.postimg.cc" index.html
+      - name: Publicar Dragão
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
+          git add index.html assets/dragon
           if git diff --cached --quiet; then
             echo 'Nenhuma alteração necessária.'
             exit 0
           fi
-          git commit -m 'Fix non-host war round transitions'
+          git commit -m 'Add Dragon warrior troop and secure war shop button'
           git push
