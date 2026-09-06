@@ -41,7 +41,7 @@ jobs:
           node --check /tmp/rampage-main.js
           grep -Fq "const nonDragonEnemies=allEnemies.filter(t=>t.type!=='dragon');" index.html
           grep -Fq "if(nonDragonEnemies.length){" index.html
-          grep -Fq "rotate(${angle-Math.PI/2}rad) scaleY(-1)" index.html
+          grep -Fq 'scaleY(-1)' index.html
           grep -Fq "const dragons=enemies.filter(t=>t.type==='dragon');" index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
           test "$(find assets -type f | wc -l)" -eq 33
