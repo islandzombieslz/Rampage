@@ -1,58 +1,72 @@
-name: Ajustar transição online do Dragão
+name: Otimizar carregamento dos assets
+
 on:
   push:
     paths:
       - '.github/workflows/optimize-loading.yml'
+
 permissions:
   contents: write
+
 jobs:
-  polish:
+  optimize:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Ajustar transição
+
+      - name: Corrigir troca de rodada remota no modo Guerra
         shell: python
         run: |
           from pathlib import Path
-          p=Path('index.html')
-          t=p.read_text(encoding='utf-8')
-          old="""     const attackActive=flight==='flying'&&e.pendingDragonAttack&&Number(e.pendingDragonAttack.endAt||0)>localNow;
-     const takeoffActive=flight==='takeoff'&&Number(e.dragonTakeoffEndAt||0)>localNow;
-     const desired=attackActive?'dragonAttack':takeoffActive?'takeoff':flight==='flying'?'fly':'ground';
-"""
-          new="""     const attackActive=flight==='flying'&&e.pendingDragonAttack&&Number(e.pendingDragonAttack.endAt||0)>localNow;
-     const takeoffActive=flight==='takeoff'&&Number(e.dragonTakeoffEndAt||0)>localNow;
-     // Entre o fim local do GIF e o próximo snapshot do host, mantém o Dragão no ar.
-     const visualFlying=flight==='flying'||(flight==='takeoff'&&!takeoffActive);
-     const desired=attackActive?'dragonAttack':takeoffActive?'takeoff':visualFlying?'fly':'ground';
-"""
-          if old not in t: raise SystemExit('Trecho visual do Dragão não encontrado')
-          t=t.replace(old,new,1)
-          oldz="el.style.zIndex=String((e.type==='dragon'&&e.dragonFlightState==='flying'?900:100)+Math.round(sy));"
-          newz="const dragonAbove=e.type==='dragon'&&(e.dragonFlightState==='flying'||(e.dragonFlightState==='takeoff'&&Number(e.dragonTakeoffEndAt||0)<=localNow));\n   el.style.zIndex=String((dragonAbove?900:100)+Math.round(sy));"
-          if oldz not in t: raise SystemExit('z-index do Dragão não encontrado')
-          t=t.replace(oldz,newz,1)
-          p.write_text(t,encoding='utf-8')
-      - name: Validar
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          marker = '// REMOTE WAR ROUND TRANSITION SYNC'
+          if marker not in text:
+              old_head = " const firstFrame=$('#gameScreen').style.display==='none';\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
+              new_head = " const firstFrame=$('#gameScreen').style.display==='none';\n const previousRound=Number(state.round)||0;\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
+              if old_head not in text:
+                  raise SystemExit('Cabeçalho de applyRemoteGame não encontrado')
+              text = text.replace(old_head, new_head, 1)
+              needle = " if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
+              insert = " // REMOTE WAR ROUND TRANSITION SYNC\n // O host permanece como única autoridade. O cliente apenas reproduz a transição local.\n const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';\n if(remoteWarRoundChanged){\n   state.particles=[];\n   clearEntityVisuals();\n   state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};\n   $('#gameScreen').classList.remove('spectator-mode');\n   const deathFade=$('#deathFade');\n   if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}\n   $('#shop').classList.remove('open');\n   beginWarCameraIntro();\n   flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);\n }\n if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
+              if needle not in text:
+                  raise SystemExit('Final de applyRemoteGame não encontrado')
+              text = text.replace(needle, insert, 1)
+          sub_old = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.waitFirebase().then(F=>{\n"
+          sub_new = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();\n    this.waitFirebase().then(F=>{\n"
+          if sub_old in text:
+              text = text.replace(sub_old, sub_new, 1)
+          if marker not in text:
+              raise SystemExit('Patch de transição não aplicado')
+          if 'this.lastRemoteSeq=0' not in text:
+              raise SystemExit('Reset de sessão remota não aplicado')
+          if 'i.postimg.cc' in text:
+              raise SystemExit('Referência ao Postimg reapareceu')
+          path.write_text(text, encoding='utf-8')
+
+      - name: Validar correção
+        shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          t=Path('index.html').read_text()
-          s=re.findall(r'<script(?![^>]*type="module")[^>]*>(.*?)</script>',t,re.S)[-1]
-          Path('/tmp/main.js').write_text(s)
-          PY
-          node --check /tmp/main.js
-          grep -q 'const visualFlying=' index.html
-          grep -q 'const dragonAbove=' index.html
-      - name: Publicar
+          grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
+          grep -q 'remoteWarRoundChanged' index.html
+          grep -q 'this.lastRemoteSeq=0' index.html
+          ! grep -q 'i.postimg.cc' index.html
+          test "$(find assets -type f | wc -l)" -eq 33
+
+      - name: Publicar correção
+        shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git commit -m 'Polish Dragon takeoff transition online'
+          if git diff --cached --quiet; then
+            echo 'Nenhuma alteração necessária.'
+            exit 0
+          fi
+          git commit -m 'Fix non-host war round transitions'
           git push
