@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check /tmp/rampage-main.js
-          grep -q "enemies.some(t=>t.type!='dragon')" index.html
+          grep -q "enemies.some(t=>t.type!=='dragon')" index.html
           grep -q "tryWarriorFleeFlyingDragon(e,dt))return" index.html
           grep -q 'angle-Math.PI/2' index.html
           ! grep -q 'tryWarriorFleeFlyingDragon(e,dt,candidates.length>0)' index.html
