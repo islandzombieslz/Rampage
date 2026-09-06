@@ -2450,22 +2450,10 @@ function refreshMobileViewportLayout(){
     return mobileViewportLayout;
   }
 
-  let logical=readPortraitViewportSnapshot();
-  if(!logical)logical={w:Math.max(rawW,rawH),h:Math.min(rawW,rawH)};
-  const scale=Math.min(rawW/logical.w,rawH/logical.h);
-  const offsetX=(rawW-logical.w*scale)/2;
-  const offsetY=(rawH-logical.h*scale)/2;
-
-  root.style.width=logical.w+'px';
-  root.style.height=logical.h+'px';
-  root.style.left=offsetX+'px';
-  root.style.top=offsetY+'px';
-  root.style.right='auto';
-  root.style.bottom='auto';
-  root.style.transformOrigin='top left';
-  root.style.transform=`scale(${scale})`;
-
-  mobileViewportLayout={active:true,portrait:false,w:logical.w,h:logical.h,scale,offsetX,offsetY};
+  // Landscape físico deve ocupar 100% da viewport real.
+  // Mantemos o mesmo dimensionamento visual via CSS/vmin, sem letterbox nem corte.
+  clearMobileRootOverrides(root);
+  mobileViewportLayout={active:true,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0};
   return mobileViewportLayout;
 }
 
