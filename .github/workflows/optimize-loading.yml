@@ -47,6 +47,208 @@ jobs:
               raise SystemExit('Referência ao Postimg reapareceu')
           path.write_text(text, encoding='utf-8')
 
+      - name: Padronizar viewport mobile e remover foco nativo dos botões
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          css_marker = '/* ===== MOBILE: SEM DESTAQUE NATIVO + LAYOUT DE REFERÊNCIA ===== */'
+          if css_marker not in text:
+              css = r'''
+
+/* ===== MOBILE: SEM DESTAQUE NATIVO + LAYOUT DE REFERÊNCIA ===== */
+button{
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+}
+button:focus,
+button:focus-visible{
+  outline:none !important;
+}
+/* Mantém somente a seleção que pertence ao próprio jogo. */
+button.selected{
+  outline:2px solid var(--accent) !important;
+}
+button::-moz-focus-inner{border:0}
+
+/* Em touch, o menor lado do aparelho vira a referência visual.
+   Assim portrait girado por CSS e landscape físico usam as mesmas proporções. */
+@media (pointer:coarse){
+  #menuScreen .menu-sprite-btn{width:min(320px,68vmin)}
+  #modeScreen .mode-menu-shell{width:min(650px,92vmin)}
+  .card{width:min(720px,95vmin);max-height:92vmax}
+  #configScreen>.card,
+  #lobbyScreen>.card,
+  #clanScreen>.card{
+    width:min(720px,94vmin) !important;
+    height:min(720px,94vmin) !important;
+  }
+  .shop-items{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+'''
+              if '</style>' not in text:
+                  raise SystemExit('Fechamento de style não encontrado')
+              text = text.replace('</style>', css + '\n</style>', 1)
+
+          # Os ajustes compactos por altura só existiam no landscape físico.
+          # Em touch eles quebravam a equivalência com o layout portrait girado.
+          text = text.replace('@media(max-height:520px){', '@media(max-height:520px) and (pointer:fine){')
+          text = text.replace('@media (max-height:650px){', '@media (max-height:650px) and (pointer:fine){')
+
+          js_marker = '// MOBILE STABLE LOGICAL VIEWPORT'
+          if js_marker not in text:
+              old_size = r'''function gameViewportSize(){
+  // No fallback portrait o jogo é girado: largura lógica = altura visual.
+  const vv=window.visualViewport;
+  const rawW=vv?.width||innerWidth;
+  const rawH=vv?.height||innerHeight;
+  const forcedPortrait=matchMedia('(orientation:portrait)').matches && innerWidth<=900;
+  return forcedPortrait ? {w:rawH,h:rawW} : {w:rawW,h:rawH};
+}'''
+              new_size = r'''// MOBILE STABLE LOGICAL VIEWPORT
+let mobileViewportLayout={active:false,portrait:false,w:innerWidth,h:innerHeight,scale:1,offsetX:0,offsetY:0};
+
+function readPortraitViewportSnapshot(){
+  try{
+    const saved=JSON.parse(sessionStorage.getItem('rampagePortraitViewport')||'null');
+    if(saved&&Number.isFinite(saved.w)&&Number.isFinite(saved.h)&&saved.w>saved.h&&saved.w>=320&&saved.h>=240)return saved;
+  }catch(_){}
+  return null;
+}
+
+function clearMobileRootOverrides(root){
+  for(const prop of ['width','height','left','top','right','bottom','transform','transformOrigin'])root.style[prop]='';
+}
+
+function refreshMobileViewportLayout(){
+  const vv=window.visualViewport;
+  const rawW=Math.max(1,vv?.width||innerWidth);
+  const rawH=Math.max(1,vv?.height||innerHeight);
+  const root=document.getElementById('landscapeRoot');
+  const mobile=isMobileLike()&&Math.min(rawW,rawH)<=900;
+  const portrait=mobile&&matchMedia('(orientation:portrait)').matches&&innerWidth<=900;
+
+  if(!mobile||!root){
+    if(root)clearMobileRootOverrides(root);
+    mobileViewportLayout={active:false,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0};
+    return mobileViewportLayout;
+  }
+
+  if(portrait){
+    clearMobileRootOverrides(root);
+    const logical={w:rawH,h:rawW};
+    mobileViewportLayout={active:true,portrait:true,w:logical.w,h:logical.h,scale:1,offsetX:0,offsetY:0};
+    try{sessionStorage.setItem('rampagePortraitViewport',JSON.stringify(logical))}catch(_){}
+    return mobileViewportLayout;
+  }
+
+  let logical=readPortraitViewportSnapshot();
+  if(!logical)logical={w:Math.max(rawW,rawH),h:Math.min(rawW,rawH)};
+  const scale=Math.min(rawW/logical.w,rawH/logical.h);
+  const offsetX=(rawW-logical.w*scale)/2;
+  const offsetY=(rawH-logical.h*scale)/2;
+
+  root.style.width=logical.w+'px';
+  root.style.height=logical.h+'px';
+  root.style.left=offsetX+'px';
+  root.style.top=offsetY+'px';
+  root.style.right='auto';
+  root.style.bottom='auto';
+  root.style.transformOrigin='top left';
+  root.style.transform=`scale(${scale})`;
+
+  mobileViewportLayout={active:true,portrait:false,w:logical.w,h:logical.h,scale,offsetX,offsetY};
+  return mobileViewportLayout;
+}
+
+function gameViewportSize(){
+  const l=mobileViewportLayout;
+  if(l.active)return {w:l.w,h:l.h};
+  const vv=window.visualViewport;
+  return {w:vv?.width||innerWidth,h:vv?.height||innerHeight};
+}'''
+              if old_size not in text:
+                  raise SystemExit('gameViewportSize original não encontrado')
+              text = text.replace(old_size, new_size, 1)
+
+              old_mobile = r'''function isPortraitFallback(){
+  return isMobileLike() && matchMedia('(orientation:portrait)').matches && innerWidth<=900;
+}
+function gameViewport(){
+  return isPortraitFallback()
+    ? {w:innerHeight,h:innerWidth}
+    : {w:innerWidth,h:innerHeight};
+}
+function screenPointToGame(x,y){
+  // Quando o root é girado 90° no portrait, converte coordenadas físicas
+  // do toque para os eixos lógicos do jogo horizontal.
+  if(isPortraitFallback())return {x:y,y:innerWidth-x};
+  return {x,y};
+}
+function screenDeltaToGame(dx,dy){
+  if(isPortraitFallback())return {x:dy,y:-dx};
+  return {x:dx,y:dy};
+}
+function resize(){
+  const {w,h}=gameViewportSize();
+  const dpr=Math.min(window.devicePixelRatio||1,1.35);
+  canvas.width=Math.max(1,Math.floor(w*dpr));
+  canvas.height=Math.max(1,Math.floor(h*dpr));
+  canvas.style.width=w+'px';
+  canvas.style.height=h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.imageSmoothingEnabled=true;
+}
+addEventListener('resize',resize);resize();'''
+              new_mobile = r'''function isPortraitFallback(){
+  return isMobileLike() && matchMedia('(orientation:portrait)').matches && innerWidth<=900;
+}
+function gameViewport(){
+  const l=mobileViewportLayout;
+  if(l.active)return {w:l.w,h:l.h};
+  return {w:innerWidth,h:innerHeight};
+}
+function screenPointToGame(x,y){
+  // Portrait continua usando a rotação CSS original, exatamente como antes.
+  if(isPortraitFallback()){
+    const rawW=window.visualViewport?.width||innerWidth;
+    return {x:y,y:rawW-x};
+  }
+  // No landscape físico, desfaz o scale/centralização do viewport lógico salvo no portrait.
+  const l=mobileViewportLayout;
+  if(l.active&&!l.portrait)return {x:(x-l.offsetX)/l.scale,y:(y-l.offsetY)/l.scale};
+  return {x,y};
+}
+function screenDeltaToGame(dx,dy){
+  if(isPortraitFallback())return {x:dy,y:-dx};
+  const l=mobileViewportLayout;
+  if(l.active&&!l.portrait)return {x:dx/l.scale,y:dy/l.scale};
+  return {x:dx,y:dy};
+}
+function resize(){
+  refreshMobileViewportLayout();
+  const {w,h}=gameViewportSize();
+  const dpr=Math.min(window.devicePixelRatio||1,1.35);
+  canvas.width=Math.max(1,Math.floor(w*dpr));
+  canvas.height=Math.max(1,Math.floor(h*dpr));
+  canvas.style.width=w+'px';
+  canvas.style.height=h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.imageSmoothingEnabled=true;
+}
+addEventListener('resize',resize);
+window.visualViewport?.addEventListener('resize',resize);
+resize();'''
+              if old_mobile not in text:
+                  raise SystemExit('Bloco mobile original não encontrado')
+              text = text.replace(old_mobile, new_mobile, 1)
+
+          if css_marker not in text or js_marker not in text:
+              raise SystemExit('Patch mobile não aplicado')
+          path.write_text(text, encoding='utf-8')
+
       - name: Validar correção
         shell: bash
         run: |
@@ -54,6 +256,10 @@ jobs:
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
           grep -q 'remoteWarRoundChanged' index.html
           grep -q 'this.lastRemoteSeq=0' index.html
+          grep -q 'MOBILE: SEM DESTAQUE NATIVO + LAYOUT DE REFERÊNCIA' index.html
+          grep -q 'MOBILE STABLE LOGICAL VIEWPORT' index.html
+          grep -q 'rampagePortraitViewport' index.html
+          grep -q -- '-webkit-tap-highlight-color:transparent' index.html
           ! grep -q 'i.postimg.cc' index.html
           test "$(find assets -type f | wc -l)" -eq 28
 
@@ -68,5 +274,5 @@ jobs:
             echo 'Nenhuma alteração necessária.'
             exit 0
           fi
-          git commit -m 'Fix non-host war round transitions'
+          git commit -m 'Fix mobile landscape proportions and tap focus'
           git push
