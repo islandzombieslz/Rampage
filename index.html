@@ -2220,7 +2220,9 @@ const MAGE_SPECIAL_HEAL=30;
 // DRAGON WARRIOR SYSTEM
 let DRAGON_TAKEOFF_DURATION=1200;
 const DRAGON_SHOT_COOLDOWN_MS=2000;
-const DRAGON_ATTACK_VISUAL_MS=850;
+const DRAGON_CLOSE_SHOT_COOLDOWN_MS=5000;
+const DRAGON_CLOSE_RANGE=175;
+let DRAGON_ATTACK_VISUAL_MS=1800;
 const DRAGON_FIREBALL_DAMAGE=35;
 const DRAGON_FIREBALL_SPEED=430;
 const DRAGON_BURN_DAMAGE=5;
@@ -2274,6 +2276,7 @@ function validGifDuration(ms,fallback){
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
      if(key==='dragonTakeoff')DRAGON_TAKEOFF_DURATION=validGifDuration(duration,DRAGON_TAKEOFF_DURATION);
+     if(key==='dragonAttack')DRAGON_ATTACK_VISUAL_MS=validGifDuration(duration,DRAGON_ATTACK_VISUAL_MS);
    }catch(_){
      // Fallback abaixo usa URL única com cache-buster. O jogo continua funcional.
    }finally{
@@ -2940,7 +2943,7 @@ function entityBase(type,x,y,team,color){
  golemPhase:'seek',golemCrowdSpecialUsed:false,golemLastAttackCompletedAt:0,
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
  pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
- dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,
+ dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,dragonCloseShotAt:0,
  dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
  dragonBurnSourceX:0,dragonBurnSourceY:0,dragonBurnSerial:0,dragonBurnFlameCount:0,ownerId:null};
 }
@@ -3787,15 +3790,12 @@ function setupWarRound(){
    // Cada rodada começa: Guerreiro -> Guerreira -> Guerreiro -> Guerreira...
    p.nextWarriorVariant='male';
  });
-  // Bots usam os quatro tipos do clã Guerreiros.
-  state.players.filter(p=>!p.human).forEach(p=>{
-   while(p.gems>=75){
-     const roll=Math.random();
-     if(p.gems>=350 && roll<.18)buyDragonForPlayer(p,true);
-     else if(p.gems>=350 && roll<.34)buyGolemForPlayer(p,true);
-     else if(p.gems>=550 && roll<.58)buyMageForPlayer(p,true);
-     else buyForPlayer(p,true);
-   }
+  // Bots compram ao longo da preparação: abrem com alguma aleatoriedade
+  // e depois passam a reagir ao que os outros exércitos realmente colocaram.
+  const botPrepNow=performance.now();
+  state.players.filter(p=>!p.human).forEach((p,i)=>{
+   p.botWarPurchases=0;
+   p.botNextPurchaseAt=botPrepNow+350+i*180+rand(0,450);
   });
 }
 $('#shopButton').onclick=()=>$('#shop').classList.toggle('open');
@@ -3843,6 +3843,87 @@ function buyDragonForPlayer(p,bot){
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*82;
  spawnDragon(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
+}
+
+
+function warCompositionForTeam(teamId){
+ const out={warrior:0,mage:0,golem:0,dragon:0};
+ for(const e of state.entities){
+   if(!e.alive||e.team!==teamId||!(e.type in out))continue;
+   out[e.type]++;
+ }
+ return out;
+}
+function enemyWarComposition(teamId){
+ const out={warrior:0,mage:0,golem:0,dragon:0};
+ for(const e of state.entities){
+   if(!e.alive||e.team===teamId||!(e.type in out))continue;
+   out[e.type]++;
+ }
+ return out;
+}
+function affordableBotWarTypes(p){
+ const types=[];
+ if(p.gems>=75)types.push('warrior');
+ if(p.gems>=350){types.push('golem');types.push('dragon')}
+ if(p.gems>=550)types.push('mage');
+ return types;
+}
+function chooseBotWarPurchase(p){
+ const affordable=affordableBotWarTypes(p);
+ if(!affordable.length)return null;
+ const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
+ const enemyTotal=enemy.warrior+enemy.mage+enemy.golem+enemy.dragon;
+ const opening=(Number(p.botWarPurchases)||0)<2;
+
+ // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
+ // exatamente o mesmo exército quando ninguém comprou nada ainda.
+ if(enemyTotal===0||Math.random()<(opening?.65:.28)){
+   return affordable[Math.floor(Math.random()*affordable.length)];
+ }
+
+ const score={warrior:1,mage:1,golem:1,dragon:1};
+ // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
+ // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
+ score.warrior+=enemy.mage*1.45+enemy.golem*.12;
+ score.golem+=enemy.warrior*1.65+enemy.mage*.35+enemy.dragon*.45;
+ score.mage+=enemy.golem*1.85+enemy.dragon*2.15+enemy.warrior*.55;
+ score.dragon+=enemy.golem*1.35+enemy.mage*.85+enemy.warrior*.45+enemy.dragon*.70;
+ // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
+ // comprando mais unidades que não conseguem atacá-lo.
+ if(enemy.dragon>0)score.warrior*=.10;
+
+ // Pequeno redutor por repetição mantém composição variada, sem transformar
+ // a escolha adaptativa numa regra rígida e previsível.
+ for(const type of Object.keys(score))score[type]-=(own[type]||0)*.32;
+
+ let bestType=affordable[0],bestScore=-Infinity;
+ for(const type of affordable){
+   const value=score[type]+Math.random()*.40;
+   if(value>bestScore){bestScore=value;bestType=type}
+ }
+ return bestType;
+}
+function buyBotWarType(p,type){
+ if(type==='dragon')return buyDragonForPlayer(p,true);
+ if(type==='golem')return buyGolemForPlayer(p,true);
+ if(type==='mage')return buyMageForPlayer(p,true);
+ return buyForPlayer(p,true);
+}
+function updateWarBotPurchases(now,force=false){
+ for(const p of state.players.filter(p=>!p.human)){
+   let guard=0;
+   while(p.gems>=75&&(force||now>=Number(p.botNextPurchaseAt||0))&&guard<(force?30:1)){
+     const type=chooseBotWarPurchase(p);
+     if(!type)break;
+     let bought=buyBotWarType(p,type);
+     if(!bought&&p.gems>=75)bought=buyForPlayer(p,true);
+     if(!bought)break;
+     p.botWarPurchases=(Number(p.botWarPurchases)||0)+1;
+     p.botNextPurchaseAt=now+(state.prepLeft<3?rand(220,420):rand(650,1250));
+     guard++;
+   }
+ }
 }
 
 function startCombatPhase(){
@@ -3900,8 +3981,10 @@ function warCandidatesFor(e,grid){
 }
 function updateWar(dt){
  if(state.phase==='prep'){
+   const now=performance.now();
+   updateWarBotPurchases(now,false);
    state.prepLeft-=dt;
-   if(state.prepLeft<=0)startCombatPhase();
+   if(state.prepLeft<=0){updateWarBotPurchases(now,true);startCombatPhase();}
  }else if(state.phase==='combat'){
    const now=performance.now();
    updateDragonProjectiles(dt);updateDragonBurns(now);
@@ -4100,13 +4183,23 @@ function beginDragonTakeoff(e){
              if(now>target.dragonBurnUntil){target.dragonBurnUntil=0;target.dragonBurnStartedAt=0;target.dragonBurnNextTick=0;target.dragonBurnSourceId=null}
            }
           }
-          function launchDragonFireball(e,target){
+          function launchDragonFireball(e,target,{emergency=false}={}){
            if(!e?.alive||e.type!=='dragon'||e.dragonFlightState!=='flying'||!target?.alive)return false;
-           const now=performance.now();if(now<(Number(e.dragonNextShotAt)||0))return false;
+           const now=performance.now();
+           const gate=emergency?(Number(e.dragonCloseShotAt)||0):(Number(e.dragonNextShotAt)||0);
+           if(now<gate)return false;
            const angle=Math.atan2(target.y-e.y,target.x-e.x);e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
            e.moving=false;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;
-           e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,endAt:now+DRAGON_ATTACK_VISUAL_MS};
-           e.dragonNextShotAt=now+DRAGON_SHOT_COOLDOWN_MS;
+           e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,endAt:now+DRAGON_ATTACK_VISUAL_MS,emergency:!!emergency};
+           if(emergency){
+             e.dragonCloseShotAt=now+DRAGON_CLOSE_SHOT_COOLDOWN_MS;
+             e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,now+DRAGON_SHOT_COOLDOWN_MS);
+           }else{
+             e.dragonNextShotAt=now+DRAGON_SHOT_COOLDOWN_MS;
+             // Se o alvo correr para cima do Dragão logo após um tiro normal,
+             // esse mesmo tiro conta para a janela de 5 s do modo de emergência.
+             e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,now+DRAGON_CLOSE_SHOT_COOLDOWN_MS);
+           }
            const startX=e.x+Math.cos(angle)*42,startY=e.y-16+Math.sin(angle)*18;
            state.dragonProjectiles.push({id:'df_'+(++state.dragonProjectileSeq),serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
            return true;
@@ -4141,9 +4234,24 @@ function beginDragonTakeoff(e){
            if(!candidates.length){e.moving=false;e.target=null;return}
            let target=candidates[0],best=dist(e,target);for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
            e.target=target;const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
+
+           // Alvo perto demais: ainda consegue se defender, mas só uma vez a cada 5 s.
+           // Entre esses disparos, tenta abrir espaço para voltar à faixa normal de 185–285.
+           if(d<DRAGON_CLOSE_RANGE){
+             if(now>=Number(e.dragonCloseShotAt||0)&&launchDragonFireball(e,target,{emergency:true}))return;
+             let mx=-dx/d,my=-dy/d;
+             const edge=125;
+             if(e.x<edge)mx+=.85;else if(e.x>state.world.w-edge)mx-=.85;
+             if(e.y<edge)my+=.85;else if(e.y>state.world.h-edge)my-=.85;
+             const ml=Math.hypot(mx,my)||1;mx/=ml;my/=ml;
+             e.x+=mx*e.speed*dt;e.y+=my*e.speed*dt;e.moving=true;
+             e.x=clamp(e.x,40,state.world.w-40);e.y=clamp(e.y,40,state.world.h-40);
+             return;
+           }
+
            if(d>=185&&d<=285&&now>=Number(e.dragonNextShotAt||0)){launchDragonFireball(e,target);return}
-           if(d<175){e.x-=dx/d*e.speed*dt;e.y-=dy/d*e.speed*dt;e.moving=true}
-           else if(d>285){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}
+           if(d>285){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}
+           else if(d<185){e.x-=dx/d*e.speed*dt;e.y-=dy/d*e.speed*dt;e.moving=true}
            else e.moving=false;
            e.x=clamp(e.x,40,state.world.w-40);e.y=clamp(e.y,40,state.world.h-40);
           }
@@ -4867,23 +4975,55 @@ function setEntitySpriteState(el,desired){
    [el._golemSpecial,'special'],[el._mageSpecial,'special'],
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
+ const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
+ const token=(el._spriteSwitchToken||0)+1;
+ el._spriteSwitchToken=token;
+ el.dataset.anim=desired;
+
+ // Mostra o novo imediatamente, mas mantém o estado anterior como "rede de segurança"
+ // até o browser confirmar que existe imagem decodificável para a nova animação.
  for(const [img,stateName] of sprites){
    if(!img)continue;
-   const active=stateName===desired;
-   img.style.opacity=active?'1':'0';
-   img.classList.toggle('active-sprite',active);
+   if(stateName===desired){
+     img.style.opacity='1';
+     img.classList.add('active-sprite');
+   }else if(stateName!==previous){
+     img.style.opacity='0';
+     img.classList.remove('active-sprite');
+   }
  }
 
- // Ataques são reiniciados por uma URL nova, portanto não há motivo para
- // decodificar os GIFs ocultos continuamente entre golpes.
- if(previous==='attack'&&desired!=='attack')stopGif(el._golemAttack);
- if(previous==='special'&&desired!=='special'){
-   stopGif(el._golemSpecial);
-   stopGif(el._mageSpecial);
+ const finalize=()=>{
+   if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
+   for(const [img,stateName] of sprites){
+     if(!img)continue;
+     const active=stateName===desired;
+     img.style.opacity=active?'1':'0';
+     img.classList.toggle('active-sprite',active);
+   }
+
+   // Só interrompe a decodificação do GIF antigo DEPOIS que o novo já entrou.
+   if(previous==='attack'&&desired!=='attack')stopGif(el._golemAttack);
+   if(previous==='special'&&desired!=='special'){
+     stopGif(el._golemSpecial);
+     stopGif(el._mageSpecial);
+   }
+   if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
+   if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
+ };
+ const settle=()=>requestAnimationFrame(finalize);
+
+ if(!desiredImg){
+   finalize();
+ }else if(desiredImg.complete&&desiredImg.naturalWidth>0){
+   settle();
+ }else{
+   desiredImg.addEventListener('load',settle,{once:true});
+   desiredImg.addEventListener('error',settle,{once:true});
+   // Failsafe apenas para um asset realmente problemático; o token evita
+   // que esse timeout interfira caso outra animação já tenha sido escolhida.
+   setTimeout(settle,700);
  }
- if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
- if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
- el.dataset.anim=desired;
  return true;
 }
 
@@ -5075,14 +5215,28 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
      }
    }else if(e.type==='dragon'){
      const flight=e.dragonFlightState||'ground';
-     const attackActive=flight==='flying'&&e.pendingDragonAttack&&Number(e.pendingDragonAttack.endAt||0)>localNow;
-     const takeoffActive=flight==='takeoff'&&Number(e.dragonTakeoffEndAt||0)>localNow;
-     const desired=attackActive?'dragonAttack':takeoffActive?'takeoff':flight==='flying'?'fly':'ground';
-     setEntitySpriteState(el,desired);
      const takeoffSerial=Number(e.dragonTakeoffSerial)||0;
-     if(takeoffActive&&takeoffSerial>0&&el.dataset.dragonTakeoffSerial!==String(takeoffSerial)){el.dataset.dragonTakeoffSerial=String(takeoffSerial);restartGif(el._dragonTakeoff,'dragonTakeoff',takeoffSerial)}
-     const attackSerial=Number(e.dragonAttackSerial)||0;
-     if(attackActive&&attackSerial>0&&el.dataset.dragonAttackSerial!==String(attackSerial)){el.dataset.dragonAttackSerial=String(attackSerial);restartGif(el._dragonAttack,'dragonAttack',attackSerial)}
+
+     if(flight==='takeoff'&&takeoffSerial>0&&el.dataset.dragonTakeoffSerial!==String(takeoffSerial)){
+       el.dataset.dragonTakeoffSerial=String(takeoffSerial);
+       el._dragonTakeoffVisualEndAt=localNow+DRAGON_TAKEOFF_DURATION;
+       restartGif(el._dragonTakeoff,'dragonTakeoff',takeoffSerial);
+     }
+     const takeoffActive=takeoffSerial>0&&Number(el._dragonTakeoffVisualEndAt||0)>localNow;
+
+     const pendingAttack=e.pendingDragonAttack;
+     const attackSerial=Number(pendingAttack?.serial||e.dragonAttackSerial)||0;
+     // Se o cliente recebeu a decolagem um pouco atrasada, ela termina primeiro.
+     // Depois o ataque começa do quadro zero, sem cortar nenhum frame.
+     if(!takeoffActive&&flight==='flying'&&pendingAttack&&attackSerial>0&&el.dataset.dragonAttackSerial!==String(attackSerial)){
+       el.dataset.dragonAttackSerial=String(attackSerial);
+       el._dragonAttackVisualEndAt=localNow+DRAGON_ATTACK_VISUAL_MS;
+       restartGif(el._dragonAttack,'dragonAttack',attackSerial);
+     }
+     const attackActive=flight==='flying'&&Number(el._dragonAttackVisualEndAt||0)>localNow;
+
+     const desired=takeoffActive?'takeoff':attackActive?'dragonAttack':flight==='flying'?'fly':'ground';
+     setEntitySpriteState(el,desired);
    }else{
      const desired=e.moving?'walk':'idle';
      setEntitySpriteState(el,desired);
