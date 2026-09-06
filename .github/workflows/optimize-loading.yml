@@ -1,4 +1,4 @@
-name: Otimizar carregamento dos assets
+name: Ajustar GIFs e IA do Dragão
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  optimize:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,56 +17,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Corrigir troca de rodada remota no modo Guerra
-        shell: python
-        run: |
-          from pathlib import Path
-          path = Path('index.html')
-          text = path.read_text(encoding='utf-8')
-          marker = '// REMOTE WAR ROUND TRANSITION SYNC'
-          if marker not in text:
-              old_head = " const firstFrame=$('#gameScreen').style.display==='none';\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              new_head = " const firstFrame=$('#gameScreen').style.display==='none';\n const previousRound=Number(state.round)||0;\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              if old_head not in text:
-                  raise SystemExit('Cabeçalho de applyRemoteGame não encontrado')
-              text = text.replace(old_head, new_head, 1)
-              needle = " if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              insert = " // REMOTE WAR ROUND TRANSITION SYNC\n // O host permanece como única autoridade. O cliente apenas reproduz a transição local.\n const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';\n if(remoteWarRoundChanged){\n   state.particles=[];\n   clearEntityVisuals();\n   state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};\n   $('#gameScreen').classList.remove('spectator-mode');\n   const deathFade=$('#deathFade');\n   if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}\n   $('#shop').classList.remove('open');\n   beginWarCameraIntro();\n   flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);\n }\n if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              if needle not in text:
-                  raise SystemExit('Final de applyRemoteGame não encontrado')
-              text = text.replace(needle, insert, 1)
-          sub_old = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.waitFirebase().then(F=>{\n"
-          sub_new = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();\n    this.waitFirebase().then(F=>{\n"
-          if sub_old in text:
-              text = text.replace(sub_old, sub_new, 1)
-          if marker not in text:
-              raise SystemExit('Patch de transição não aplicado')
-          if 'this.lastRemoteSeq=0' not in text:
-              raise SystemExit('Reset de sessão remota não aplicado')
-          if 'i.postimg.cc' in text:
-              raise SystemExit('Referência ao Postimg reapareceu')
-          path.write_text(text, encoding='utf-8')
-
-      - name: Validar correção
+      - name: Aplicar ajustes
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
-          grep -q 'remoteWarRoundChanged' index.html
-          grep -q 'this.lastRemoteSeq=0' index.html
+          python .github/patch_dragon_gif_ai_stability.py
+
+      - name: Extrair JavaScript principal
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,flags=re.S)
+          if not scripts:
+              raise SystemExit('Nenhum script encontrado')
+          Path('/tmp/rampage-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+
+      - name: Validar JavaScript e regras
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/rampage-main.js
+          grep -q "let DRAGON_ATTACK_VISUAL_MS=1800;" index.html
+          grep -q "if(key==='dragonAttack')DRAGON_ATTACK_VISUAL_MS=validGifDuration" index.html
+          grep -q "DRAGON_CLOSE_SHOT_COOLDOWN_MS=5000" index.html
+          grep -q "function updateWarBotPurchases(now,force=false)" index.html
+          grep -q "function chooseBotWarPurchase(p)" index.html
+          grep -q "_dragonAttackVisualEndAt" index.html
+          grep -q "_spriteSwitchToken" index.html
+          grep -q "launchDragonFireball(e,target,{emergency:true})" index.html
+          grep -q "REMOTE WAR ROUND TRANSITION SYNC" index.html
+          ! grep -q "const DRAGON_ATTACK_VISUAL_MS=850;" index.html
           ! grep -q 'i.postimg.cc' index.html
           test "$(find assets -type f | wc -l)" -eq 33
 
-      - name: Publicar correção
+      - name: Publicar ajustes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          if git diff --cached --quiet; then
-            echo 'Nenhuma alteração necessária.'
-            exit 0
-          fi
-          git commit -m 'Fix non-host war round transitions'
+          git commit -m 'Stabilize Dragon GIFs and improve war bot strategy'
           git push
