@@ -21,6 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sed -i 's/launchDragonFireball(e,target,{emergency=true})/launchDragonFireball(e,target,{emergency:true})/' .github/patch_dragon_gif_ai_stability.py
           python .github/patch_dragon_gif_ai_stability.py
 
       - name: Extrair JavaScript principal
