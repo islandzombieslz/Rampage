@@ -184,7 +184,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   width:100%;
   min-height:44px;
 }
-@media(max-height:520px){
+@media(max-height:520px) and (pointer:fine){
   #modeScreen .mode-menu-shell{width:min(540px,86vw)}
   #modeScreen .mode-grid,#modeScreen .mode-actions{gap:14px}
 }
@@ -1417,7 +1417,7 @@ html,body{
 }
 
 /* Landscape baixo: aumenta um pouco a largura útil sem deixar sair da moldura. */
-@media (max-height:650px){
+@media (max-height:650px) and (pointer:fine){
   #configScreen>.card{
     width:min(610px,94vh,94vw) !important;
     height:min(610px,94vh,94vw) !important;
@@ -1611,7 +1611,7 @@ html,body{
   font-size:11px !important;
   white-space:nowrap !important;
 }
-@media (max-height:650px){
+@media (max-height:650px) and (pointer:fine){
   #lobbyScreen>.card{
     width:min(610px,94vh,94vw) !important;
     height:min(610px,94vh,94vw) !important;
@@ -1762,7 +1762,7 @@ html,body{
   font-size:11px !important;
   white-space:nowrap !important;
 }
-@media (max-height:650px){
+@media (max-height:650px) and (pointer:fine){
   #clanScreen>.card{
     width:min(610px,94vh,94vw) !important;
     height:min(610px,94vh,94vw) !important;
@@ -1789,6 +1789,38 @@ html,body{
     font-size:10px !important;
   }
 }
+
+
+/* ===== MOBILE: SEM DESTAQUE NATIVO + LAYOUT DE REFERÊNCIA ===== */
+button{
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+}
+button:focus,
+button:focus-visible{
+  outline:none !important;
+}
+/* Mantém somente a seleção que pertence ao próprio jogo. */
+button.selected{
+  outline:2px solid var(--accent) !important;
+}
+button::-moz-focus-inner{border:0}
+
+/* Em touch, o menor lado do aparelho vira a referência visual.
+   Assim portrait girado por CSS e landscape físico usam as mesmas proporções. */
+@media (pointer:coarse){
+  #menuScreen .menu-sprite-btn{width:min(320px,68vmin)}
+  #modeScreen .mode-menu-shell{width:min(650px,92vmin)}
+  .card{width:min(720px,95vmin);max-height:92vmax}
+  #configScreen>.card,
+  #lobbyScreen>.card,
+  #clanScreen>.card{
+    width:min(720px,94vmin) !important;
+    height:min(720px,94vmin) !important;
+  }
+  .shop-items{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 </style>
 
 <script type="module">
@@ -2381,13 +2413,67 @@ $('#saveNick').onclick=async()=>{const n=getCurrentNick();localStorage.setItem('
 $('#logoutBtn').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();await NetworkAdapter.leaveRoom();await F.signOut(F.firebaseAuth)};
 
 
-function gameViewportSize(){
-  // No fallback portrait o jogo é girado: largura lógica = altura visual.
+// MOBILE STABLE LOGICAL VIEWPORT
+let mobileViewportLayout={active:false,portrait:false,w:innerWidth,h:innerHeight,scale:1,offsetX:0,offsetY:0};
+
+function readPortraitViewportSnapshot(){
+  try{
+    const saved=JSON.parse(sessionStorage.getItem('rampagePortraitViewport')||'null');
+    if(saved&&Number.isFinite(saved.w)&&Number.isFinite(saved.h)&&saved.w>saved.h&&saved.w>=320&&saved.h>=240)return saved;
+  }catch(_){}
+  return null;
+}
+
+function clearMobileRootOverrides(root){
+  for(const prop of ['width','height','left','top','right','bottom','transform','transformOrigin'])root.style[prop]='';
+}
+
+function refreshMobileViewportLayout(){
   const vv=window.visualViewport;
-  const rawW=vv?.width||innerWidth;
-  const rawH=vv?.height||innerHeight;
-  const forcedPortrait=matchMedia('(orientation:portrait)').matches && innerWidth<=900;
-  return forcedPortrait ? {w:rawH,h:rawW} : {w:rawW,h:rawH};
+  const rawW=Math.max(1,vv?.width||innerWidth);
+  const rawH=Math.max(1,vv?.height||innerHeight);
+  const root=document.getElementById('landscapeRoot');
+  const mobile=isMobileLike()&&Math.min(rawW,rawH)<=900;
+  const portrait=mobile&&matchMedia('(orientation:portrait)').matches&&innerWidth<=900;
+
+  if(!mobile||!root){
+    if(root)clearMobileRootOverrides(root);
+    mobileViewportLayout={active:false,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0};
+    return mobileViewportLayout;
+  }
+
+  if(portrait){
+    clearMobileRootOverrides(root);
+    const logical={w:rawH,h:rawW};
+    mobileViewportLayout={active:true,portrait:true,w:logical.w,h:logical.h,scale:1,offsetX:0,offsetY:0};
+    try{sessionStorage.setItem('rampagePortraitViewport',JSON.stringify(logical))}catch(_){}
+    return mobileViewportLayout;
+  }
+
+  let logical=readPortraitViewportSnapshot();
+  if(!logical)logical={w:Math.max(rawW,rawH),h:Math.min(rawW,rawH)};
+  const scale=Math.min(rawW/logical.w,rawH/logical.h);
+  const offsetX=(rawW-logical.w*scale)/2;
+  const offsetY=(rawH-logical.h*scale)/2;
+
+  root.style.width=logical.w+'px';
+  root.style.height=logical.h+'px';
+  root.style.left=offsetX+'px';
+  root.style.top=offsetY+'px';
+  root.style.right='auto';
+  root.style.bottom='auto';
+  root.style.transformOrigin='top left';
+  root.style.transform=`scale(${scale})`;
+
+  mobileViewportLayout={active:true,portrait:false,w:logical.w,h:logical.h,scale,offsetX,offsetY};
+  return mobileViewportLayout;
+}
+
+function gameViewportSize(){
+  const l=mobileViewportLayout;
+  if(l.active)return {w:l.w,h:l.h};
+  const vv=window.visualViewport;
+  return {w:vv?.width||innerWidth,h:vv?.height||innerHeight};
 }
 
 
@@ -2673,21 +2759,29 @@ function isPortraitFallback(){
   return isMobileLike() && matchMedia('(orientation:portrait)').matches && innerWidth<=900;
 }
 function gameViewport(){
-  return isPortraitFallback()
-    ? {w:innerHeight,h:innerWidth}
-    : {w:innerWidth,h:innerHeight};
+  const l=mobileViewportLayout;
+  if(l.active)return {w:l.w,h:l.h};
+  return {w:innerWidth,h:innerHeight};
 }
 function screenPointToGame(x,y){
-  // Quando o root é girado 90° no portrait, converte coordenadas físicas
-  // do toque para os eixos lógicos do jogo horizontal.
-  if(isPortraitFallback())return {x:y,y:innerWidth-x};
+  // Portrait continua usando a rotação CSS original, exatamente como antes.
+  if(isPortraitFallback()){
+    const rawW=window.visualViewport?.width||innerWidth;
+    return {x:y,y:rawW-x};
+  }
+  // No landscape físico, desfaz o scale/centralização do viewport lógico salvo no portrait.
+  const l=mobileViewportLayout;
+  if(l.active&&!l.portrait)return {x:(x-l.offsetX)/l.scale,y:(y-l.offsetY)/l.scale};
   return {x,y};
 }
 function screenDeltaToGame(dx,dy){
   if(isPortraitFallback())return {x:dy,y:-dx};
+  const l=mobileViewportLayout;
+  if(l.active&&!l.portrait)return {x:dx/l.scale,y:dy/l.scale};
   return {x:dx,y:dy};
 }
 function resize(){
+  refreshMobileViewportLayout(){
   const {w,h}=gameViewportSize();
   const dpr=Math.min(window.devicePixelRatio||1,1.35);
   canvas.width=Math.max(1,Math.floor(w*dpr));
@@ -2697,7 +2791,9 @@ function resize(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.imageSmoothingEnabled=true;
 }
-addEventListener('resize',resize);resize();
+addEventListener('resize',resize);
+window.visualViewport?.addEventListener('resize',resize);
+resize();
 
 const keys={};
 addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.code==='Space'){e.preventDefault();attackControlled()}});
