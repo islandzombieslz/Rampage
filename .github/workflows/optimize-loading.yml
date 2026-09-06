@@ -1,4 +1,4 @@
-name: Otimizar carregamento dos assets
+name: Ajustar voo e balanceamento do Dragão
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  optimize:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,56 +17,146 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Corrigir troca de rodada remota no modo Guerra
+      - name: Aplicar ajustes do Dragão
         shell: python
         run: |
           from pathlib import Path
+          import re
+
           path = Path('index.html')
           text = path.read_text(encoding='utf-8')
-          marker = '// REMOTE WAR ROUND TRANSITION SYNC'
-          if marker not in text:
-              old_head = " const firstFrame=$('#gameScreen').style.display==='none';\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              new_head = " const firstFrame=$('#gameScreen').style.display==='none';\n const previousRound=Number(state.round)||0;\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              if old_head not in text:
-                  raise SystemExit('Cabeçalho de applyRemoteGame não encontrado')
-              text = text.replace(old_head, new_head, 1)
-              needle = " if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              insert = " // REMOTE WAR ROUND TRANSITION SYNC\n // O host permanece como única autoridade. O cliente apenas reproduz a transição local.\n const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';\n if(remoteWarRoundChanged){\n   state.particles=[];\n   clearEntityVisuals();\n   state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};\n   $('#gameScreen').classList.remove('spectator-mode');\n   const deathFade=$('#deathFade');\n   if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}\n   $('#shop').classList.remove('open');\n   beginWarCameraIntro();\n   flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);\n }\n if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              if needle not in text:
-                  raise SystemExit('Final de applyRemoteGame não encontrado')
-              text = text.replace(needle, insert, 1)
-          sub_old = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.waitFirebase().then(F=>{\n"
-          sub_new = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();\n    this.waitFirebase().then(F=>{\n"
-          if sub_old in text:
-              text = text.replace(sub_old, sub_new, 1)
-          if marker not in text:
-              raise SystemExit('Patch de transição não aplicado')
-          if 'this.lastRemoteSeq=0' not in text:
-              raise SystemExit('Reset de sessão remota não aplicado')
-          if 'i.postimg.cc' in text:
-              raise SystemExit('Referência ao Postimg reapareceu')
+
+          def replace_once(old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: esperado 1 trecho, encontrado {count}')
+              return text.replace(old, new, 1)
+
+          text = replace_once(
+              'const DRAGON_BURN_DAMAGE=50;',
+              'const DRAGON_BURN_DAMAGE=5;',
+              'dano da queimadura'
+          )
+
+          text = replace_once(
+              'Dispara a cada 2s • queimadura 50/s por 6s • voador',
+              'Dispara a cada 2s • queimadura: 6 pulsos de 5 (1/s) • voador',
+              'descrição da loja'
+          )
+
+          old_collision = """       const b=living[j];
+       if((a.type==='dragon'&&a.dragonFlightState==='flying')||(b.type==='dragon'&&b.dragonFlightState==='flying'))continue;
+     let dx=b.x-a.x,dy=b.y-a.y;
+     let d=Math.hypot(dx,dy);
+     const minD=Math.min(58,a.r+b.r);"""
+          new_collision = """       const b=living[j];
+       const aFlyingDragon=a.type==='dragon'&&a.dragonFlightState==='flying';
+       const bFlyingDragon=b.type==='dragon'&&b.dragonFlightState==='flying';
+       // Dragões voando atravessam tropas terrestres, mas colidem entre si para não se amontoarem.
+       if((aFlyingDragon||bFlyingDragon)&&!(aFlyingDragon&&bFlyingDragon))continue;
+     let dx=b.x-a.x,dy=b.y-a.y;
+     let d=Math.hypot(dx,dy);
+     const minD=aFlyingDragon&&bFlyingDragon?76:Math.min(58,a.r+b.r);"""
+          text = replace_once(old_collision, new_collision, 'colisão entre dragões')
+
+          text = replace_once(
+              "img.style.transform=`translate(-50%,-50%) rotate(${angle}rad)`;img.style.visibility='visible';",
+              "img.style.transform=`translate(-50%,-50%) rotate(${angle+Math.PI/2}rad)`;img.style.visibility='visible';",
+              'rotação da bola de fogo'
+          )
+
+          old_lift = """   // O scale geral aplica a câmera; o flip fica só no miolo do personagem.
+   el.style.left=sx+'px';
+   el.style.top=sy+'px';
+   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;"""
+          new_lift = """   // O scale geral aplica a câmera; o flip fica só no miolo do personagem.
+   // Durante a decolagem o Dragão sobe visualmente e mantém altitude enquanto voa.
+   // A posição lógica no mapa não muda: é apenas altura visual, preservando alcance e sincronização.
+   let dragonLift=0;
+   if(e.type==='dragon'){
+     if(e.dragonFlightState==='takeoff'){
+       const start=Number(e.dragonTakeoffStartedAt)||localNow;
+       const end=Math.max(start+1,Number(e.dragonTakeoffEndAt)||start+DRAGON_TAKEOFF_DURATION);
+       const progress=clamp((localNow-start)/(end-start),0,1);
+       dragonLift=36*(1-Math.pow(1-progress,2));
+     }else if(e.dragonFlightState==='flying')dragonLift=36;
+   }
+   el.style.left=sx+'px';
+   el.style.top=(sy-dragonLift*zoom)+'px';
+   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;"""
+          text = replace_once(old_lift, new_lift, 'subida visual da decolagem')
+
+          flee_function = """
+function tryWarriorFleeFlyingDragon(e,dt,hasAttackableTargets=false){
+ if(e.type!=='warrior'||state.mode!=='war'||state.phase!=='combat'||!e.alive)return false;
+ // Quando restam apenas um ou dois Guerreiros do time, eles passam a preservar distância do Dragão.
+ const livingWarriors=state.entities.filter(t=>t.alive&&t.team===e.team&&t.type==='warrior').length;
+ if(livingWarriors>2)return false;
+ const dragons=state.entities.filter(t=>t.alive&&t.team!==e.team&&t.type==='dragon'&&t.dragonFlightState==='flying');
+ if(!dragons.length)return false;
+ let dragon=dragons[0],best=dist(e,dragon);
+ for(let i=1;i<dragons.length;i++){const d=dist(e,dragons[i]);if(d<best){best=d;dragon=dragons[i]}}
+ // Se ainda existem alvos terrestres atacáveis, só abandona a luta quando o Dragão realmente ameaça de perto.
+ if(hasAttackableTargets&&best>380)return false;
+ let mx=e.x-dragon.x,my=e.y-dragon.y;
+ if(best<.001){mx=e.x<state.world.w/2?-1:1;my=e.y<state.world.h/2?-1:1}
+ // Evita ficar pressionando a mesma borda do mapa: adiciona componente lateral para continuar escapando.
+ const edge=135;
+ if(e.x<edge)mx+=.9;
+ else if(e.x>state.world.w-edge)mx-=.9;
+ if(e.y<edge)my+=.9;
+ else if(e.y>state.world.h-edge)my-=.9;
+ const len=Math.hypot(mx,my)||1;mx/=len;my/=len;
+ e.target=dragon;e.heading=Math.atan2(my,mx);if(Math.abs(mx)>.05)e.facing=mx<0?-1:1;
+ e.x+=mx*e.speed*dt;e.y+=my*e.speed*dt;e.moving=true;
+ e.x=clamp(e.x,35,state.world.w-35);e.y=clamp(e.y,35,state.world.h-35);
+ return true;
+}
+
+"""
+          ai_anchor = 'function aiFight(e,dt,forcedTeam,preparedCandidates=null){\n'
+          if 'function tryWarriorFleeFlyingDragon' in text:
+              raise SystemExit('função de fuga já existe inesperadamente')
+          if text.count(ai_anchor) != 1:
+              raise SystemExit('âncora de aiFight não encontrada de forma única')
+          text = text.replace(ai_anchor, flee_function + ai_anchor, 1)
+
+          old_ai = """ if(!e.alive||e.knockTime>0){e.moving=false;return;}
+ const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
+ if(!candidates.length){e.moving=false;return}"""
+          new_ai = """ if(!e.alive||e.knockTime>0){e.moving=false;return;}
+ const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
+ if(tryWarriorFleeFlyingDragon(e,dt,candidates.length>0))return;
+ if(!candidates.length){e.moving=false;return}"""
+          text = replace_once(old_ai, new_ai, 'integração da fuga do guerreiro')
+
           path.write_text(text, encoding='utf-8')
 
-      - name: Validar correção
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S)
+          if not scripts:
+              raise SystemExit('nenhum script encontrado')
+          Path('/tmp/rampage-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+
+      - name: Validar JavaScript e regras
         shell: bash
         run: |
           set -euo pipefail
+          node --check /tmp/rampage-main.js
+          grep -q 'const DRAGON_BURN_DAMAGE=5;' index.html
+          grep -q 'aFlyingDragon&&bFlyingDragon?76' index.html
+          grep -q 'angle+Math.PI/2' index.html
+          grep -q 'dragonLift=36' index.html
+          grep -q 'tryWarriorFleeFlyingDragon' index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
-          grep -q 'remoteWarRoundChanged' index.html
-          grep -q 'this.lastRemoteSeq=0' index.html
           ! grep -q 'i.postimg.cc' index.html
           test "$(find assets -type f | wc -l)" -eq 33
 
-      - name: Publicar correção
+      - name: Publicar ajustes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          if git diff --cached --quiet; then
-            echo 'Nenhuma alteração necessária.'
-            exit 0
-          fi
-          git commit -m 'Fix non-host war round transitions'
+          git commit -m 'Refine Dragon flight, burn and warrior evasion'
           git push
