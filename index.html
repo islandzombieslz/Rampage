@@ -1234,7 +1234,42 @@ html,body{
 @media(max-width:620px){.shop-items{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 
-/* ===== NITIDEZ DOS SPRITES =====
+/* ===== DRAGÃO GUERREIRO + LOJA SEMPRE ACESSÍVEL ===== */
+          #gameScreen:not(.pve-mode) #shopButton{
+            display:block !important;
+            visibility:visible !important;
+            opacity:1 !important;
+            position:absolute !important;
+            right:calc(var(--safe-right) + 4px) !important;
+            bottom:calc(var(--safe-bottom) + 4px) !important;
+            left:auto !important;
+            top:auto !important;
+            z-index:120 !important;
+            pointer-events:auto !important;
+            transform:none !important;
+          }
+          #gameScreen:not(.pve-mode) #shop{z-index:119 !important}
+          .entity-visual.dragon-visual{width:116px;height:126px}
+          .entity-visual.dragon-visual .entity-facing{width:116px;height:118px}
+          .entity-visual.dragon-visual .entity-body{left:-7px;top:-8px;width:130px;height:128px;object-fit:contain}
+          .entity-visual.dragon-visual .entity-bars{left:21px;top:-7px;width:74px}
+          .entity-visual.dragon-visual .hp-bg,.entity-visual.dragon-visual .shield-bg{width:74px}
+          .entity-visual.dragon-visual .entity-weapon-facing{display:none !important}
+          .entity-dragon-ground,.entity-dragon-takeoff,.entity-dragon-fly,.entity-dragon-attack{opacity:0}
+          .dragon-fireball-projectile{position:absolute;width:48px;height:48px;object-fit:contain;pointer-events:none;transform-origin:center;z-index:12;will-change:transform,left,top}
+          .dragon-burn-layer{position:absolute;left:50%;top:42%;width:76px;height:76px;transform:translate(-50%,-50%);pointer-events:none;z-index:9;opacity:0}
+          .dragon-burn-layer img{position:absolute;width:27px;height:27px;object-fit:contain;pointer-events:none;transform:translate(-50%,-50%)}
+          .dragon-burn-layer img:nth-child(1){left:28%;top:55%}
+          .dragon-burn-layer img:nth-child(2){left:68%;top:38%}
+          .dragon-burn-layer img:nth-child(3){left:51%;top:70%}
+          .dragon-shop-unit{border-color:#c84724;box-shadow:inset 0 0 20px rgba(255,82,34,.10)}
+          .shop-items{grid-template-columns:repeat(4,minmax(0,1fr))}
+          @media (pointer:coarse), (max-height:720px), (max-width:900px){
+            .shop-items{grid-template-columns:repeat(2,minmax(0,1fr))}
+            #shop{width:min(680px,calc(100% - var(--safe-left) - var(--safe-right))) !important}
+          }
+
+          /* ===== NITIDEZ DOS SPRITES =====
    Mantém suavização de alta qualidade e pede contraste otimizado ao Chromium/WebKit
    quando disponível, sem reduzir resolução ou quadros dos GIFs. */
 .entity-body,.entity-sword,.mage-staff,.mage-hand,.golem-rock-fragment,.mage-power-normal,.mage-power-special,.shop-unit img,.clan-option img{
@@ -1950,7 +1985,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <div class="config">
         <div class="label">Gemas iniciais por jogador</div>
         <div class="counter"><button class="minus" data-target="gems">−</button><b id="gemsVal">500</b><button class="plus" data-target="gems">+</button></div>
-        <div class="small">Guerreiro 75 • Mago 550 • Golem 350 gemas.</div>
+        <div class="small">Guerreiro 75 • Dragão 350 • Golem 350 • Mago 550 gemas.</div>
         <div class="small">O vencedor de cada rodada recebe +200 gemas extras na rodada seguinte.</div>
       </div>
     </div>
@@ -1994,8 +2029,8 @@ window.dispatchEvent(new Event('firebase-ready'));
       <img src="assets/ui/cla-guerreiros.png" alt="" loading="lazy" decoding="async">
       <div>
         <h3>Guerreiros</h3>
-        <div class="small">Guerreiro/Guerreira • Mago/Maga • Golem</div>
-        <div class="small">Três tropas disponíveis na preparação da guerra.</div>
+        <div class="small">Guerreiro/Guerreira • Mago/Maga • Golem • Dragão</div>
+        <div class="small">Quatro tropas disponíveis na preparação da guerra.</div>
       </div>
     </div>
     <div class="divider"></div>
@@ -2043,6 +2078,16 @@ window.dispatchEvent(new Event('firebase-ready'));
             <div class="small">Especial 100 + cura 30 na área: cercado ou com ≤50% de vida</div>
           </div>
           <button id="buyMage">550 💎</button>
+        </div>
+
+        <div class="shop-unit dragon-shop-unit">
+          <img src="assets/dragon/dragao-guerreiro-parado.gif" loading="lazy" decoding="async">
+          <div class="shop-unit-info">
+            <b>Dragão Guerreiro</b>
+            <div class="small">150 vida + 50 escudo • bola de fogo 35</div>
+            <div class="small">Dispara a cada 2s • queimadura 50/s por 6s • voador</div>
+          </div>
+          <button id="buyDragon">350 💎</button>
         </div>
 
         <div class="shop-unit">
@@ -2127,7 +2172,14 @@ const ASSETS = {
   mageHand:'assets/mage/mao-magos.png',
   femaleMageIdle:'assets/mage/maga-parada.gif',
   femaleMageWalk:'assets/mage/maga-andando.gif',
-  femaleMageSpecial:'assets/mage/maga-especial.gif'
+  femaleMageSpecial:'assets/mage/maga-especial.gif',
+
+  // Dragão Guerreiro — clã Guerreiros
+  dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',
+  dragonTakeoff:'assets/dragon/dragao-guerreiro-pulando.gif',
+  dragonFly:'assets/dragon/dragao-guerreiro-voando.gif',
+  dragonAttack:'assets/dragon/dragao-guerreiro-atacando.gif',
+  dragonFireball:'assets/dragon/bola-de-fogo.gif'
 };
 const state = {
   mode:'pve', pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
@@ -2139,7 +2191,7 @@ const state = {
   fps:60, fpsFrames:0, fpsLast:performance.now(), hudLast:0,
   spectator:{active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null},
   screenShake:{until:0,power:0},
-  golemRockEffects:[], mageEffects:[], netSeq:0
+  golemRockEffects:[], mageEffects:[], dragonProjectiles:[], dragonProjectileSeq:0, netSeq:0
 };
 const COLORS=['#58a6ff','#e3b341','#3fb950','#f778ba','#a371f7','#ff7b72'];
 const speedMap={slow:145,normal:195,fast:255};
@@ -2164,6 +2216,16 @@ const MAGE_SPECIAL_COOLDOWN=10;
 const MAGE_SPECIAL_RADIUS=215;
 const MAGE_SPECIAL_DAMAGE=100;
 const MAGE_SPECIAL_HEAL=30;
+
+// DRAGON WARRIOR SYSTEM
+let DRAGON_TAKEOFF_DURATION=1200;
+const DRAGON_SHOT_COOLDOWN_MS=2000;
+const DRAGON_ATTACK_VISUAL_MS=850;
+const DRAGON_FIREBALL_DAMAGE=35;
+const DRAGON_FIREBALL_SPEED=430;
+const DRAGON_BURN_DAMAGE=50;
+const DRAGON_BURN_TICK_MS=1000;
+const DRAGON_BURN_DURATION_MS=6000;
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
 let golemAttackAssetsReady=false;
@@ -2196,7 +2258,7 @@ function validGifDuration(ms,fallback){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial'];
+ const gifKeys=['golemAttack','golemSpecial','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','dragonTakeoff','dragonAttack','dragonFireball'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -2211,6 +2273,7 @@ function validGifDuration(ms,fallback){
      if(key==='magePowerSpecial')MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,MAGE_POWER_SPECIAL_DURATION);
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
+     if(key==='dragonTakeoff')DRAGON_TAKEOFF_DURATION=validGifDuration(duration,DRAGON_TAKEOFF_DURATION);
    }catch(_){
      // Fallback abaixo usa URL única com cache-buster. O jogo continua funcional.
    }finally{
@@ -2282,9 +2345,27 @@ function serializeGame(){
        impactRemainingMs:Math.max(0,out.pendingGolemAttack.impactAt-now)
      };
    }
+   if(out.dragonTakeoffEndAt){
+     out.dragonTakeoffRemainingMs=Math.max(0,out.dragonTakeoffEndAt-now);
+     delete out.dragonTakeoffEndAt;
+     delete out.dragonTakeoffStartedAt;
+   }
+   if(out.pendingDragonAttack){
+     out.pendingDragonAttack={...out.pendingDragonAttack,remainingMs:Math.max(0,out.pendingDragonAttack.endAt-now)};
+   }
+   if(out.dragonBurnUntil){
+     out.dragonBurnRemainingMs=Math.max(0,out.dragonBurnUntil-now);
+     delete out.dragonBurnUntil;
+     delete out.dragonBurnStartedAt;
+     delete out.dragonBurnNextTick;
+   }
    return out;
  });
- return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,players:state.players.map(p=>({...p,local:false})),entities};
+ const dragonProjectiles=(state.dragonProjectiles||[]).map(p=>({
+   id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
+   targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0
+ }));
+ return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
 }
 function applyRemoteGame(game){
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
@@ -2349,9 +2430,24 @@ function applyRemoteGame(game){
      }
      // Estado visual nunca pode sobreviver sozinho sem um ataque pendente real.
      if(!out.pendingGolemAttack)out.golemAttackKind=null;
+     if(out.dragonTakeoffRemainingMs!=null){
+       const remaining=Math.max(0,Number(out.dragonTakeoffRemainingMs)||0);
+       out.dragonTakeoffEndAt=localNow+remaining;
+       out.dragonTakeoffStartedAt=localNow-Math.max(0,DRAGON_TAKEOFF_DURATION-remaining);
+     }
+     if(out.pendingDragonAttack?.remainingMs!=null){
+       const remaining=Math.max(0,Number(out.pendingDragonAttack.remainingMs)||0);
+       out.pendingDragonAttack={...out.pendingDragonAttack,endAt:localNow+remaining};
+     }
+     if(out.dragonBurnRemainingMs!=null){
+       const remaining=Math.max(0,Number(out.dragonBurnRemainingMs)||0);
+       out.dragonBurnUntil=localNow+remaining;
+       out.dragonBurnStartedAt=localNow-Math.max(0,DRAGON_BURN_DURATION_MS-remaining);
+     }
      return out;
    });
  }
+ if(Array.isArray(game.dragonProjectiles))state.dragonProjectiles=game.dragonProjectiles.map(p=>({...p}));
  // REMOTE WAR ROUND TRANSITION SYNC
  // O host permanece como única autoridade. O cliente apenas reproduz a transição local.
  const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';
@@ -2381,6 +2477,7 @@ function handleHostCommands(commands){
      if(cmd.type==='buy-warrior')buyForPlayer(p,false);
      if(cmd.type==='buy-golem')buyGolemForPlayer(p,false);
      if(cmd.type==='buy-mage')buyMageForPlayer(p,false);
+     if(cmd.type==='buy-dragon')buyDragonForPlayer(p,false);
    }
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
@@ -2841,7 +2938,11 @@ function entityBase(type,x,y,team,color){
  // Máquina de estados do Golem: localizar -> aproximar -> atacar -> finalizar.
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
  golemPhase:'seek',golemCrowdSpecialUsed:false,golemLastAttackCompletedAt:0,
- pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,ownerId:null};
+ pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
+ pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
+ dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,
+ dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
+ dragonBurnSourceX:0,dragonBurnSourceY:0,dragonBurnSerial:0,dragonBurnFlameCount:0,ownerId:null};
 }
 function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null){
  const e=entityBase('warrior',x,y,team,color);
@@ -2884,6 +2985,14 @@ function spawnMage(x,y,team,color,variant='male'){
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER:92;e.attackCooldown=0;e.mageCycle=0;
  state.entities.push(e);return e;
 }
+function spawnDragon(x,y,team,color){
+ const e=entityBase('dragon',x,y,team,color);
+ e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=DRAGON_FIREBALL_DAMAGE;e.r=34;
+ // Um pouco mais rápido que o Mago (55 vs 46 no modo Guerra).
+ e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;
+ e.dragonFlightState='ground';e.dragonNextShotAt=0;
+ state.entities.push(e);return e;
+}
 
 function spawnEnemy(){
  const margin=80, side=Math.floor(Math.random()*4);let x,y;
@@ -2904,6 +3013,7 @@ function burst(x,y,color){
 
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
+ if(target.type==='dragon'&&target.dragonFlightState==='flying'&&attacker.type==='warrior')return;
 
  // Escudo absorve primeiro.
  let remaining=amount;
@@ -2991,6 +3101,7 @@ function startEntityDeath(e,dx=0,dy=0){
  e.golemPhase='dead';
  e.pendingMageAttack=null;
  e.mageAttackKind=null;
+ e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
  // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
  e.removeAt=now+1900;
@@ -3057,6 +3168,7 @@ function separateLivingEntities(){
      for(const j of bucket){
        if(j<=i)continue;
        const b=living[j];
+       if((a.type==='dragon'&&a.dragonFlightState==='flying')||(b.type==='dragon'&&b.dragonFlightState==='flying'))continue;
      let dx=b.x-a.x,dy=b.y-a.y;
      let d=Math.hypot(dx,dy);
      const minD=Math.min(58,a.r+b.r);
@@ -3246,7 +3358,12 @@ function updateGolemRockEffects(now){
 function isRealCombatTarget(t){
  // A IA nunca pode selecionar GIFs, poderes, fragmentos ou outros efeitos visuais.
  // Só personagens/unidades reais do combate entram na lista de alvos.
- return !!t && t.alive && ['warrior','mage','golem','enemy'].includes(t.type);
+ return !!t && t.alive && ['warrior','mage','golem','dragon','enemy'].includes(t.type);
+}
+function canEngageTarget(attacker,target){
+ if(!isRealCombatTarget(target)||!attacker)return false;
+ if(target.type==='dragon'&&target.dragonFlightState==='flying'&&attacker.type==='warrior')return false;
+ return true;
 }
 
 function isValidGolemPending(e,p){
@@ -3503,7 +3620,7 @@ function performAttack(e,preparedCandidates=null){
 
  const candidates=preparedCandidates||state.entities;
  for(const t of candidates){
-   if(t.alive&&t!==e&&t.team!==e.team&&dist(e,t)<92)applyCombatHit(t,e,e.damage);
+   if(t.alive&&t!==e&&t.team!==e.team&&canEngageTarget(e,t)&&dist(e,t)<92)applyCombatHit(t,e,e.damage);
  }
 }
 
@@ -3645,7 +3762,7 @@ function updatePVE(dt){
 
 /* ==================== MESTRE DA GUERRA ==================== */
 function startWarMode(){
- state.round=1;state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;state.running=true;state.entities=[];state.particles=[];
+ state.round=1;state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;state.running=true;state.entities=[];state.particles=[];state.dragonProjectiles=[];
  state.players.forEach((p,i)=>{p.bonusGems=0;p.gems=state.gems;p.troops=0;p.score=0;});
  navigateScreen('gameScreen');configureGameScreenForMode();
  $('#shop').classList.remove('open');
@@ -3659,7 +3776,7 @@ function territoryFor(i,n){
  return {x:n===1?state.world.w/2:pad+i*lane,y:i%2===0?240:state.world.h-240};
 }
 function setupWarRound(){
- state.entities=[];state.particles=[];clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
+ state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
    p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);
    p.troops=0;
@@ -3667,11 +3784,12 @@ function setupWarRound(){
    // Cada rodada começa: Guerreiro -> Guerreira -> Guerreiro -> Guerreira...
    p.nextWarriorVariant='male';
  });
-  // Bots usam os três tipos do clã Guerreiros.
+  // Bots usam os quatro tipos do clã Guerreiros.
   state.players.filter(p=>!p.human).forEach(p=>{
    while(p.gems>=75){
      const roll=Math.random();
-     if(p.gems>=350 && roll<.25)buyGolemForPlayer(p,true);
+     if(p.gems>=350 && roll<.18)buyDragonForPlayer(p,true);
+     else if(p.gems>=350 && roll<.34)buyGolemForPlayer(p,true);
      else if(p.gems>=550 && roll<.58)buyMageForPlayer(p,true);
      else buyForPlayer(p,true);
    }
@@ -3681,11 +3799,12 @@ $('#shopButton').onclick=()=>$('#shop').classList.toggle('open');
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
- else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false)}
+ else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
 $('#buyGolem').onclick=()=>requestWarPurchase('buy-golem');
 $('#buyMage').onclick=()=>requestWarPurchase('buy-mage');
+$('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');
 function buyForPlayer(p,bot){
  if(p.gems<75)return false;
  p.gems-=75;
@@ -3716,8 +3835,18 @@ function buyMageForPlayer(p,bot){
  spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female');
  return true;
 }
+function buyDragonForPlayer(p,bot){
+ if(p.gems<350)return false;p.gems-=350;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*82;
+ spawnDragon(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
+ return true;
+}
 
-function startCombatPhase(){state.phase='combat';state.timeLeft=state.warTime;flash('GUERRA!',1.2)}
+function startCombatPhase(){
+ state.phase='combat';state.timeLeft=state.warTime;
+ for(const e of state.entities)if(e.alive&&e.type==='dragon')beginDragonTakeoff(e);
+ flash('GUERRA!',1.2);
+}
 const WAR_AI_GRID_CELL=220;
 const WAR_AI_LOCAL_RADIUS=560;
 function buildWarAIGrid(living){
@@ -3737,7 +3866,7 @@ function nearestEnemyFromWarGrid(e,grid){
      if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
      const bucket=grid.get(x+','+y);if(!bucket)continue;
      for(const t of bucket){
-       if(!t.alive||t===e||t.team===e.team)continue;
+       if(!t.alive||t===e||t.team===e.team||!canEngageTarget(e,t))continue;
        const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
        if(ds<bestSq){bestSq=ds;best=t}
      }
@@ -3758,7 +3887,7 @@ function warCandidatesFor(e,grid){
  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++){
    const bucket=grid.get(x+','+y);if(!bucket)continue;
    for(const t of bucket){
-     if(!t.alive||t===e||t.team===e.team)continue;
+     if(!t.alive||t===e||t.team===e.team||!canEngageTarget(e,t))continue;
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
    }
  }
@@ -3771,6 +3900,8 @@ function updateWar(dt){
    state.prepLeft-=dt;
    if(state.prepLeft<=0)startCombatPhase();
  }else if(state.phase==='combat'){
+   const now=performance.now();
+   updateDragonProjectiles(dt);updateDragonBurns(now);
    const living=state.entities.filter(e=>e.alive);
    const teams=[...new Set(living.map(e=>e.team))];
    const combatGrid=buildWarAIGrid(living);
@@ -3843,10 +3974,10 @@ function aiFightGolem(e,dt,forcedTeam,preparedCandidates=null){
  // ESTADO 2 — localizar um alvo REAL novamente.
  // Poderes/GIFs/fragmentos nunca entram em state.entities como alvo válido e
  // ainda são filtrados explicitamente por isRealCombatTarget().
- const candidates=preparedCandidates||state.entities.filter(t=>
+ const candidates=(preparedCandidates||state.entities.filter(t=>
    isRealCombatTarget(t) && t!==e &&
    (forcedTeam?t.team===forcedTeam:t.team!==e.team)
- );
+ )).filter(t=>canEngageTarget(e,t));
  if(!candidates.length){
    e.moving=false;
    e.target=null;
@@ -3929,13 +4060,98 @@ function aiFightGolem(e,dt,forcedTeam,preparedCandidates=null){
  e.y=clamp(e.y,42,state.world.h-42);
 }
 
-function aiFightMage(e,dt,forcedTeam,preparedCandidates=null){
+function beginDragonTakeoff(e){
+           if(!e||!e.alive||e.type!=='dragon'||e.dragonFlightState!=='ground')return false;
+           const now=performance.now();
+           e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;
+           e.dragonTakeoffStartedAt=now;e.dragonTakeoffEndAt=now+DRAGON_TAKEOFF_DURATION;e.moving=false;e.target=null;
+           return true;
+          }
+          function updateDragonState(e,now=performance.now()){
+           if(!e||e.type!=='dragon')return;
+           if(e.dragonFlightState==='takeoff'&&now>=(e.dragonTakeoffEndAt||0)){
+             e.dragonFlightState='flying';e.dragonTakeoffEndAt=0;e.dragonTakeoffStartedAt=0;
+             e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,now+150);
+           }
+           if(e.pendingDragonAttack&&now>=Number(e.pendingDragonAttack.endAt||0))e.pendingDragonAttack=null;
+          }
+          function igniteDragonBurn(target,source){
+           if(!target||!target.alive)return;
+           const now=performance.now();
+           target.dragonBurnSerial=(target.dragonBurnSerial||0)+1;
+           target.dragonBurnStartedAt=now;target.dragonBurnUntil=now+DRAGON_BURN_DURATION_MS;
+           target.dragonBurnNextTick=now+DRAGON_BURN_TICK_MS;target.dragonBurnSourceId=source?.id??null;
+           target.dragonBurnSourceX=source?.x??target.x;target.dragonBurnSourceY=source?.y??target.y;
+           target.dragonBurnFlameCount=2+(target.dragonBurnSerial%2);
+          }
+          function dragonBurnAttacker(target){
+           return state.entities.find(e=>e.id===target.dragonBurnSourceId)||{id:'dragon-burn',type:'dragon',x:Number(target.dragonBurnSourceX)||target.x,y:Number(target.dragonBurnSourceY)||target.y,heading:0,lastCombatAt:0};
+          }
+          function updateDragonBurns(now){
+           for(const target of state.entities){
+             if(!target.alive||!target.dragonBurnUntil)continue;
+             while(target.alive&&target.dragonBurnNextTick&&now>=target.dragonBurnNextTick&&target.dragonBurnNextTick<=target.dragonBurnUntil){
+               applyCombatHit(target,dragonBurnAttacker(target),DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4});
+               target.dragonBurnNextTick+=DRAGON_BURN_TICK_MS;
+             }
+             if(now>target.dragonBurnUntil){target.dragonBurnUntil=0;target.dragonBurnStartedAt=0;target.dragonBurnNextTick=0;target.dragonBurnSourceId=null}
+           }
+          }
+          function launchDragonFireball(e,target){
+           if(!e?.alive||e.type!=='dragon'||e.dragonFlightState!=='flying'||!target?.alive)return false;
+           const now=performance.now();if(now<(Number(e.dragonNextShotAt)||0))return false;
+           const angle=Math.atan2(target.y-e.y,target.x-e.x);e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
+           e.moving=false;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;
+           e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,endAt:now+DRAGON_ATTACK_VISUAL_MS};
+           e.dragonNextShotAt=now+DRAGON_SHOT_COOLDOWN_MS;
+           const startX=e.x+Math.cos(angle)*42,startY=e.y-16+Math.sin(angle)*18;
+           state.dragonProjectiles.push({id:'df_'+(++state.dragonProjectileSeq),serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
+           return true;
+          }
+          function updateDragonProjectiles(dt){
+           const now=performance.now(),list=state.dragonProjectiles||[];
+           for(let i=list.length-1;i>=0;i--){
+             const p=list[i],target=state.entities.find(t=>t.id===p.targetId&&t.alive&&t.team!==p.team);
+             if(target){p.targetX=target.x;p.targetY=target.y}
+             const tx=Number(p.targetX),ty=Number(p.targetY);
+             if(!Number.isFinite(tx)||!Number.isFinite(ty)||now>Number(p.expireAt||0)){list.splice(i,1);continue}
+             const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy)||1,step=DRAGON_FIREBALL_SPEED*dt;
+             p.vx=dx/d*DRAGON_FIREBALL_SPEED;p.vy=dy/d*DRAGON_FIREBALL_SPEED;
+             if(d<=Math.max(18,step+8)){
+               p.x=tx;p.y=ty;
+               if(target){
+                 const source=state.entities.find(e=>e.id===p.sourceId)||{id:p.sourceId,type:'dragon',x:p.x,y:p.y,heading:0,lastCombatAt:0};
+                 applyCombatHit(target,source,DRAGON_FIREBALL_DAMAGE,{knockForce:105,knockTime:.06,tilt:6});
+                 if(target.alive)igniteDragonBurn(target,source);
+               }
+               list.splice(i,1);continue;
+             }
+             p.x+=p.vx*dt;p.y+=p.vy*dt;
+           }
+          }
+          function aiFightDragon(e,dt,forcedTeam,preparedCandidates=null){
+           if(!e.alive||e.knockTime>0){e.moving=false;return}
+           const now=performance.now();updateDragonState(e,now);
+           if(e.dragonFlightState!=='flying'){e.moving=false;return}
+           if(e.pendingDragonAttack&&now<e.pendingDragonAttack.endAt){e.moving=false;return}
+           const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
+           if(!candidates.length){e.moving=false;e.target=null;return}
+           let target=candidates[0],best=dist(e,target);for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
+           e.target=target;const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
+           if(d>=185&&d<=285&&now>=Number(e.dragonNextShotAt||0)){launchDragonFireball(e,target);return}
+           if(d<175){e.x-=dx/d*e.speed*dt;e.y-=dy/d*e.speed*dt;e.moving=true}
+           else if(d>285){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}
+           else e.moving=false;
+           e.x=clamp(e.x,40,state.world.w-40);e.y=clamp(e.y,40,state.world.h-40);
+          }
+
+          function aiFightMage(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive||e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  // Qualquer ataque do mago que já foi lançado precisa terminar por completo.
  // Enquanto pendingMageAttack existir, a IA não muda distância nem inicia outro movimento/ataque.
  if(e.pendingMageAttack){e.moving=false;return}
- const candidates=preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team));
+ const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
  if(!candidates.length){e.moving=false;return}
  let target=candidates[0],best=dist(e,target);for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
  e.target=target;const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
@@ -3960,8 +4176,9 @@ function aiFightMage(e,dt,forcedTeam,preparedCandidates=null){
 function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='golem'){aiFightGolem(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
+ if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
  if(!e.alive||e.knockTime>0){e.moving=false;return;}
- const candidates=preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team));
+ const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
  if(!candidates.length){e.moving=false;return}
  let target=candidates[0],best=dist(e,target);
  for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
@@ -4271,6 +4488,7 @@ function updateEntities(dt){
    if(e.type==='mage' && e.pendingMageAttack){
      updateMageAttackState(e,now);
    }
+   if(e.type==='dragon')updateDragonState(e,now);
 
    if(e.knockTime>0){
      const step=Math.min(dt,e.knockTime);
@@ -4383,6 +4601,7 @@ function draw(){
 
  syncEntityVisuals(visible,left,top,zoom,vw,vh);
  syncMagePowerEffects(left,top,zoom);
+ syncDragonProjectileEffects(left,top,zoom);
 }
 function drawEntityMarker(e){
  // No PVE a identificação agora é feita por contorno/silhueta no próprio sprite.
@@ -4397,6 +4616,7 @@ function drawEntityMarker(e){
 const entityLayer=$('#entityLayer');
 const entityNodes=new Map();
 const magePowerNodes=new Map();
+const dragonProjectileNodes=new Map();
 
 function syncMagePowerEffects(left,top,zoom){
  const layer=$('#combatFxLayer'),active=new Set(),now=performance.now();
@@ -4456,7 +4676,26 @@ function syncMagePowerEffects(left,top,zoom){
  }
 }
 
-function makeEntityNode(e){
+function syncDragonProjectileEffects(left,top,zoom){
+           const layer=$('#combatFxLayer'),active=new Set();const {w:screenW,h:screenH}=gameViewportSize();
+           for(const p of state.dragonProjectiles||[]){
+             const sx=(p.x-left)*zoom,sy=(p.y-top)*zoom,margin=90;if(sx<-margin||sx>screenW+margin||sy<-margin||sy>screenH+margin)continue;
+             active.add(p.id);let img=dragonProjectileNodes.get(p.id);
+             if(!img){img=document.createElement('img');img.className='dragon-fireball-projectile';img.draggable=false;restartGif(img,'dragonFireball',p.serial||p.id);layer.appendChild(img);dragonProjectileNodes.set(p.id,img)}
+             const angle=Math.atan2(Number(p.vy)||0,Number(p.vx)||1),size=48*zoom;
+             img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=size+'px';img.style.height=size+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle}rad)`;img.style.visibility='visible';
+           }
+           for(const [id,img] of dragonProjectileNodes)if(!active.has(id)){releaseGifObjectUrl(img);img.remove();dragonProjectileNodes.delete(id)}
+          }
+          function syncDragonBurnOnEntity(el,e,now){
+           const remaining=(Number(e.dragonBurnUntil)||0)-now;if(!e.alive||remaining<=0){if(el._dragonBurnLayer)el._dragonBurnLayer.style.opacity='0';return}
+           let layer=el._dragonBurnLayer;const serial=Number(e.dragonBurnSerial)||0,count=clamp(Number(e.dragonBurnFlameCount)||2,2,3);
+           if(!layer){layer=document.createElement('div');layer.className='dragon-burn-layer';el.appendChild(layer);el._dragonBurnLayer=layer;layer.dataset.serial='-1'}
+           if(layer.dataset.serial!==String(serial)||layer.children.length!==count){[...layer.querySelectorAll('img')].forEach(releaseGifObjectUrl);layer.innerHTML='';for(let i=0;i<count;i++){const img=document.createElement('img');img.draggable=false;restartGif(img,'dragonFireball',serial*10+i);layer.appendChild(img)}layer.dataset.serial=String(serial)}
+           const started=Number(e.dragonBurnStartedAt)||now,fadeIn=clamp((now-started)/350,0,1),fadeOut=clamp(remaining/500,0,1);layer.style.opacity=String(Math.min(fadeIn,fadeOut));
+          }
+
+          function makeEntityNode(e){
  const el=document.createElement('div');
  el.className='entity-visual';
 
@@ -4492,6 +4731,17 @@ function makeEntityNode(e){
        <div class="hp-bg"><div class="hp-fill"></div></div>
        <div class="shield-bg"><div class="shield-fill"></div></div>
      </div>`;
+ }else if(e.type==='dragon'){
+   el.classList.add('dragon-visual');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-dragon-ground active-sprite" data-asset-key="dragonGround" src="${ASSETS.dragonGround}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-dragon-takeoff" data-asset-key="dragonTakeoff" draggable="false" style="opacity:0">
+       <img class="entity-body entity-dragon-fly" data-asset-key="dragonFly" src="${ASSETS.dragonFly}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-dragon-attack" data-asset-key="dragonAttack" draggable="false" style="opacity:0">
+     </div>
+     <div class="entity-weapon-facing"></div>
+     <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
  }else{
    const bodyIdle=e.variant==='female'?ASSETS.femaleIdle:ASSETS.idle;
    const bodyWalk=e.variant==='female'?ASSETS.femaleWalk:ASSETS.walk;
@@ -4524,6 +4774,10 @@ function makeEntityNode(e){
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
  el._mageHand=el.querySelector('.mage-hand');
+ el._dragonGround=el.querySelector('.entity-dragon-ground');
+ el._dragonTakeoff=el.querySelector('.entity-dragon-takeoff');
+ el._dragonFly=el.querySelector('.entity-dragon-fly');
+ el._dragonAttack=el.querySelector('.entity-dragon-attack');
  el._hp=el.querySelector('.hp-fill');
  el._shieldBg=el.querySelector('.shield-bg');
  el._shield=el.querySelector('.shield-fill');
@@ -4532,17 +4786,20 @@ function makeEntityNode(e){
  el.dataset.golemAttackSerial='-1';
  el.dataset.golemRockSerial='-1';
  el.dataset.mageAttackSerial='-1';
+ el.dataset.dragonTakeoffSerial='-1';
+ el.dataset.dragonAttackSerial='-1';
  // Chaves dos GIFs visíveis por estado. Quando o estado muda, reiniciamos o
  // GIF que está entrando para ele aparecer desde o quadro 0.
  if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
  else if(e.type==='mage')el._gifKeys={idle:e.variant==='female'?'femaleMageIdle':'mageIdle',walk:e.variant==='female'?'femaleMageWalk':'mageWalk',special:e.variant==='female'?'femaleMageSpecial':'mageSpecial'};
+ else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
  else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};
  el._lastHitSerial=0;
  el._lastRegenSerial=0;
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._golemAttack,el._golemSpecial,el._mageSpecial].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._golemAttack,el._golemSpecial,el._mageSpecial,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -4555,7 +4812,7 @@ function makeEntityNode(e){
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
        const transientState=img===el._golemAttack?'attack':
-         (img===el._golemSpecial||img===el._mageSpecial?'special':null);
+         (img===el._golemSpecial||img===el._mageSpecial?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
@@ -4576,7 +4833,8 @@ function setEntitySpriteState(el,desired){
 
  const sprites=[
    [el._idle,'idle'],[el._walk,'walk'],[el._golemAttack,'attack'],
-   [el._golemSpecial,'special'],[el._mageSpecial,'special']
+   [el._golemSpecial,'special'],[el._mageSpecial,'special'],
+   [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
  for(const [img,stateName] of sprites){
    if(!img)continue;
@@ -4592,6 +4850,8 @@ function setEntitySpriteState(el,desired){
    stopGif(el._golemSpecial);
    stopGif(el._mageSpecial);
  }
+ if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
+ if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
  el.dataset.anim=desired;
  return true;
 }
@@ -4658,13 +4918,13 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    // O scale geral aplica a câmera; o flip fica só no miolo do personagem.
    el.style.left=sx+'px';
    el.style.top=sy+'px';
-   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
      el.style.transform=`translate(-50%,-58%) scale(${visualScale})`;
    }
-   el.style.zIndex=String(100+Math.round(sy));
+   el.style.zIndex=String((e.type==='dragon'&&e.dragonFlightState==='flying'?900:100)+Math.round(sy));
 
    const face=e.facing||1;
    if(el._face!==face){
@@ -4771,10 +5031,22 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
        el.dataset.mageAttackSerial=String(e.mageAttackSerial);
        if(e.mageAttackSerial>0&&special)restartGif(el._mageSpecial,e.variant==='female'?'femaleMageSpecial':'mageSpecial',e.mageAttackSerial);
      }
+   }else if(e.type==='dragon'){
+     const flight=e.dragonFlightState||'ground';
+     const attackActive=flight==='flying'&&e.pendingDragonAttack&&Number(e.pendingDragonAttack.endAt||0)>localNow;
+     const takeoffActive=flight==='takeoff'&&Number(e.dragonTakeoffEndAt||0)>localNow;
+     const desired=attackActive?'dragonAttack':takeoffActive?'takeoff':flight==='flying'?'fly':'ground';
+     setEntitySpriteState(el,desired);
+     const takeoffSerial=Number(e.dragonTakeoffSerial)||0;
+     if(takeoffActive&&takeoffSerial>0&&el.dataset.dragonTakeoffSerial!==String(takeoffSerial)){el.dataset.dragonTakeoffSerial=String(takeoffSerial);restartGif(el._dragonTakeoff,'dragonTakeoff',takeoffSerial)}
+     const attackSerial=Number(e.dragonAttackSerial)||0;
+     if(attackActive&&attackSerial>0&&el.dataset.dragonAttackSerial!==String(attackSerial)){el.dataset.dragonAttackSerial=String(attackSerial);restartGif(el._dragonAttack,'dragonAttack',attackSerial)}
    }else{
      const desired=e.moving?'walk':'idle';
      setEntitySpriteState(el,desired);
    }
+
+   syncDragonBurnOnEntity(el,e,localNow);
 
    const hpWidth=(100*clamp(e.hp/e.maxHp,0,1))+'%';
    if(el._hpWidth!==hpWidth){el._hpWidth=hpWidth;el._hp.style.width=hpWidth}
@@ -4805,7 +5077,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    if(!visibleIds.has(id)||!presentIds.has(id)){
      setEntityNodeVisible(el,false);
      const entity=presentMap.get(id);
-     const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack);
+     const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
      if(entity && !transient && localNow-lastSeen>1400){
        el.querySelectorAll('img').forEach(releaseGifObjectUrl);
@@ -4818,10 +5090,12 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
 function clearEntityVisuals(){
  for(const el of entityNodes.values())el.querySelectorAll('img').forEach(releaseGifObjectUrl);
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
+ for(const img of dragonProjectileNodes.values())releaseGifObjectUrl(img);
  entityLayer.innerHTML='';
  const fx=$('#combatFxLayer');if(fx)fx.innerHTML='';
  state.golemRockEffects=[];
  magePowerNodes.clear();
+ dragonProjectileNodes.clear();
  entityNodes.clear();
 }
 
@@ -4851,12 +5125,13 @@ function updateHUD(){
     $('#buyWarrior').disabled=state.phase!=='prep'||(me?.gems??0)<75;
     $('#buyGolem').disabled=state.phase!=='prep'||(me?.gems??0)<350;
     $('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<550;
+    $('#buyDragon').disabled=state.phase!=='prep'||(me?.gems??0)<350;
   }
 }
 function finishGame(msg){
  state.running=false;state.phase='finished';state.camera.intro=false;state.spectator.active=false;state.spectator.transitioning=false;$('#gameScreen').classList.remove('spectator-mode');flash(msg,4);
  if(NetworkAdapter.online&&NetworkAdapter.isHost)NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()}).catch(console.error);
- setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
+ setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
 }
 
 })();
