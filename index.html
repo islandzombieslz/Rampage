@@ -2085,7 +2085,7 @@ window.dispatchEvent(new Event('firebase-ready'));
           <div class="shop-unit-info">
             <b>Dragão Guerreiro</b>
             <div class="small">150 vida + 50 escudo • bola de fogo 35</div>
-            <div class="small">Dispara a cada 2s • queimadura 50/s por 6s • voador</div>
+            <div class="small">Dispara a cada 2s • queimadura: 6 pulsos de 5 (1/s) • voador</div>
           </div>
           <button id="buyDragon">350 💎</button>
         </div>
@@ -2223,7 +2223,7 @@ const DRAGON_SHOT_COOLDOWN_MS=2000;
 const DRAGON_ATTACK_VISUAL_MS=850;
 const DRAGON_FIREBALL_DAMAGE=35;
 const DRAGON_FIREBALL_SPEED=430;
-const DRAGON_BURN_DAMAGE=50;
+const DRAGON_BURN_DAMAGE=5;
 const DRAGON_BURN_TICK_MS=1000;
 const DRAGON_BURN_DURATION_MS=6000;
 const gifRuntime=new Map();
@@ -3168,10 +3168,13 @@ function separateLivingEntities(){
      for(const j of bucket){
        if(j<=i)continue;
        const b=living[j];
-       if((a.type==='dragon'&&a.dragonFlightState==='flying')||(b.type==='dragon'&&b.dragonFlightState==='flying'))continue;
+       const aFlyingDragon=a.type==='dragon'&&a.dragonFlightState==='flying';
+       const bFlyingDragon=b.type==='dragon'&&b.dragonFlightState==='flying';
+       // Dragões voando atravessam tropas terrestres, mas colidem entre si para não se amontoarem.
+       if((aFlyingDragon||bFlyingDragon)&&!(aFlyingDragon&&bFlyingDragon))continue;
      let dx=b.x-a.x,dy=b.y-a.y;
      let d=Math.hypot(dx,dy);
-     const minD=Math.min(58,a.r+b.r);
+     const minD=aFlyingDragon&&bFlyingDragon?76:Math.min(58,a.r+b.r);
      if(d>=minD)continue;
      if(d<.001){dx=1;dy=0;d=1}
      const push=(minD-d)*.5;
@@ -4173,12 +4176,40 @@ function beginDragonTakeoff(e){
  e.x=clamp(e.x,40,state.world.w-40);e.y=clamp(e.y,40,state.world.h-40);
 }
 
+
+function tryWarriorFleeFlyingDragon(e,dt,hasAttackableTargets=false){
+ if(e.type!=='warrior'||state.mode!=='war'||state.phase!=='combat'||!e.alive)return false;
+ // Quando restam apenas um ou dois Guerreiros do time, eles passam a preservar distância do Dragão.
+ const livingWarriors=state.entities.filter(t=>t.alive&&t.team===e.team&&t.type==='warrior').length;
+ if(livingWarriors>2)return false;
+ const dragons=state.entities.filter(t=>t.alive&&t.team!==e.team&&t.type==='dragon'&&t.dragonFlightState==='flying');
+ if(!dragons.length)return false;
+ let dragon=dragons[0],best=dist(e,dragon);
+ for(let i=1;i<dragons.length;i++){const d=dist(e,dragons[i]);if(d<best){best=d;dragon=dragons[i]}}
+ // Se ainda existem alvos terrestres atacáveis, só abandona a luta quando o Dragão realmente ameaça de perto.
+ if(hasAttackableTargets&&best>380)return false;
+ let mx=e.x-dragon.x,my=e.y-dragon.y;
+ if(best<.001){mx=e.x<state.world.w/2?-1:1;my=e.y<state.world.h/2?-1:1}
+ // Evita ficar pressionando a mesma borda do mapa: adiciona componente lateral para continuar escapando.
+ const edge=135;
+ if(e.x<edge)mx+=.9;
+ else if(e.x>state.world.w-edge)mx-=.9;
+ if(e.y<edge)my+=.9;
+ else if(e.y>state.world.h-edge)my-=.9;
+ const len=Math.hypot(mx,my)||1;mx/=len;my/=len;
+ e.target=dragon;e.heading=Math.atan2(my,mx);if(Math.abs(mx)>.05)e.facing=mx<0?-1:1;
+ e.x+=mx*e.speed*dt;e.y+=my*e.speed*dt;e.moving=true;
+ e.x=clamp(e.x,35,state.world.w-35);e.y=clamp(e.y,35,state.world.h-35);
+ return true;
+}
+
 function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='golem'){aiFightGolem(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
  if(!e.alive||e.knockTime>0){e.moving=false;return;}
  const candidates=(preparedCandidates||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team))).filter(t=>canEngageTarget(e,t));
+ if(tryWarriorFleeFlyingDragon(e,dt,candidates.length>0))return;
  if(!candidates.length){e.moving=false;return}
  let target=candidates[0],best=dist(e,target);
  for(let i=1;i<candidates.length;i++){const d=dist(e,candidates[i]);if(d<best){best=d;target=candidates[i]}}
@@ -4683,7 +4714,7 @@ function syncDragonProjectileEffects(left,top,zoom){
              active.add(p.id);let img=dragonProjectileNodes.get(p.id);
              if(!img){img=document.createElement('img');img.className='dragon-fireball-projectile';img.draggable=false;restartGif(img,'dragonFireball',p.serial||p.id);layer.appendChild(img);dragonProjectileNodes.set(p.id,img)}
              const angle=Math.atan2(Number(p.vy)||0,Number(p.vx)||1),size=48*zoom;
-             img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=size+'px';img.style.height=size+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle}rad)`;img.style.visibility='visible';
+             img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=size+'px';img.style.height=size+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle+Math.PI/2}rad)`;img.style.visibility='visible';
            }
            for(const [id,img] of dragonProjectileNodes)if(!active.has(id)){releaseGifObjectUrl(img);img.remove();dragonProjectileNodes.delete(id)}
           }
@@ -4916,8 +4947,19 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    }
 
    // O scale geral aplica a câmera; o flip fica só no miolo do personagem.
+   // Durante a decolagem o Dragão sobe visualmente e mantém altitude enquanto voa.
+   // A posição lógica no mapa não muda: é apenas altura visual, preservando alcance e sincronização.
+   let dragonLift=0;
+   if(e.type==='dragon'){
+     if(e.dragonFlightState==='takeoff'){
+       const start=Number(e.dragonTakeoffStartedAt)||localNow;
+       const end=Math.max(start+1,Number(e.dragonTakeoffEndAt)||start+DRAGON_TAKEOFF_DURATION);
+       const progress=clamp((localNow-start)/(end-start),0,1);
+       dragonLift=36*(1-Math.pow(1-progress,2));
+     }else if(e.dragonFlightState==='flying')dragonLift=36;
+   }
    el.style.left=sx+'px';
-   el.style.top=sy+'px';
+   el.style.top=(sy-dragonLift*zoom)+'px';
    const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
