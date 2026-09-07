@@ -1,0 +1,85 @@
+name: Gameplay performance sweep
+
+on:
+  push:
+    paths:
+      - '.github/workflows/performance-sweep.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guardar HTML original
+        run: cp index.html /tmp/index-before.html
+
+      - name: Aplicar otimizacoes
+        run: python .github/patch_performance_sweep.py
+
+      - name: Validar JavaScript
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,flags=re.S)
+          if not scripts:
+              raise SystemExit('nenhum script encontrado')
+          Path('/tmp/rampage-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+
+      - name: Verificar sintaxe e invariantes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/rampage-main.js
+          git diff --check
+          test "$(git diff --name-only | tr -d '\r')" = "index.html"
+          grep -Fq 'PERFORMANCE SWEEP 2026-09-07' index.html
+          grep -Fq 'const warFrameEnemiesByTeam=new Map();' index.html
+          grep -Fq 'const renderVisibleEntities=[];' index.html
+          grep -Fq 'const magePowerActiveIds=new Set();' index.html
+          grep -Fq 'const dragonProjectileActiveIds=new Set();' index.html
+          grep -Fq 'width:96px !important' index.html
+          grep -Fq 'width:78px !important' index.html
+          grep -Fq "$('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');" index.html
+          grep -Fq "$('#buyGolem').onclick=()=>requestWarPurchase('buy-golem');" index.html
+          grep -Fq "$('#buyMage').onclick=()=>requestWarPurchase('buy-mage');" index.html
+          grep -Fq "$('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');" index.html
+          grep -Fq 'REMOTE WAR ROUND TRANSITION SYNC' index.html
+          grep -Fq 'scaleY(-1)' index.html
+          ! grep -Fq 'nearbySpecial.sort' index.html
+          ! grep -Fq 'controlledHumans.includes' index.html
+          ! grep -Fq 'state.particles=state.particles.filter' index.html
+          ! grep -Fq 'const presentIds=new Set(state.entities.filter' index.html
+
+      - name: Garantir assets e resolucoes intocados
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          before=Path('/tmp/index-before.html').read_text(encoding='utf-8')
+          after=Path('index.html').read_text(encoding='utf-8')
+          pattern=r'assets/[A-Za-z0-9_./-]+\.(?:gif|png|webp|jpg|jpeg)'
+          b=re.findall(pattern,before,re.I)
+          a=re.findall(pattern,after,re.I)
+          if b!=a:
+              raise SystemExit('referencias de assets mudaram; abortando para preservar GIFs/imagens')
+          if before.count('.gif')!=after.count('.gif'):
+              raise SystemExit('quantidade de referencias GIF mudou')
+
+      - name: Publicar
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Optimize gameplay frame performance and enlarge shop button'
+          git push
