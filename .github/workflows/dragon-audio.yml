@@ -1,0 +1,82 @@
+name: Dragon timing and soundtrack
+
+on:
+  push:
+    paths:
+      - '.github/workflows/dragon-audio.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Baixar trilhas verificadas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/audio
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+            'https://filebin.net/rampage-audio-20260907-7f3c91/tema-menu.mp3' \
+            -o assets/audio/tema-menu.mp3
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+            'https://filebin.net/rampage-audio-20260907-7f3c91/som-batalha.mp3' \
+            -o assets/audio/som-batalha.mp3
+          echo 'b965cfac470cc3b618d7561e298e42f73d7f591fd8fc58f857e3a963cc113489  assets/audio/tema-menu.mp3' | sha256sum -c -
+          echo 'c1b09df45093e1d826816315baa503532ee96ac64c44d0e7da350caabcc5aef4  assets/audio/som-batalha.mp3' | sha256sum -c -
+          test -s assets/audio/tema-menu.mp3
+          test -s assets/audio/som-batalha.mp3
+
+      - name: Aplicar alteracoes
+        run: python .github/patch_dragon_audio.py
+
+      - name: Remover transferencia temporaria
+        run: rm -rf .audio-stage
+
+      - name: Extrair JavaScript principal
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,flags=re.S)
+          if not scripts:
+              raise SystemExit('nenhum script encontrado')
+          Path('/tmp/rampage-main.js').write_text(max(scripts,key=len),encoding='utf-8')
+
+      - name: Validar jogo e audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/rampage-main.js
+          git diff --check
+          grep -Fq 'const DRAGON_FIREBALL_RELEASE_DELAY_MS=1000;' index.html
+          grep -Fq 'releaseAt:now+DRAGON_FIREBALL_RELEASE_DELAY_MS' index.html
+          grep -Fq 'releasePendingDragonFireball(e,pending,now)' index.html
+          grep -Fq "setGameMusicMode('battle')" index.html
+          grep -Fq "setGameMusicMode('menu')" index.html
+          grep -Fq 'assets/audio/tema-menu.mp3' index.html
+          grep -Fq 'assets/audio/som-batalha.mp3' index.html
+          grep -Fq 'REMOTE WAR ROUND TRANSITION SYNC' index.html
+          grep -Fq 'scaleY(-1)' index.html
+          grep -Fq 'PERFORMANCE SWEEP 2026-09-07' index.html
+          grep -Fq "$('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');" index.html
+          test "$(find assets -type f | wc -l)" -ge 35
+          file assets/audio/tema-menu.mp3 | grep -qi 'audio\|mpeg'
+          file assets/audio/som-batalha.mp3 | grep -qi 'audio\|mpeg'
+
+      - name: Publicar
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A index.html assets/audio .audio-stage
+          git commit -m 'Delay Dragon fireball and add adaptive soundtrack'
+          git push
