@@ -1869,8 +1869,8 @@ button::-moz-focus-inner{border:0}
   position:absolute !important;
   right:calc(var(--safe-right) + 8px) !important;
   bottom:calc(var(--safe-bottom) + 8px) !important;
-  width:76px !important;
-  height:76px !important;
+  width:96px !important;
+  height:96px !important;
   min-width:0 !important;
   min-height:0 !important;
   max-width:none !important;
@@ -1970,8 +1970,8 @@ button::-moz-focus-inner{border:0}
 }
 @media (pointer:coarse), (max-height:650px), (max-width:900px){
   #gameScreen:not(.pve-mode) #shopButton{
-    width:62px !important;
-    height:62px !important;
+    width:78px !important;
+    height:78px !important;
     right:calc(var(--safe-right) + 5px) !important;
     bottom:calc(var(--safe-bottom) + 5px) !important;
   }
@@ -1988,6 +1988,9 @@ button::-moz-focus-inner{border:0}
     max-width:88vw !important;
   }
 }
+
+/* PERFORMANCE SWEEP: limita invalidacoes de layout/pintura dos efeitos de combate. */
+#combatFxLayer{contain:layout paint style}
 </style>
 
 <script type="module">
@@ -3807,11 +3810,11 @@ function beginPVERound(){
  flash(`RODADA ${state.round}`,1.2);
 }
 
-function updateOutOfCombatRegen(dt){
+function updateOutOfCombatRegen(dt,enemies=null){
   if(state.mode!=='pve'||state.phase!=='combat')return;
 
   const now=performance.now();
-  const enemies=state.entities.filter(e=>e.alive&&e.team==='enemy');
+  enemies=enemies||state.entities.filter(e=>e.alive&&e.team==='enemy');
 
   for(const e of state.entities){
     if(!e.alive||e.team!=='players'||e.hp>=e.maxHp)continue;
@@ -3835,8 +3838,24 @@ function updateOutOfCombatRegen(dt){
   }
 }
 
+const pveHumanOwnerIds=new Set();
+const pveAlivePlayersScratch=[];
+const pveAliveEnemiesScratch=[];
+const pveControlledHumansScratch=[];
 function updatePVE(dt){
- const controlledHumans=state.entities.filter(e=>e.alive&&e.team==='players'&&state.players.some(p=>p.id===e.ownerId&&p.human));
+ pveHumanOwnerIds.clear();
+ pveAlivePlayersScratch.length=0;pveAliveEnemiesScratch.length=0;pveControlledHumansScratch.length=0;
+ for(const p of state.players)if(p.human)pveHumanOwnerIds.add(p.id);
+ for(const e of state.entities){
+   if(!e.alive)continue;
+   if(e.team==='players'){
+     pveAlivePlayersScratch.push(e);
+     if(pveHumanOwnerIds.has(e.ownerId))pveControlledHumansScratch.push(e);
+   }else if(e.team==='enemy')pveAliveEnemiesScratch.push(e);
+ }
+ const controlledHumans=pveControlledHumansScratch;
+ const alivePlayersList=pveAlivePlayersScratch;
+ const aliveEnemiesList=pveAliveEnemiesScratch;
  for(const me of controlledHumans){
    if(me.knockTime>0){me.moving=false;continue}
    const input=me.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[me.ownerId]||{});
@@ -3845,15 +3864,13 @@ function updatePVE(dt){
    const attackSeq=Number(input.attackSeq)||0;if(attackSeq>(me.lastNetworkAttackSeq||0)){me.lastNetworkAttackSeq=attackSeq;performAttack(me)}
    me.x=clamp(me.x,40,state.world.w-40);me.y=clamp(me.y,40,state.world.h-40);
  }
- // Arrays de alvo são montados uma única vez por frame.
- const alivePlayersList=state.entities.filter(e=>e.alive&&e.team==='players');
- const aliveEnemiesList=state.entities.filter(e=>e.alive&&e.team==='enemy');
+ // Arrays de alvo ja foram montados no inicio do frame e sao reutilizados.
  for(let i=0;i<alivePlayersList.length;i++){
    const e=alivePlayersList[i];
-   if(!controlledHumans.includes(e))aiFightAgainstList(e,dt,aliveEnemiesList);
+   if(!pveHumanOwnerIds.has(e.ownerId))aiFightAgainstList(e,dt,aliveEnemiesList);
  }
  for(let i=0;i<aliveEnemiesList.length;i++)aiFightAgainstList(aliveEnemiesList[i],dt,alivePlayersList);
- updateOutOfCombatRegen(dt);
+ updateOutOfCombatRegen(dt,aliveEnemiesList);
  state.timeLeft-=dt;
  const cfg=difficultyConfig[state.difficulty], extra=state.players.length-1;
  const elapsed=state.pveTime-state.timeLeft;
@@ -4038,6 +4055,25 @@ function startCombatPhase(){
 }
 const WAR_AI_GRID_CELL=220;
 const WAR_AI_LOCAL_RADIUS=560;
+// PERFORMANCE SWEEP 2026-09-07: caches de frame sem alterar decisao/alcance da IA.
+const warFrameEnemiesByTeam=new Map();
+function rebuildWarFrameEnemyCache(living){
+ const teams=[],seen=new Set();
+ warFrameEnemiesByTeam.clear();
+ for(const e of living){
+   if(!seen.has(e.team)){seen.add(e.team);teams.push(e.team)}
+ }
+ for(const team of teams){
+   const all=[],nonDragon=[],dragons=[];
+   for(const t of living){
+     if(t.team===team||!isRealCombatTarget(t))continue;
+     all.push(t);
+     if(t.type==='dragon')dragons.push(t);else nonDragon.push(t);
+   }
+   warFrameEnemiesByTeam.set(team,{all,nonDragon,dragons});
+ }
+ return teams;
+}
 function buildWarAIGrid(living){
  const cells=new Map();
  for(const e of living){
@@ -4094,7 +4130,7 @@ function updateWar(dt){
    const now=performance.now();
    updateDragonProjectiles(dt);updateDragonBurns(now);
    const living=state.entities.filter(e=>e.alive);
-   const teams=[...new Set(living.map(e=>e.team))];
+   const teams=rebuildWarFrameEnemyCache(living);
    const combatGrid=buildWarAIGrid(living);
    for(const e of living)aiFight(e,dt,null,warCandidatesFor(e,combatGrid));
    state.timeLeft-=dt;
@@ -4189,21 +4225,24 @@ function aiFightGolem(e,dt,forcedTeam,preparedCandidates=null){
  e.heading=Math.atan2(dy,dx);
  if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
 
- const nearbySpecial=[];
+ let nearbySpecialTarget=null,nearbySpecialBestSq=Infinity,nearbySpecialCount=0;
+ const golemSpecialRadiusSq=145*145;
  for(const candidate of candidates){
    const ndx=candidate.x-e.x,ndy=candidate.y-e.y,ds=ndx*ndx+ndy*ndy;
-   if(ds<=145*145)nearbySpecial.push({target:candidate,ds});
+   if(ds<=golemSpecialRadiusSq){
+     nearbySpecialCount++;
+     if(ds<nearbySpecialBestSq){nearbySpecialBestSq=ds;nearbySpecialTarget=candidate}
+   }
  }
- nearbySpecial.sort((a,b)=>a.ds-b.ds);
 
- const crowdActive=nearbySpecial.length>=2;
+ const crowdActive=nearbySpecialCount>=2;
 
  // ESTADO 3A — exceção de aglomeração:
  // 2+ inimigos próximos => um único especial assim que o ataque anterior já terminou.
  // Essa exceção só existe uma vez por Golem. As próprias pedras afastavam os
  // alvos, rearmavam a condição e causavam especiais seguidos quando voltavam.
  if(crowdActive && !e.golemCrowdSpecialUsed){
-   if(startGolemAttack(e,'special',nearbySpecial[0].target,'crowd')){
+   if(startGolemAttack(e,'special',nearbySpecialTarget,'crowd')){
      e.golemCrowdSpecialUsed=true; // trava antes do próximo snapshot/frame
      return;
    }
@@ -4374,7 +4413,12 @@ function beginDragonTakeoff(e){
  if(e.attackCooldown<=0&&!e.pendingMageAttack){
    // Especial condicional: usa quando está cercado (3+ inimigos dentro da área
    // real do especial) OU quando a vida chegou à metade. Cooldown evita spam.
-   const nearbyForSpecial=candidates.filter(t=>dist(e,t)<=MAGE_SPECIAL_RADIUS).length;
+   let nearbyForSpecial=0;
+   const mageSpecialRadiusSq=MAGE_SPECIAL_RADIUS*MAGE_SPECIAL_RADIUS;
+   for(const t of candidates){
+     const sdx=t.x-e.x,sdy=t.y-e.y;
+     if(sdx*sdx+sdy*sdy<=mageSpecialRadiusSq)nearbyForSpecial++;
+   }
    const lowHealth=e.hp<=e.maxHp*.5;
    if(e.specialCooldown<=0 && (nearbyForSpecial>=3 || lowHealth)){
      startMageAttack(e,'special',target);return;
@@ -4395,11 +4439,12 @@ function tryWarriorFleeFlyingDragon(e,dt){
 
  // Fuga é uma regra de fim de combate, não uma preferência de alvo:
  // se existir QUALQUER tropa inimiga que não seja Dragão, o Guerreiro luta normalmente.
- const enemies=state.entities.filter(t=>t.alive&&t.team!==e.team&&isRealCombatTarget(t));
- if(!enemies.length||enemies.some(t=>t.type!=='dragon'))return false;
+ const cached=warFrameEnemiesByTeam.get(e.team);
+ const enemies=cached?.all||state.entities.filter(t=>t.alive&&t.team!==e.team&&isRealCombatTarget(t));
+ if(!enemies.length||(cached?cached.nonDragon.length:enemies.some(t=>t.type!=='dragon')))return false;
 
- // Quando só restam Dragões, foge do Dragão voando mais próximo em vez de ficar parado.
- const dragons=enemies.filter(t=>t.type==='dragon');
+ // Quando só restam Dragões, foge do Dragão mais próximo em vez de ficar parado.
+ const dragons=cached?.dragons||enemies.filter(t=>t.type==='dragon');
  if(!dragons.length)return false;
  let dragon=dragons[0],best=dist(e,dragon);
  for(let i=1;i<dragons.length;i++){const d=dist(e,dragons[i]);if(d<best){best=d;dragon=dragons[i]}}
@@ -4429,8 +4474,9 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
    // Regra absoluta: enquanto existir QUALQUER tropa inimiga que não seja Dragão,
    // o Guerreiro ignora os Dragões e escolhe apenas entre essas tropas.
    // Não usa o recorte local do grid aqui, evitando conflito entre fuga e aquisição de alvo.
-   const allEnemies=state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team)&&isRealCombatTarget(t));
-   const nonDragonEnemies=allEnemies.filter(t=>t.type!=='dragon');
+   const cachedEnemies=forcedTeam==null?warFrameEnemiesByTeam.get(e.team):null;
+   const allEnemies=cachedEnemies?.all||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team)&&isRealCombatTarget(t));
+   const nonDragonEnemies=cachedEnemies?.nonDragon||allEnemies.filter(t=>t.type!=='dragon');
    if(nonDragonEnemies.length){
      candidates=nonDragonEnemies.filter(t=>canEngageTarget(e,t));
    }else{
@@ -4653,7 +4699,13 @@ canvas.addEventListener('pointercancel',endTouch);
 
 /* ==================== RENDER ==================== */
 let last=performance.now(), messageUntil=0;
-function flash(text,secs=.8){$('#centerMessage').textContent=text;messageUntil=performance.now()+secs*1000}
+const centerMessagePerfEl=$('#centerMessage');
+const gameScreenPerfEl=$('#gameScreen');
+const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
+const buyWarriorPerfEl=$('#buyWarrior'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
+function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
+function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
+function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
 
 function updateSpectatorTransition(now){
   if(state.mode!=='pve')return;
@@ -4719,7 +4771,7 @@ function loop(now){
  updateGolemRockEffects(now);
  draw();
 
- if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&$('#gameScreen').style.display!=='none'&&now-NetworkAdapter.lastStateAt>=100&&!NetworkAdapter.pushing){
+ if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=100&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
    NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
  }
@@ -4730,7 +4782,7 @@ function loop(now){
    state.hudLast=now;
  }
 
- if(performance.now()>messageUntil)$('#centerMessage').textContent='';
+ if(now>messageUntil&&centerMessagePerfEl.textContent)centerMessagePerfEl.textContent='';
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -4767,7 +4819,13 @@ function updateEntities(dt){
  separateLivingEntities();
  cleanupDeadEntities(now);
 }
-function updateParticles(dt){state.particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt});state.particles=state.particles.filter(p=>p.life>0)}
+function updateParticles(dt){
+ const list=state.particles;
+ for(let i=list.length-1;i>=0;i--){
+   const p=list[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
+   if(p.life<=0)list.splice(i,1);
+ }
+}
 
 function draw(){
  const {w:vw,h:vh}=gameViewport();
@@ -4849,8 +4907,11 @@ function draw(){
 
  // Apenas marcação simples no canvas. GIF/espada/barras ficam em DOM para os GIFs animarem de verdade.
  const margin=80;
- const visible=state.entities.filter(e=>(e.alive||e.deathStarted)&&e.x>=left-margin&&e.x<=right+margin&&e.y>=top-margin&&e.y<=bottom+margin);
- visible.forEach(drawEntityMarker);
+ const visible=renderVisibleEntities;visible.length=0;
+ for(const e of state.entities){
+   if((e.alive||e.deathStarted)&&e.x>=left-margin&&e.x<=right+margin&&e.y>=top-margin&&e.y<=bottom+margin)visible.push(e);
+ }
+ for(let i=0;i<visible.length;i++)drawEntityMarker(visible[i]);
 
  state.particles.forEach(p=>{
    if(p.x<left-20||p.x>right+20||p.y<top-20||p.y>bottom+20)return;
@@ -4861,8 +4922,8 @@ function draw(){
  ctx.restore();
 
  syncEntityVisuals(visible,left,top,zoom,vw,vh);
- syncMagePowerEffects(left,top,zoom);
- syncDragonProjectileEffects(left,top,zoom);
+ syncMagePowerEffects(left,top,zoom,vw,vh);
+ syncDragonProjectileEffects(left,top,zoom,vw,vh);
 }
 function drawEntityMarker(e){
  // No PVE a identificação agora é feita por contorno/silhueta no próprio sprite.
@@ -4875,13 +4936,20 @@ function drawEntityMarker(e){
 }
 
 const entityLayer=$('#entityLayer');
+const combatFxLayer=$('#combatFxLayer');
 const entityNodes=new Map();
 const magePowerNodes=new Map();
 const dragonProjectileNodes=new Map();
+// Estruturas temporarias reutilizadas pelo render para reduzir GC/jank em batalhas grandes.
+const renderVisibleEntities=[];
+const renderVisibleIds=new Set();
+const renderPresentIds=new Set();
+const renderPresentMap=new Map();
+const magePowerActiveIds=new Set();
+const dragonProjectileActiveIds=new Set();
 
-function syncMagePowerEffects(left,top,zoom){
- const layer=$('#combatFxLayer'),active=new Set(),now=performance.now();
- const {w:screenW,h:screenH}=gameViewportSize();
+function syncMagePowerEffects(left,top,zoom,screenW,screenH){
+ const layer=combatFxLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
  for(const e of state.entities){
    const p=e.pendingMageAttack;if(!e.alive||!p)continue;
    // Poderes completamente fora da câmera não ganham DOM/GIF. Dano e estado seguem intactos.
@@ -4937,8 +5005,8 @@ function syncMagePowerEffects(left,top,zoom){
  }
 }
 
-function syncDragonProjectileEffects(left,top,zoom){
-           const layer=$('#combatFxLayer'),active=new Set();const {w:screenW,h:screenH}=gameViewportSize();
+function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
+           const layer=combatFxLayer,active=dragonProjectileActiveIds;active.clear();
            for(const p of state.dragonProjectiles||[]){
              const sx=(p.x-left)*zoom,sy=(p.y-top)*zoom,margin=90;if(sx<-margin||sx>screenW+margin||sy<-margin||sy>screenH+margin)continue;
              active.add(p.id);let img=dragonProjectileNodes.get(p.id);
@@ -5157,8 +5225,13 @@ function setEntityNodeVisible(el,visible){
 }
 
 function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
- const visibleIds=new Set();
- const presentIds=new Set(state.entities.filter(e=>e.alive||e.deathStarted).map(e=>e.id));
+ const visibleIds=renderVisibleIds;visibleIds.clear();
+ const presentIds=renderPresentIds;presentIds.clear();
+ const presentMap=renderPresentMap;presentMap.clear();
+ for(const entity of state.entities){
+   presentMap.set(entity.id,entity);
+   if(entity.alive||entity.deathStarted)presentIds.add(entity.id);
+ }
  const localNow=performance.now();
 
  // Tamanho visual aproximado máximo do guerreiro + espada.
@@ -5220,15 +5293,17 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
        dragonLift=36*(1-Math.pow(1-progress,2));
      }else if(e.dragonFlightState==='flying')dragonLift=36;
    }
-   el.style.left=sx+'px';
-   el.style.top=(sy-dragonLift*zoom)+'px';
+   const visualTop=sy-dragonLift*zoom;
+   if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
+   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
    const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
      el.style.transform=`translate(-50%,-58%) scale(${visualScale})`;
    }
-   el.style.zIndex=String((e.type==='dragon'&&e.dragonFlightState==='flying'?900:100)+Math.round(sy));
+   const visualZ=(e.type==='dragon'&&e.dragonFlightState==='flying'?900:100)+Math.round(sy);
+   if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
 
    const face=e.facing||1;
    if(el._face!==face){
@@ -5390,7 +5465,6 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
 
  // Esconde imediatamente qualquer nó fora da tela. Se ficar fora por um tempo e
  // não estiver em ataque/morte, remove o DOM; a entidade lógica continua existindo.
- const presentMap=new Map(state.entities.map(e=>[e.id,e]));
  for(const [id,el] of entityNodes){
    if(!visibleIds.has(id)||!presentIds.has(id)){
      setEntityNodeVisible(el,false);
@@ -5410,7 +5484,7 @@ function clearEntityVisuals(){
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
  for(const img of dragonProjectileNodes.values())releaseGifObjectUrl(img);
  entityLayer.innerHTML='';
- const fx=$('#combatFxLayer');if(fx)fx.innerHTML='';
+ if(combatFxLayer)combatFxLayer.innerHTML='';
  state.golemRockEffects=[];
  magePowerNodes.clear();
  dragonProjectileNodes.clear();
@@ -5418,32 +5492,27 @@ function clearEntityVisuals(){
 }
 
 function updateHUD(){
- if($('#gameScreen').style.display==='none')return;
- if(state.mode!=='pve') $('#hudMain').textContent=`Rodada ${state.round}/${state.rounds} • Mestre da Guerra`;
+ if(gameScreenPerfEl.style.display==='none')return;
  if(state.mode==='pve'){
-    const p=state.entities.filter(e=>e.alive&&e.team==='players').length;
-    const en=state.entities.filter(e=>e.alive&&e.team==='enemy').length;
-
-    // Apenas número da rodada, sem o texto "Rodada".
-    $('#hudMain').textContent=`${state.round}/${state.rounds}`;
-
-    // HUD minimalista: inimigos em cima, aliados embaixo.
-    $('#aliveCount').textContent=`💀 ${en}
-⚔️ ${p}`;
-    $('#hudSub').textContent='';
-    $('#timer').textContent=fmt(state.timeLeft);
+    let p=0,en=0;
+    for(const e of state.entities){
+      if(!e.alive)continue;
+      if(e.team==='players')p++;else if(e.team==='enemy')en++;
+    }
+    perfSetText(hudMainPerfEl,`${state.round}/${state.rounds}`);
+    perfSetText(aliveCountPerfEl,`💀 ${en}\n⚔️ ${p}`);
+    perfSetText(hudSubPerfEl,'');
+    perfSetText(timerPerfEl,fmt(state.timeLeft));
   } else {
-    const me=localPlayer();
-
-    // Mestre da Guerra: HUD mínimo.
-    $('#hudMain').textContent=`${state.round}/${state.rounds}`;
-    $('#hudSub').textContent=`💎 ${me?.gems??0}`;
-    $('#timer').textContent=state.phase==='prep'?fmt(state.prepLeft):fmt(state.timeLeft);
-    $('#aliveCount').textContent='';
-    $('#buyWarrior').disabled=state.phase!=='prep'||(me?.gems??0)<75;
-    $('#buyGolem').disabled=state.phase!=='prep'||(me?.gems??0)<350;
-    $('#buyMage').disabled=state.phase!=='prep'||(me?.gems??0)<550;
-    $('#buyDragon').disabled=state.phase!=='prep'||(me?.gems??0)<350;
+    const me=localPlayer(),gems=me?.gems??0;
+    perfSetText(hudMainPerfEl,`${state.round}/${state.rounds}`);
+    perfSetText(hudSubPerfEl,`💎 ${gems}`);
+    perfSetText(timerPerfEl,state.phase==='prep'?fmt(state.prepLeft):fmt(state.timeLeft));
+    perfSetText(aliveCountPerfEl,'');
+    perfSetDisabled(buyWarriorPerfEl,state.phase!=='prep'||gems<75);
+    perfSetDisabled(buyGolemPerfEl,state.phase!=='prep'||gems<350);
+    perfSetDisabled(buyMagePerfEl,state.phase!=='prep'||gems<550);
+    perfSetDisabled(buyDragonPerfEl,state.phase!=='prep'||gems<350);
   }
 }
 function finishGame(msg){
