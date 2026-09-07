@@ -1,0 +1,48 @@
+name: Cleanup Dragon audio deployment
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cleanup-dragon-audio.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validar versao funcional
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'const DRAGON_FIREBALL_RELEASE_DELAY_MS=1000;' index.html
+          grep -Fq "setGameMusicMode('battle')" index.html
+          grep -Fq "setGameMusicMode('menu')" index.html
+          test -s assets/audio/tema-menu.mp3
+          test -s assets/audio/som-batalha.mp3
+          echo 'b965cfac470cc3b618d7561e298e42f73d7f591fd8fc58f857e3a963cc113489  assets/audio/tema-menu.mp3' | sha256sum -c -
+          echo 'c1b09df45093e1d826816315baa503532ee96ac64c44d0e7da350caabcc5aef4  assets/audio/som-batalha.mp3' | sha256sum -c -
+
+      - name: Limpar arquivos temporarios
+        shell: bash
+        run: |
+          rm -rf .audio-stage
+          rm -f .github/patch_dragon_audio.py
+          rm -f .github/workflows/dragon-audio.yml
+          rm -f .github/workflows/cleanup-dragon-audio.yml
+
+      - name: Publicar limpeza
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Remove temporary Dragon audio deployment files'
+          git push
