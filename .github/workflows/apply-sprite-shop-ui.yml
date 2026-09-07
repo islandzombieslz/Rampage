@@ -22,12 +22,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets/ui/war-shop
-          curl -fL --retry 3 'https://i.postimg.cc/V6SVxfsC/botao-loja.png' -o assets/ui/botao-loja.png
-          curl -fL --retry 3 'https://i.postimg.cc/j5GFKpCw/card-magos-guerreiros.png' -o assets/ui/war-shop/card-magos-guerreiros.png
-          curl -fL --retry 3 'https://i.postimg.cc/XJZzRjNf/card-golem-guerreiro.png' -o assets/ui/war-shop/card-golem-guerreiro.png
-          curl -fL --retry 3 'https://i.postimg.cc/FRfBMrFj/card-dragao-guerreiro.png' -o assets/ui/war-shop/card-dragao-guerreiro.png
-          curl -fL --retry 3 'https://i.postimg.cc/RF3DkSCw/card-guerreiros.png' -o assets/ui/war-shop/card-guerreiros.png
-          curl -fL --retry 3 'https://i.postimg.cc/637mkW6B/walpaper-menus.png' -o assets/ui/walpaper-menus.png
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/V6SVxfsC/botao-loja.png' -o assets/ui/botao-loja.png &
+          p1=$!
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/j5GFKpCw/card-magos-guerreiros.png' -o assets/ui/war-shop/card-magos-guerreiros.png &
+          p2=$!
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/XJZzRjNf/card-golem-guerreiro.png' -o assets/ui/war-shop/card-golem-guerreiro.png &
+          p3=$!
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/FRfBMrFj/card-dragao-guerreiro.png' -o assets/ui/war-shop/card-dragao-guerreiro.png &
+          p4=$!
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/RF3DkSCw/card-guerreiros.png' -o assets/ui/war-shop/card-guerreiros.png &
+          p5=$!
+          curl -fL --connect-timeout 8 --max-time 45 --retry 2 --retry-all-errors 'https://i.postimg.cc/637mkW6B/walpaper-menus.png' -o assets/ui/walpaper-menus.png &
+          p6=$!
+          wait "$p1" "$p2" "$p3" "$p4" "$p5" "$p6"
 
       - name: Validar imagens baixadas
         shell: bash
