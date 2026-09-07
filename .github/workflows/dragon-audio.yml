@@ -80,3 +80,5 @@ jobs:
           git add -A index.html assets/audio .audio-stage
           git commit -m 'Delay Dragon fireball and add adaptive soundtrack'
           git push
+
+# rerun: 2026-09-07 audio verification
