@@ -23,6 +23,8 @@
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-magos-guerreiros.png">
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-golem-guerreiro.png">
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-dragao-guerreiro.png">
+<link rel="preload" as="audio" href="assets/audio/tema.mp3" type="audio/mpeg">
+<link rel="prefetch" as="audio" href="assets/audio/som-de-batalha.mp3" type="audio/mpeg">
 
 <style>
 :root{
@@ -2007,6 +2009,8 @@ window.dispatchEvent(new Event('firebase-ready'));
 </head>
 <body>
 <div id="landscapeRoot" class="force-landscape">
+<audio id="menuMusic" src="assets/audio/tema.mp3" preload="auto" playsinline hidden></audio>
+<audio id="battleMusic" src="assets/audio/som-de-batalha.mp3" preload="auto" playsinline hidden></audio>
 <div id="assetWarning">Não foi possível carregar um ou mais assets locais do jogo.</div>
 <div id="mobileStartHint"><span>Toque para manter o jogo em tela cheia</span></div>
 <div id="screenTransitionFade" aria-hidden="true"></div>
@@ -2406,6 +2410,96 @@ setTimeout(()=>{golemAttackAssetsReady=true},3500);
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
+
+/* ==================== TRILHA SONORA ==================== */
+const menuMusicEl=$('#menuMusic'),battleMusicEl=$('#battleMusic');
+const MUSIC_VOLUME={menu:.30,battle:.38};
+const MUSIC_SWITCH_FADE_MS=850,MUSIC_LOOP_FADE_MS=1800,MUSIC_LOOP_FADE_SECONDS=2;
+const musicFadeTokens=new WeakMap(),musicTailFading=new WeakSet();
+let desiredMusicMode='menu',activeMusicEl=null;
+
+function musicFor(mode){return mode==='battle'?battleMusicEl:menuMusicEl}
+function fadeMusic(audio,target,duration,onDone){
+ if(!audio)return;
+ const token=(musicFadeTokens.get(audio)||0)+1;
+ musicFadeTokens.set(audio,token);
+ const from=Number.isFinite(audio.volume)?audio.volume:0,start=performance.now();
+ const step=now=>{
+   if(musicFadeTokens.get(audio)!==token)return;
+   const progress=clamp((now-start)/Math.max(1,duration),0,1);
+   const eased=progress*progress*(3-2*progress);
+   audio.volume=clamp(from+(target-from)*eased,0,1);
+   if(progress<1)requestAnimationFrame(step);else onDone?.();
+ };
+ requestAnimationFrame(step);
+}
+function playDesiredMusic({restart=false}={}){
+ const mode=desiredMusicMode,next=musicFor(mode);
+ if(!next)return;
+ if(activeMusicEl===next&&!next.paused){
+   fadeMusic(next,MUSIC_VOLUME[mode],260);
+   return;
+ }
+ const previous=activeMusicEl;
+ activeMusicEl=next;
+ musicTailFading.delete(next);
+ if(restart||next.ended||!Number.isFinite(next.currentTime))next.currentTime=0;
+ next.loop=false;
+ next.volume=0;
+ let playResult;
+ try{playResult=next.play()}catch(_){if(activeMusicEl===next)activeMusicEl=null;return}
+ Promise.resolve(playResult).then(()=>{
+   if(activeMusicEl===next&&desiredMusicMode===mode)fadeMusic(next,MUSIC_VOLUME[mode],MUSIC_SWITCH_FADE_MS);
+ }).catch(()=>{
+   // Autoplay pode ser bloqueado; o primeiro toque/clique/tecla tenta novamente.
+   if(activeMusicEl===next)activeMusicEl=null;
+ });
+ if(previous&&previous!==next&&!previous.paused){
+   fadeMusic(previous,0,MUSIC_SWITCH_FADE_MS,()=>{
+     if(activeMusicEl!==previous){previous.pause();previous.currentTime=0;musicTailFading.delete(previous)}
+   });
+ }
+}
+function setMusicMode(mode,{restart=false}={}){
+ const normalized=mode==='battle'?'battle':'menu';
+ const changed=desiredMusicMode!==normalized||activeMusicEl!==musicFor(normalized);
+ desiredMusicMode=normalized;
+ playDesiredMusic({restart:restart||(changed&&activeMusicEl!==musicFor(normalized))});
+}
+function retryMusicFromGesture(){
+ const desired=musicFor(desiredMusicMode);
+ if(!desired||activeMusicEl!==desired||desired.paused)playDesiredMusic();
+}
+function handleMusicTail(audio,mode){
+ if(audio!==activeMusicEl||desiredMusicMode!==mode||audio.paused||musicTailFading.has(audio))return;
+ if(!Number.isFinite(audio.duration)||audio.duration<=0)return;
+ const remaining=audio.duration-audio.currentTime;
+ if(remaining>0&&remaining<=MUSIC_LOOP_FADE_SECONDS){
+   musicTailFading.add(audio);
+   fadeMusic(audio,0,Math.max(180,remaining*1000));
+ }
+}
+function restartFinishedMusic(audio,mode){
+ if(audio!==activeMusicEl||desiredMusicMode!==mode)return;
+ musicTailFading.delete(audio);
+ audio.currentTime=0;
+ audio.volume=0;
+ let playResult;
+ try{playResult=audio.play()}catch(_){if(audio===activeMusicEl)activeMusicEl=null;return}
+ Promise.resolve(playResult).then(()=>{
+   if(audio===activeMusicEl&&desiredMusicMode===mode)fadeMusic(audio,MUSIC_VOLUME[mode],MUSIC_LOOP_FADE_MS);
+ }).catch(()=>{if(audio===activeMusicEl)activeMusicEl=null});
+}
+for(const [mode,audio] of [['menu',menuMusicEl],['battle',battleMusicEl]]){
+ audio.loop=false;
+ audio.addEventListener('timeupdate',()=>handleMusicTail(audio,mode));
+ audio.addEventListener('ended',()=>restartFinishedMusic(audio,mode));
+}
+document.addEventListener('pointerdown',retryMusicFromGesture,{capture:true});
+document.addEventListener('touchstart',retryMusicFromGesture,{capture:true,passive:true});
+document.addEventListener('keydown',retryMusicFromGesture,{capture:true});
+playDesiredMusic({restart:true});
+
 let screenTransitionBusy=false,queuedScreenId=null;
 function screenWithFade(id){
  if(screenTransitionBusy){queuedScreenId=id;return}
@@ -2426,6 +2520,8 @@ function screenWithFade(id){
 function navigateScreen(id){
  const current=$('.screen.active')?.id||null;
  if(current===id)return;
+ if(id==='gameScreen')setMusicMode('battle');
+ else if(MENU_SCREEN_IDS.has(id))setMusicMode('menu');
  // Qualquer entrada, saída ou troca entre menus recebe fade-out + fade-in.
  if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id);
  else screen(id);
