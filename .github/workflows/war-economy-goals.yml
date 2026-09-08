@@ -1,0 +1,126 @@
+name: War economy and goals
+
+on:
+  push:
+    branches:
+      - war-economy-goals-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: war-economy-goals-20260908
+          fetch-depth: 0
+
+      - name: Snapshot original index
+        run: cp index.html /tmp/index.before.html
+
+      - name: Apply economy patch
+        run: python .github/patch_war_economy_goals.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          start=t.rfind('<script>')
+          end=t.rfind('</script>')
+          if start < 0 or end < start:
+              raise SystemExit('game script block not found')
+          Path('/tmp/game.js').write_text(t[start+8:end],encoding='utf-8')
+          PY
+          node --check /tmp/game.js
+
+      - name: Verify economy, goals and preserved combat
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          before=Path('/tmp/index.before.html').read_text(encoding='utf-8')
+          after=Path('index.html').read_text(encoding='utf-8')
+
+          required=[
+            "const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});",
+            "const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});",
+            "const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40}});",
+            "addWarGoalProgress(e.team,'specials')",
+            "addWarGoalProgress(e.team,'ranged')",
+            "p.warGoals={specials:0,ranged:0,specialsClaimed:false,rangedClaimed:false};",
+            "Comprar Guerreiro por 50 gemas",
+            "Comprar Rei Guerreiro por 300 gemas",
+            "Comprar Golem por 550 gemas",
+            "Comprar Mago por 550 gemas",
+            "Comprar Dragão por 450 gemas",
+            "perdedores +${WAR_ROUND_GEM_REWARD.loser} 💎",
+            "Empate! Todos recebem +${WAR_ROUND_GEM_REWARD.tie} 💎",
+            "✨ ${specials}/${WAR_GOALS.specials.target}",
+            "🎯 ${ranged}/${WAR_GOALS.ranged.target}",
+          ]
+          for marker in required:
+              if marker not in after:
+                  raise SystemExit('missing marker: '+marker)
+
+          forbidden=[
+            'Comprar Guerreiro por 75 gemas',
+            'Comprar Rei Guerreiro por 250 gemas',
+            'Comprar Golem por 350 gemas',
+            'Comprar Dragão por 350 gemas',
+            "if(p.gems>=75)types.push('warrior')",
+            "if(p.gems>=250)types.push('king')",
+            "if(p.gems>=350){types.push('golem');types.push('dragon')}",
+          ]
+          for marker in forbidden:
+              if marker in after:
+                  raise SystemExit('old economy marker remains: '+marker)
+
+          # Critical combat balance values must remain identical.
+          combat_markers=[
+            'const MAGE_SPECIAL_DAMAGE=100;',
+            'const MAGE_SPECIAL_HEAL=30;',
+            'const KING_SPECIAL_DAMAGE=50;',
+            'const DRAGON_FIREBALL_DAMAGE=35;',
+            'const DRAGON_BURN_DAMAGE=5;',
+            'e.hp=e.maxHp=600;',
+            'e.shield=e.maxShield=200;',
+            'e.damage=40;',
+            'e.hp=e.maxHp=200;',
+            'e.damage=25;',
+            "applyCombatHit(t,e,70,{",
+            "applyCombatHit(target,e,40,{",
+          ]
+          for marker in combat_markers:
+              if marker not in before or marker not in after:
+                  raise SystemExit('combat marker changed/missing: '+marker)
+
+          # Firebase project configuration must remain byte-identical.
+          pat=re.compile(r"const firebaseConfig\s*=\s*\{.*?\};",re.S)
+          b=pat.search(before); a=pat.search(after)
+          if bool(b)!=bool(a):
+              raise SystemExit('firebase config presence changed')
+          if b and b.group(0)!=a.group(0):
+              raise SystemExit('firebase config changed')
+
+          if 'const ROOM_COLOR_NAMES=[' not in after or 'function normalizeRoomCode(value)' not in after:
+              raise SystemExit('color room codes were not preserved')
+
+          # Only index.html may be modified by the patch itself.
+          import subprocess
+          names=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          if names != ['index.html']:
+              raise SystemExit('unexpected patched files: '+repr(names))
+          PY
+
+      - name: Commit validated change
+        run: |
+          git config user.name islandzombieslz
+          git config user.email island.zombie.slz@gmail.com
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Balance war economy and add combat goals"
+          git push origin HEAD:war-economy-goals-20260908
