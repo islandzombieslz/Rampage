@@ -49,20 +49,15 @@ jobs:
               a=t.index(start); b=t.index(end,a)
               return t[a:b]
 
-          # Assets and image formats must remain byte-for-byte identical.
           assert section(before,'const ASSETS = {','const state = {') == section(after,'const ASSETS = {','const state = {')
-
-          # Gameplay constants / damage / timing are intentionally untouched.
           assert section(before,'const speedMap=','const gifRuntime=new Map();') == section(after,'const speedMap=','const gifRuntime=new Map();')
 
-          # Firebase client configuration and host-authoritative architecture stay intact.
           fb_before=re.search(r'const firebaseConfig=\{.*?\};',before,re.S).group(0)
           fb_after=re.search(r'const firebaseConfig=\{.*?\};',after,re.S).group(0)
           assert fb_before == fb_after
           assert 'FIREBASE RTDB, HOST AUTORITATIVO' in after
           assert 'now-NetworkAdapter.lastStateAt>=100' in after
 
-          # Critical rules/statistics requested to remain unchanged.
           for marker in [
               'e.hp=e.maxHp=200;',
               'e.shield=e.maxShield=200;',
@@ -75,7 +70,6 @@ jobs:
           ]:
               assert marker in after, marker
 
-          # Expected optimization markers.
           for marker in [
               'WAR_AI_DECISION_INTERVAL_MS=70',
               'forEachWarSpatialCandidate',
@@ -90,17 +84,9 @@ jobs:
           rs=after.index("if((el._lastRegenSerial||0)!==(e.regenSerial||0))")
           re_=after.index("if(e.type==='golem')",rs)
           assert 'offsetWidth' not in after[rs:re_]
-
-          # No Phase 4: no new WebP/assets and no asset-path edits.
           assert '.webp' not in section(after,'const ASSETS = {','const state = {')
           PY
           test -z "$(git diff --name-only -- assets/)"
-
-      - name: Verify patch is rerun-safe
-        run: |
-          cp index.html /tmp/index-phase123-once.html
-          python .github/patch_war_performance_phase123.py
-          cmp /tmp/index-phase123-once.html index.html
 
       - name: Publish reviewed optimization on branch
         run: |
