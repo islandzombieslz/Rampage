@@ -1,4 +1,4 @@
-name: Otimizar carregamento dos assets
+name: Otimizar modo guerra e Rei Guerreiro
 
 on:
   push:
@@ -17,43 +17,260 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Corrigir troca de rodada remota no modo Guerra
+      - name: Aplicar otimizações sem alterar regras do combate
         shell: python
         run: |
           from pathlib import Path
+
           path = Path('index.html')
           text = path.read_text(encoding='utf-8')
-          marker = '// REMOTE WAR ROUND TRANSITION SYNC'
+          marker = '// WAR PERFORMANCE 2026-09-08: only active looping GIFs stay decoded.'
+
+          def replace_once(old, new, label):
+              global text
+              if old in text:
+                  text = text.replace(old, new, 1)
+                  return
+              if new in text:
+                  return
+              raise SystemExit(f'Trecho não encontrado: {label}')
+
+          # Ajustes solicitados do Rei Guerreiro.
+          replace_once(
+              " e.hp=e.maxHp=150;\n e.shield=e.maxShield=150;\n e.damage=15;",
+              " e.hp=e.maxHp=200;\n e.shield=e.maxShield=200;\n e.damage=25;",
+              'atributos do Rei Guerreiro'
+          )
+          replace_once(
+              "if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=8){startKingSpecial(e);return}",
+              "if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6){startKingSpecial(e);return}",
+              'ciclo do especial do Rei'
+          )
+          replace_once(
+              "if(e.type==='king')e.kingNormalCount=Math.min(8,(Number(e.kingNormalCount)||0)+1);",
+              "if(e.type==='king')e.kingNormalCount=Math.min(6,(Number(e.kingNormalCount)||0)+1);",
+              'contador normal do Rei'
+          )
+
+          # O power.gif vira filho direto da entidade do Rei. Assim ele acompanha a
+          # posição da entidade e não herda transformações locais do corpo/facing.
+          replace_once(
+              "   el.innerHTML=`\n     <div class=\"entity-facing\">\n       <img class=\"king-special-power\" data-asset-key=\"kingPower\" draggable=\"false\">\n       <img class=\"entity-body entity-idle active-sprite\" data-asset-key=\"kingIdle\" src=\"${ASSETS.kingIdle}\" draggable=\"false\" style=\"opacity:1\">",
+              "   el.innerHTML=`\n     <img class=\"king-special-power\" data-asset-key=\"kingPower\" draggable=\"false\">\n     <div class=\"entity-facing\">\n       <img class=\"entity-body entity-idle active-sprite\" data-asset-key=\"kingIdle\" src=\"${ASSETS.kingIdle}\" draggable=\"false\" style=\"opacity:1\">",
+              'ancoragem visual do poder do Rei'
+          )
+
+          # Mantém a mesma regra de alvo dos Guerreiros/Rei, mas usa a grade espacial
+          # também para eles. Todos os inimigos dentro de 560 px continuam no conjunto,
+          # portanto o dano a múltiplos alvos dentro de 92 px permanece idêntico.
+          grid_start = text.find('function nearestEnemyFromWarGrid(e,grid){')
+          grid_end = text.find('\nfunction updateWar(dt){', grid_start)
+          if grid_start >= 0 and grid_end > grid_start:
+              new_grid = '''function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
+ const cs=WAR_AI_GRID_CELL,cx=Math.floor(e.x/cs),cy=Math.floor(e.y/cs);
+ const maxR=Math.ceil(Math.max(state.world.w,state.world.h)/cs)+1;
+ let best=null,bestSq=Infinity;
+ for(let r=0;r<=maxR;r++){
+   for(let x=cx-r;x<=cx+r;x++)for(let y=cy-r;y<=cy+r;y++){
+     if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
+     const bucket=grid.get(x+','+y);if(!bucket)continue;
+     for(const t of bucket){
+       if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
+       const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
+       if(ds<bestSq){bestSq=ds;best=t}
+     }
+   }
+   if(best){
+     const minX=(cx-r)*cs,maxX=(cx+r+1)*cs,minY=(cy-r)*cs,maxY=(cy+r+1)*cs;
+     const outside=Math.min(e.x-minX,maxX-e.x,e.y-minY,maxY-e.y);
+     if(outside>=0 && bestSq<=outside*outside)return best;
+   }
+ }
+ return best;
+}
+function warCandidatesFor(e,grid,nonDragonOnly=false){
+ const cs=WAR_AI_GRID_CELL,r=WAR_AI_LOCAL_RADIUS,r2=r*r;
+ const minX=Math.floor((e.x-r)/cs),maxX=Math.floor((e.x+r)/cs);
+ const minY=Math.floor((e.y-r)/cs),maxY=Math.floor((e.y+r)/cs);
+ const local=[];
+ for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++){
+   const bucket=grid.get(x+','+y);if(!bucket)continue;
+   for(const t of bucket){
+     if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
+     const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
+   }
+ }
+ if(local.length)return local;
+ const nearest=nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
+ return nearest?[nearest]:[];
+}'''
+              text = text[:grid_start] + new_grid + text[grid_end:]
+          elif 'function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){' not in text:
+              raise SystemExit('Bloco da grade espacial não encontrado')
+
+          replace_once(
+              "   for(const e of living)aiFight(e,dt,null,warCandidatesFor(e,combatGrid));",
+              "   for(const e of living){\n     const avoidDragons=(e.type==='warrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;\n     aiFight(e,dt,null,warCandidatesFor(e,combatGrid,avoidDragons));\n   }",
+              'uso da grade espacial no combate'
+          )
+          replace_once(
+              "   if(nonDragonEnemies.length){\n     candidates=nonDragonEnemies.filter(t=>canEngageTarget(e,t));",
+              "   if(nonDragonEnemies.length){\n     candidates=preparedCandidates||nonDragonEnemies.filter(t=>canEngageTarget(e,t));",
+              'candidatos preparados do Guerreiro/Rei'
+          )
+
+          # Principal gargalo visual: opacity:0 não interrompe a decodificação de GIF.
+          # Agora apenas o loop realmente ativo (idle/walk/ground/fly) mantém src.
           if marker not in text:
-              old_head = " const firstFrame=$('#gameScreen').style.display==='none';\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              new_head = " const firstFrame=$('#gameScreen').style.display==='none';\n const previousRound=Number(state.round)||0;\n state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;\n"
-              if old_head not in text:
-                  raise SystemExit('Cabeçalho de applyRemoteGame não encontrado')
-              text = text.replace(old_head, new_head, 1)
-              needle = " if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              insert = " // REMOTE WAR ROUND TRANSITION SYNC\n // O host permanece como única autoridade. O cliente apenas reproduz a transição local.\n const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';\n if(remoteWarRoundChanged){\n   state.particles=[];\n   clearEntityVisuals();\n   state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};\n   $('#gameScreen').classList.remove('spectator-mode');\n   const deathFade=$('#deathFade');\n   if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}\n   $('#shop').classList.remove('open');\n   beginWarCameraIntro();\n   flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);\n }\n if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}\n"
-              if needle not in text:
-                  raise SystemExit('Final de applyRemoteGame não encontrado')
-              text = text.replace(needle, insert, 1)
-          sub_old = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.waitFirebase().then(F=>{\n"
-          sub_new = "  subscribeRoom(code){\n    this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};\n    this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();\n    this.waitFirebase().then(F=>{\n"
-          if sub_old in text:
-              text = text.replace(sub_old, sub_new, 1)
-          if marker not in text:
-              raise SystemExit('Patch de transição não aplicado')
-          if 'this.lastRemoteSeq=0' not in text:
-              raise SystemExit('Reset de sessão remota não aplicado')
+              fn_start = text.find('function setEntitySpriteState(el,desired){')
+              fn_end = text.find('\nfunction setEntityNodeVisible(el,visible){', fn_start)
+              if fn_start < 0 or fn_end <= fn_start:
+                  raise SystemExit('setEntitySpriteState não encontrada')
+              new_fn = '''const ENTITY_LOOP_STATES=new Set(['idle','walk','ground','fly']);
+// WAR PERFORMANCE 2026-09-08: only active looping GIFs stay decoded.
+// Um GIF invisível com opacity:0 continua consumindo CPU/memória no navegador.
+// A URL do asset não muda e nenhum GIF é removido do jogo: só pausamos o loop oculto.
+function entitySpriteForState(el,stateName){
+ if(stateName==='idle')return el._idle;
+ if(stateName==='walk')return el._walk;
+ if(stateName==='ground')return el._dragonGround;
+ if(stateName==='fly')return el._dragonFly;
+ if(stateName==='attack')return el._golemAttack;
+ if(stateName==='special')return el._golemSpecial||el._mageSpecial||el._kingSpecial;
+ if(stateName==='takeoff')return el._dragonTakeoff;
+ if(stateName==='dragonAttack')return el._dragonAttack;
+ return null;
+}
+function ensureEntityLoopGif(el,stateName,img=null){
+ if(!ENTITY_LOOP_STATES.has(stateName))return;
+ img=img||entitySpriteForState(el,stateName);
+ const key=el._gifKeys?.[stateName];
+ const src=key?ASSETS[key]:null;
+ if(!img||!src||img.hasAttribute('src'))return;
+ img.dataset.assetKey=key;
+ img.src=src;
+}
+function suspendEntityLoopGif(el){
+ const stateName=el?.dataset?.anim||'';
+ if(!ENTITY_LOOP_STATES.has(stateName))return;
+ stopGif(entitySpriteForState(el,stateName));
+}
+function setEntitySpriteState(el,desired){
+ const previous=el.dataset.anim||'';
+ const sprites=[
+   [el._idle,'idle'],[el._walk,'walk'],[el._golemAttack,'attack'],
+   [el._golemSpecial,'special'],[el._mageSpecial,'special'],
+   [el._kingSpecial,'special'],
+   [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
+ ];
+ const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
+ ensureEntityLoopGif(el,desired,desiredImg);
+ if(previous===desired){
+   if(desiredImg){desiredImg.style.opacity='1';desiredImg.classList.add('active-sprite')}
+   return false;
+ }
+ const token=(el._spriteSwitchToken||0)+1;
+ el._spriteSwitchToken=token;
+ el.dataset.anim=desired;
+
+ // Mostra o novo imediatamente, mas mantém o estado anterior como rede de segurança
+ // até o browser confirmar que a nova imagem está pronta.
+ for(const [img,stateName] of sprites){
+   if(!img)continue;
+   if(stateName===desired){
+     img.style.opacity='1';
+     img.classList.add('active-sprite');
+   }else if(stateName!==previous){
+     img.style.opacity='0';
+     img.classList.remove('active-sprite');
+   }
+ }
+
+ const finalize=()=>{
+   if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
+   for(const [img,stateName] of sprites){
+     if(!img)continue;
+     const active=stateName===desired;
+     img.style.opacity=active?'1':'0';
+     img.classList.toggle('active-sprite',active);
+   }
+
+   // Loops persistentes invisíveis deixam de decodificar. Na próxima troca,
+   // ensureEntityLoopGif recoloca a mesma URL e o cache do navegador é reutilizado.
+   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)stopGif(entitySpriteForState(el,previous));
+
+   // Ataques fechados continuam usando a lógica original de restart por serial.
+   if(previous==='attack'&&desired!=='attack')stopGif(el._golemAttack);
+   if(previous==='special'&&desired!=='special'){
+     stopGif(el._golemSpecial);
+     stopGif(el._mageSpecial);
+     stopGif(el._kingSpecial);
+     stopGif(el._kingPower);
+   }
+   if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
+   if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
+ };
+ const settle=()=>requestAnimationFrame(finalize);
+
+ if(!desiredImg){
+   finalize();
+ }else if(desiredImg.complete&&desiredImg.naturalWidth>0){
+   settle();
+ }else{
+   desiredImg.addEventListener('load',settle,{once:true});
+   desiredImg.addEventListener('error',settle,{once:true});
+   setTimeout(settle,700);
+ }
+ return true;
+}'''
+              text = text[:fn_start] + new_fn + text[fn_end:]
+
+          inactive_anchor = " else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};\n el._lastHitSerial=0;"
+          inactive_new = " else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};\n // O nó nasce em idle/ground. O segundo loop pesado só recebe src quando virar ativo.\n if(el._walk)stopGif(el._walk);\n if(el._dragonFly)stopGif(el._dragonFly);\n el._lastHitSerial=0;"
+          replace_once(inactive_anchor, inactive_new, 'pausa inicial dos loops ocultos')
+
+          offscreen_old = "     }else if(e.type==='king'&&el.dataset.anim==='special'&&\n              !(e.pendingKingSpecial&&e.pendingKingSpecial.endAt>localNow)){\n       setEntitySpriteState(el,e.moving?'walk':'idle');\n     }\n     continue;"
+          offscreen_new = "     }else if(e.type==='king'&&el.dataset.anim==='special'&&\n              !(e.pendingKingSpecial&&e.pendingKingSpecial.endAt>localNow)){\n       setEntitySpriteState(el,e.moving?'walk':'idle');\n     }\n     suspendEntityLoopGif(el);\n     continue;"
+          replace_once(offscreen_old, offscreen_new, 'suspensão de loop fora da câmera')
+
+          replace_once(
+              "     setEntityNodeVisible(el,false);\n     const entity=presentMap.get(id);",
+              "     setEntityNodeVisible(el,false);\n     suspendEntityLoopGif(el);\n     const entity=presentMap.get(id);",
+              'suspensão de nós não visíveis'
+          )
+
+          # Regras Firebase/arquitetura online permanecem intocadas.
+          required = [
+              "BACKEND / REDE — FIREBASE RTDB, HOST AUTORITATIVO",
+              "now-NetworkAdapter.lastStateAt>=100",
+              "if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6)",
+              "e.hp=e.maxHp=200;",
+              "e.shield=e.maxShield=200;",
+              "e.damage=25;",
+              marker,
+              "warCandidatesFor(e,combatGrid,avoidDragons)",
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit('Validação falhou: ' + ' | '.join(missing))
+
           if 'i.postimg.cc' in text:
               raise SystemExit('Referência ao Postimg reapareceu')
+
           path.write_text(text, encoding='utf-8')
 
-      - name: Validar correção
+      - name: Validar arquivo final
         shell: bash
         run: |
           set -euo pipefail
+          grep -q 'WAR PERFORMANCE 2026-09-08' index.html
+          grep -q "e.hp=e.maxHp=200" index.html
+          grep -q "e.shield=e.maxShield=200" index.html
+          grep -q "e.damage=25" index.html
+          grep -q "kingNormalCount)||0)>=6" index.html
+          grep -q "Math.min(6,(Number(e.kingNormalCount)" index.html
+          grep -q 'warCandidatesFor(e,combatGrid,avoidDragons)' index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
-          grep -q 'remoteWarRoundChanged' index.html
-          grep -q 'this.lastRemoteSeq=0' index.html
           ! grep -q 'i.postimg.cc' index.html
           test "$(find assets -type f | wc -l)" -eq 33
 
@@ -68,5 +285,5 @@ jobs:
             echo 'Nenhuma alteração necessária.'
             exit 0
           fi
-          git commit -m 'Fix non-host war round transitions'
+          git commit -m 'Optimize war performance and tune Warrior King'
           git push
