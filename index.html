@@ -421,20 +421,20 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   animation:swordStrike2 .30s cubic-bezier(.18,.75,.25,1);
 }
 
-/* Rei Guerreiro: maior que o Guerreiro comum, mantendo a mesma lógica de combate. */
-.entity-visual.king-visual{width:112px;height:138px}
+/* Rei Guerreiro: tamanho visual reforçado; colisão/atributos não mudam. */
+.entity-visual.king-visual{width:138px;height:168px}
 .entity-visual.king-visual .entity-facing,
-.entity-visual.king-visual .entity-weapon-facing{width:112px;height:132px}
-.entity-visual.king-visual .entity-body{left:0;top:-4px;width:112px;height:132px}
-.entity-visual.king-visual .entity-bars{left:17px;top:-7px;width:78px}
+.entity-visual.king-visual .entity-weapon-facing{width:138px;height:160px}
+.entity-visual.king-visual .entity-body{left:0;top:-8px;width:138px;height:160px}
+.entity-visual.king-visual .entity-bars{left:26px;top:-8px;width:86px}
 .entity-visual.king-visual .hp-bg,
-.entity-visual.king-visual .shield-bg{width:78px}
-/* A mão/espada do Rei fica mais baixa que antes. */
-.entity-visual.king-visual .entity-sword{left:41px;top:4px;width:30px;height:88px}
-/* O corpo do especial é propositalmente maior que idle/walk. */
+.entity-visual.king-visual .shield-bg{width:86px}
+/* A mão/espada do Rei fica claramente mais baixa e proporcional ao corpo maior. */
+.entity-visual.king-visual .entity-sword{left:51px;top:20px;width:34px;height:98px}
+/* O GIF do corpo no especial é bem maior que idle/walk. */
 .entity-visual.king-visual .entity-king-special{
-  width:156px !important;height:184px !important;
-  left:-22px !important;top:-32px !important;object-fit:contain !important;
+  width:205px !important;height:238px !important;
+  left:-34px !important;top:-50px !important;object-fit:contain !important;
 }
 /* power.gif agora é efeito de mundo independente, ancorado no chão do lançamento. */
 .king-special-power{
@@ -5638,7 +5638,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='mage'?1.08:e.type==='dragon'?1.16:e.type==='king'?1.18:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
