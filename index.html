@@ -3227,9 +3227,9 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
 function spawnKing(x,y,team,color){
  const e=entityBase('king',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
- e.hp=e.maxHp=150;
- e.shield=e.maxShield=150;
- e.damage=15;
+ e.hp=e.maxHp=200;
+ e.shield=e.maxShield=200;
+ e.damage=25;
  e.r=29;
  e.kingNormalCount=0;
  state.entities.push(e);
@@ -3928,7 +3928,7 @@ function updateKingSpecialState(e,now){
 function performAttack(e,preparedCandidates=null){
  if(e.type==='golem'||e.type==='mage')return;
  if(!e.alive||e.attackCooldown>0||e.knockTime>0||e.pendingKingSpecial)return;
- if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=8){startKingSpecial(e);return}
+ if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6){startKingSpecial(e);return}
  const now=performance.now();
  if(now-e.lastAttackAt<=900)e.comboStep=e.comboStep===1?2:1;
  else e.comboStep=1;
@@ -3938,7 +3938,7 @@ function performAttack(e,preparedCandidates=null){
  e.attackCooldown=.38;
  e.attackAnim=.30;
  e.attackSerial++;
- if(e.type==='king')e.kingNormalCount=Math.min(8,(Number(e.kingNormalCount)||0)+1);
+ if(e.type==='king')e.kingNormalCount=Math.min(6,(Number(e.kingNormalCount)||0)+1);
 
  const candidates=preparedCandidates||state.entities;
  for(const t of candidates){
@@ -4303,7 +4303,7 @@ function buildWarAIGrid(living){
  }
  return cells;
 }
-function nearestEnemyFromWarGrid(e,grid){
+function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  const cs=WAR_AI_GRID_CELL,cx=Math.floor(e.x/cs),cy=Math.floor(e.y/cs);
  const maxR=Math.ceil(Math.max(state.world.w,state.world.h)/cs)+1;
  let best=null,bestSq=Infinity;
@@ -4312,7 +4312,7 @@ function nearestEnemyFromWarGrid(e,grid){
      if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
      const bucket=grid.get(x+','+y);if(!bucket)continue;
      for(const t of bucket){
-       if(!t.alive||t===e||t.team===e.team||!canEngageTarget(e,t))continue;
+       if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
        const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
        if(ds<bestSq){bestSq=ds;best=t}
      }
@@ -4325,7 +4325,7 @@ function nearestEnemyFromWarGrid(e,grid){
  }
  return best;
 }
-function warCandidatesFor(e,grid){
+function warCandidatesFor(e,grid,nonDragonOnly=false){
  const cs=WAR_AI_GRID_CELL,r=WAR_AI_LOCAL_RADIUS,r2=r*r;
  const minX=Math.floor((e.x-r)/cs),maxX=Math.floor((e.x+r)/cs);
  const minY=Math.floor((e.y-r)/cs),maxY=Math.floor((e.y+r)/cs);
@@ -4333,12 +4333,12 @@ function warCandidatesFor(e,grid){
  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++){
    const bucket=grid.get(x+','+y);if(!bucket)continue;
    for(const t of bucket){
-     if(!t.alive||t===e||t.team===e.team||!canEngageTarget(e,t))continue;
+     if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
    }
  }
  if(local.length)return local;
- const nearest=nearestEnemyFromWarGrid(e,grid);
+ const nearest=nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
  return nearest?[nearest]:[];
 }
 function updateWar(dt){
@@ -4353,7 +4353,10 @@ function updateWar(dt){
    const living=state.entities.filter(e=>e.alive);
    const teams=rebuildWarFrameEnemyCache(living);
    const combatGrid=buildWarAIGrid(living);
-   for(const e of living)aiFight(e,dt,null,warCandidatesFor(e,combatGrid));
+   for(const e of living){
+     const avoidDragons=(e.type==='warrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
+     aiFight(e,dt,null,warCandidatesFor(e,combatGrid,avoidDragons));
+   }
    state.timeLeft-=dt;
    if(teams.length<=1 || state.timeLeft<=0)finishWarRound();
  }
@@ -4701,7 +4704,7 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
    const allEnemies=cachedEnemies?.all||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team)&&isRealCombatTarget(t));
    const nonDragonEnemies=cachedEnemies?.nonDragon||allEnemies.filter(t=>t.type!=='dragon');
    if(nonDragonEnemies.length){
-     candidates=nonDragonEnemies.filter(t=>canEngageTarget(e,t));
+     candidates=preparedCandidates||nonDragonEnemies.filter(t=>canEngageTarget(e,t));
    }else{
      if(tryWarriorFleeFlyingDragon(e,dt))return;
      candidates=[];
@@ -5289,8 +5292,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
  }else if(e.type==='king'){
    el.classList.add('king-visual');
    el.innerHTML=`
+     <img class="king-special-power" data-asset-key="kingPower" draggable="false">
      <div class="entity-facing">
-       <img class="king-special-power" data-asset-key="kingPower" draggable="false">
        <img class="entity-body entity-idle active-sprite" data-asset-key="kingIdle" src="${ASSETS.kingIdle}" draggable="false" style="opacity:1">
        <img class="entity-body entity-walk" data-asset-key="kingWalk" src="${ASSETS.kingWalk}" draggable="false" style="opacity:0">
        <img class="entity-body entity-king-special" data-asset-key="kingSpecial" draggable="false" style="opacity:0">
@@ -5370,6 +5373,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
  else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};
+ // O nó nasce em idle/ground. O segundo loop pesado só recebe src quando virar ativo.
+ if(el._walk)stopGif(el._walk);
+ if(el._dragonFly)stopGif(el._dragonFly);
  el._lastHitSerial=0;
  el._lastRegenSerial=0;
 
@@ -5403,10 +5409,37 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
  entityNodes.set(e.id,el);
  return el;
 }
+const ENTITY_LOOP_STATES=new Set(['idle','walk','ground','fly']);
+// WAR PERFORMANCE 2026-09-08: only active looping GIFs stay decoded.
+// Um GIF invisível com opacity:0 continua consumindo CPU/memória no navegador.
+// A URL do asset não muda e nenhum GIF é removido do jogo: só pausamos o loop oculto.
+function entitySpriteForState(el,stateName){
+ if(stateName==='idle')return el._idle;
+ if(stateName==='walk')return el._walk;
+ if(stateName==='ground')return el._dragonGround;
+ if(stateName==='fly')return el._dragonFly;
+ if(stateName==='attack')return el._golemAttack;
+ if(stateName==='special')return el._golemSpecial||el._mageSpecial||el._kingSpecial;
+ if(stateName==='takeoff')return el._dragonTakeoff;
+ if(stateName==='dragonAttack')return el._dragonAttack;
+ return null;
+}
+function ensureEntityLoopGif(el,stateName,img=null){
+ if(!ENTITY_LOOP_STATES.has(stateName))return;
+ img=img||entitySpriteForState(el,stateName);
+ const key=el._gifKeys?.[stateName];
+ const src=key?ASSETS[key]:null;
+ if(!img||!src||img.hasAttribute('src'))return;
+ img.dataset.assetKey=key;
+ img.src=src;
+}
+function suspendEntityLoopGif(el){
+ const stateName=el?.dataset?.anim||'';
+ if(!ENTITY_LOOP_STATES.has(stateName))return;
+ stopGif(entitySpriteForState(el,stateName));
+}
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
- if(previous===desired)return false;
-
  const sprites=[
    [el._idle,'idle'],[el._walk,'walk'],[el._golemAttack,'attack'],
    [el._golemSpecial,'special'],[el._mageSpecial,'special'],
@@ -5414,12 +5447,17 @@ function setEntitySpriteState(el,desired){
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
  const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
+ ensureEntityLoopGif(el,desired,desiredImg);
+ if(previous===desired){
+   if(desiredImg){desiredImg.style.opacity='1';desiredImg.classList.add('active-sprite')}
+   return false;
+ }
  const token=(el._spriteSwitchToken||0)+1;
  el._spriteSwitchToken=token;
  el.dataset.anim=desired;
 
- // Mostra o novo imediatamente, mas mantém o estado anterior como "rede de segurança"
- // até o browser confirmar que existe imagem decodificável para a nova animação.
+ // Mostra o novo imediatamente, mas mantém o estado anterior como rede de segurança
+ // até o browser confirmar que a nova imagem está pronta.
  for(const [img,stateName] of sprites){
    if(!img)continue;
    if(stateName===desired){
@@ -5440,7 +5478,11 @@ function setEntitySpriteState(el,desired){
      img.classList.toggle('active-sprite',active);
    }
 
-   // Só interrompe a decodificação do GIF antigo DEPOIS que o novo já entrou.
+   // Loops persistentes invisíveis deixam de decodificar. Na próxima troca,
+   // ensureEntityLoopGif recoloca a mesma URL e o cache do navegador é reutilizado.
+   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)stopGif(entitySpriteForState(el,previous));
+
+   // Ataques fechados continuam usando a lógica original de restart por serial.
    if(previous==='attack'&&desired!=='attack')stopGif(el._golemAttack);
    if(previous==='special'&&desired!=='special'){
      stopGif(el._golemSpecial);
@@ -5460,13 +5502,10 @@ function setEntitySpriteState(el,desired){
  }else{
    desiredImg.addEventListener('load',settle,{once:true});
    desiredImg.addEventListener('error',settle,{once:true});
-   // Failsafe apenas para um asset realmente problemático; o token evita
-   // que esse timeout interfira caso outra animação já tenha sido escolhida.
    setTimeout(settle,700);
  }
  return true;
 }
-
 function setEntityNodeVisible(el,visible){
  if(el._nodeVisible===visible)return;
  el._nodeVisible=visible;
@@ -5517,6 +5556,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
               !(e.pendingKingSpecial&&e.pendingKingSpecial.endAt>localNow)){
        setEntitySpriteState(el,e.moving?'walk':'idle');
      }
+     suspendEntityLoopGif(el);
      continue;
    }
 
@@ -5745,6 +5785,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
  for(const [id,el] of entityNodes){
    if(!visibleIds.has(id)||!presentIds.has(id)){
      setEntityNodeVisible(el,false);
+     suspendEntityLoopGif(el);
      const entity=presentMap.get(id);
      const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
