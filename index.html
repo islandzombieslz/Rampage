@@ -338,7 +338,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .label{font-size:13px;color:var(--muted);margin-bottom:8px}
 .counter{display:flex;align-items:center;gap:12px}
 .counter b{min-width:34px;text-align:center;font-size:20px}
-.code{font-size:26px;letter-spacing:5px;font-weight:900;color:var(--gold)}
+.code{font-size:26px;letter-spacing:2px;font-weight:900;color:var(--gold);overflow-wrap:anywhere}
 .small{font-size:12px;color:var(--muted)}
 .divider{height:1px;background:var(--line);margin:18px 0}
 #gameScreen{padding:0;background:#080b10}
@@ -2124,7 +2124,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     <h2>Entrar com código</h2>
     <p class="sub">Digite o código compartilhado pelo anfitrião para entrar na mesma partida online.</p>
     <div class="row">
-      <input id="roomCodeInput" maxlength="6" placeholder="ABC123" style="text-transform:uppercase;flex:1">
+      <input id="roomCodeInput" maxlength="32" placeholder="AZUL-CORAL" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;flex:1">
       <button id="confirmJoin" class="primary">Entrar</button>
     </div>
     <div id="joinError" class="small" style="margin-top:10px;color:#f85149"></div>
@@ -2315,8 +2315,8 @@ const NetworkAdapter = {
   async ensureAuth(){const F=await this.waitFirebase();if(F.firebaseAuth.currentUser){this.localPlayerId=F.firebaseAuth.currentUser.uid;return F.firebaseAuth.currentUser}const c=await F.signInAnonymously(F.firebaseAuth);this.localPlayerId=c.user.uid;return c.user},
   get online(){return !!this.roomId},
   get isHost(){return !!this.roomId&&this.hostUid===this.localPlayerId},
-  async createRoom(snapshot){const F=await this.waitFirebase(),user=await this.ensureAuth();let code=null;for(let i=0;i<8;i++){const c=generateCode(),s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));if(!s.exists()){code=c;break}}if(!code)throw Error('Falha ao gerar sala');const settings={mode:snapshot.mode,pveTime:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.speed,gems:snapshot.gems};await F.set(F.ref(F.firebaseDb,`rooms/${code}`),{code,hostUid:user.uid,status:'lobby',npcCount:0,createdAt:F.serverTimestamp(),settings,players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],joinedAt:F.serverTimestamp()}}});this.roomId=code;this.hostUid=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {code,offline:false}},
-  async joinRoom(code){const F=await this.waitFirebase(),user=await this.ensureAuth();code=(code||'').trim().toUpperCase();const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);if(!snap.exists())return {ok:false,reason:'not-found'};const room=snap.val();if(room.status!=='lobby')return {ok:false,reason:'started'};const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],joinedAt:F.serverTimestamp()});this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {ok:true,room,offline:false}},
+  async createRoom(snapshot){const F=await this.waitFirebase(),user=await this.ensureAuth();let code=null;for(let i=0;i<32;i++){const c=generateCode(),s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));if(!s.exists()){code=c;break}}if(!code)throw Error('Falha ao gerar sala');const settings={mode:snapshot.mode,pveTime:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.speed,gems:snapshot.gems};await F.set(F.ref(F.firebaseDb,`rooms/${code}`),{code,hostUid:user.uid,status:'lobby',npcCount:0,createdAt:F.serverTimestamp(),settings,players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],joinedAt:F.serverTimestamp()}}});this.roomId=code;this.hostUid=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {code,offline:false}},
+  async joinRoom(code){const F=await this.waitFirebase(),user=await this.ensureAuth();code=normalizeRoomCode(code);const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);if(!snap.exists())return {ok:false,reason:'not-found'};const room=snap.val();if(room.status!=='lobby')return {ok:false,reason:'started'};const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],joinedAt:F.serverTimestamp()});this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {ok:true,room,offline:false}},
   async attachPresence(code,uid){const F=await this.waitFirebase();try{await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`)).remove();await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`)).remove()}catch(_){}},
   subscribeRoom(code){
     this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};
@@ -2621,7 +2621,25 @@ function navigateScreen(id){
  if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id);
  else screen(id);
 }
-function generateCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+const ROOM_COLOR_NAMES=[
+ 'AZUL','VERDE','VERMELHO','AMARELO','LARANJA','ROXO','ROSA','PRETO','BRANCO','CINZA','MARROM','BEGE',
+ 'DOURADO','PRATA','CORAL','TURQUESA','VIOLETA','LILAS','MAGENTA','CIANO','BORDO','VINHO','SALMAO','CREME',
+ 'CARAMELO','MOSTARDA','ESMERALDA','SAFIRA','RUBI','AMBAR','JADE','OLIVA','MENTA','LIMA','INDIGO','ANIL',
+ 'COBRE','BRONZE','GRAFITE','PEROLA','AREIA','CHOCOLATE','CARMIM','ESCARLATE','FERRUGEM'
+];
+function normalizeRoomCode(value){
+ const raw=String(value||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ // Compatibilidade: salas antigas de 6 caracteres continuam acessíveis enquanto existirem.
+ if(/^[A-Z0-9]{6}$/.test(raw))return raw;
+ return raw.replace(/\s+/g,'-').replace(/[^A-Z-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'');
+}
+function generateCode(){
+ const n=ROOM_COLOR_NAMES.length;
+ const ai=Math.floor(Math.random()*n);
+ let bi=Math.floor(Math.random()*(n-1));
+ if(bi>=ai)bi++;
+ return ROOM_COLOR_NAMES[ai]+'-'+ROOM_COLOR_NAMES[bi];
+}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
@@ -3053,7 +3071,7 @@ $('#createRoomBtn').onclick=async()=>{
   renderPlayers(); navigateScreen('lobbyScreen');
 };
 $('#confirmJoin').onclick=async()=>{
-  const code=$('#roomCodeInput').value.trim().toUpperCase();
+  const code=normalizeRoomCode($('#roomCodeInput').value);
   const res=await NetworkAdapter.joinRoom(code);
   if(res.ok){
     const joinedMode=res.room.settings?.mode||state.mode;
