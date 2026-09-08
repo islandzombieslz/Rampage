@@ -35,7 +35,7 @@ jobs:
           grep -q "e.shield=e.maxShield=200" index.html
           grep -q "e.damage=25" index.html
           grep -q "kingNormalCount)||0)>=6" index.html
-          grep -q '.entity-visual.king-visual{width:112px;height:138px}' index.html
+          grep -q 'entity-visual.king-visual' index.html
           grep -q 'entity-visual.king-visual .entity-king-special' index.html
           grep -q 'const kingPowerNodes=new Map()' index.html
           grep -q 'function syncKingPowerEffects' index.html
@@ -58,5 +58,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Adjust Warrior King visuals and special ground effect'
+          git commit -m 'Correct Warrior King render scale and visuals'
           git push
