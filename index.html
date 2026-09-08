@@ -3572,7 +3572,6 @@ function restartMagePowerGif(img,serial){
  restartGif(img,'magePower',serial);
 }
 
-function spawnGolemRockBurst(golem){
 function acquireGolemRockNode(){
  let rock=golemRockPool.pop();
  if(!rock){rock=document.createElement('img');rock.className='golem-rock-fragment';rock.src=ASSETS.golemRocks}
@@ -3588,6 +3587,7 @@ function recycleGolemRockNode(rock){
  else rock.remove();
 }
 
+function spawnGolemRockBurst(golem){
  const layer=$('#combatFxLayer');
  if(!layer||!golem)return;
 
