@@ -1,0 +1,67 @@
+name: Fix war menu CSS consolidated
+
+on:
+  push:
+    branches:
+      - war-menu-buttons-smaller-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: war-menu-buttons-smaller-20260908
+          fetch-depth: 0
+      - name: Apply consolidated war menu CSS fix
+        run: python .github/fix_war_menu_css_consolidated.py
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          a=t.rfind('<script>'); b=t.rfind('</script>')
+          if a<0 or b<a: raise SystemExit('script block not found')
+          Path('/tmp/rampage.js').write_text(t[a+8:b],encoding='utf-8')
+          PY
+          node --check /tmp/rampage.js
+      - name: Verify consolidated menu state
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          checks={
+            'style_open':t.count('<style'),
+            'style_close':t.count('</style>'),
+            'warConfig_id':t.count('id="warConfig"'),
+            'canonical':t.count('WAR CONFIG CANONICAL OVERRIDE — 2026-09-08'),
+            'old_specific':t.count('Mestre da Guerra: mantém todos os controles'),
+            'compact_v2':t.count('WAR MENU COMPACT BUTTONS V2'),
+            'old_price_text':t.count('Guerreiro 50 • Rei 300'),
+            'reward_text':t.count('Rodada: vencedor +200'),
+            'goals_text':t.count('Metas: 5 especiais +70'),
+          }
+          print(checks)
+          expected={'style_open':1,'style_close':1,'warConfig_id':1,'canonical':1,'old_specific':0,'compact_v2':0,'old_price_text':0,'reward_text':0,'goals_text':0}
+          if checks!=expected: raise SystemExit(f'unexpected consolidated state: {checks}')
+          for s in [
+            'const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});',
+            'damage:{target:100,reward:50}',
+            'perfSetText(hudSubPerfEl,`💎 ${gems}`);',
+            'height:20px !important;',
+            'left:27% !important;',
+            'height:25px !important;'
+          ]:
+            if s not in t: raise SystemExit('missing '+s)
+          print('consolidated validation passed')
+          PY
+      - name: Commit validated fix
+        run: |
+          git config user.name "islandzombieslz"
+          git config user.email "island.zombie.slz@gmail.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Consolidate and shrink Master of War menu CSS"
+          git push origin HEAD:war-menu-buttons-smaller-20260908
