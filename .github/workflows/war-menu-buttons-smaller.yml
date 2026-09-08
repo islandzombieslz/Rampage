@@ -1,0 +1,66 @@
+name: War menu buttons smaller
+
+on:
+  push:
+    branches:
+      - war-menu-buttons-smaller-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: war-menu-buttons-smaller-20260908
+          fetch-depth: 0
+
+      - name: Apply compact menu patch
+        run: python .github/patch_war_menu_buttons_smaller.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          start=t.rfind('<script>')
+          end=t.rfind('</script>')
+          if start<0 or end<start: raise SystemExit('script block not found')
+          Path('/tmp/rampage.js').write_text(t[start+8:end],encoding='utf-8')
+          PY
+          node --check /tmp/rampage.js
+
+      - name: Verify only war menu CSS requested
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'WAR MENU COMPACT BUTTONS V2',
+            '#configScreen.war-config #warConfig{',
+            'width:84% !important;',
+            'grid-template-columns:24px 36px 24px !important;',
+            '#configScreen.war-config>.card>.row:last-child button{'
+          ]
+          for s in required:
+            if s not in t: raise SystemExit('missing '+s)
+          # Preserve economy and goals from current main.
+          for s in [
+            'const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});',
+            'damage:{target:100,reward:50}',
+            'perfSetText(hudSubPerfEl,`💎 ${gems}`);'
+          ]:
+            if s not in t: raise SystemExit('preservation check failed: '+s)
+          print('validation passed')
+          PY
+
+      - name: Commit validated change
+        run: |
+          git config user.name "islandzombieslz"
+          git config user.email "island.zombie.slz@gmail.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Shrink all Master of War menu buttons"
+          git push origin HEAD:war-menu-buttons-smaller-20260908
