@@ -1,9 +1,10 @@
-name: Optimize war performance and Warrior King
+name: Warrior King visual adjustments
 
 on:
   push:
     paths:
       - '.github/workflows/optimize-loading.yml'
+      - '.github/patch_war_performance.py'
 
 permissions:
   contents: write
@@ -29,24 +30,23 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'WAR PERFORMANCE 2026-09-08' index.html
+          grep -q 'FIREBASE RTDB, HOST AUTORITATIVO' index.html
           grep -q "e.hp=e.maxHp=200" index.html
           grep -q "e.shield=e.maxShield=200" index.html
           grep -q "e.damage=25" index.html
           grep -q "kingNormalCount)||0)>=6" index.html
-          grep -q "Math.min(6,(Number(e.kingNormalCount)" index.html
-          grep -q 'warCandidatesFor(e,combatGrid,avoidDragons)' index.html
+          grep -q '.entity-visual.king-visual{width:112px;height:138px}' index.html
+          grep -q 'entity-visual.king-visual .entity-king-special' index.html
+          grep -q 'const kingPowerNodes=new Map()' index.html
+          grep -q 'function syncKingPowerEffects' index.html
+          grep -q 'syncKingPowerEffects(left,top,zoom,vw,vh)' index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
-          grep -q 'FIREBASE RTDB, HOST AUTORITATIVO' index.html
           ! grep -q 'i.postimg.cc' index.html
           test -f assets/king/idle.gif
           test -f assets/king/walk.gif
           test -f assets/king/special.gif
           test -f assets/king/power.gif
           test -f assets/king/sword.png
-          test -f assets/king/card.png
-          test -f assets/golem/golem-especial.gif
-          test -f assets/mage/poder-mago-especial.gif
-          test -f assets/dragon/dragao-guerreiro-atacando.gif
 
       - name: Publish correction
         run: |
@@ -58,5 +58,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Optimize war performance and tune Warrior King'
+          git commit -m 'Adjust Warrior King visuals and special ground effect'
           git push
