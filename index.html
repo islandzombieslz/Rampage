@@ -545,6 +545,8 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .hp-fill{height:100%;background:#3fb950;transition:width .55s cubic-bezier(.2,.78,.25,1)}.shield-fill{height:100%;background:#58a6ff;transition:width .45s ease}
 .hp-fill.heal-pulse{animation:hpHealPulse .72s ease-out}
 @keyframes hpHealPulse{0%{filter:brightness(1);box-shadow:none}35%{filter:brightness(1.75);box-shadow:0 0 8px rgba(90,255,150,.95)}100%{filter:brightness(1);box-shadow:none}}
+.hp-fill.heal-pulse-alt{animation:hpHealPulseAlt .72s ease-out}
+@keyframes hpHealPulseAlt{0%{filter:brightness(1);box-shadow:none}35%{filter:brightness(1.75);box-shadow:0 0 8px rgba(90,255,150,.95)}100%{filter:brightness(1);box-shadow:none}}
 .entity-tag{
   position:absolute;left:50%;top:82px;transform:translateX(-50%);
   width:54px;height:16px;border:2px solid currentColor;border-radius:50%;
@@ -815,6 +817,15 @@ html,body{
   animation:roundHeal .95s ease-out;
 }
 @keyframes roundHeal{
+  0%{filter:none}
+  25%{filter:brightness(1.55) saturate(1.25) drop-shadow(0 0 4px rgba(90,255,150,.25))}
+  55%{filter:brightness(1.25) saturate(1.12) drop-shadow(0 0 13px rgba(90,255,150,.85))}
+  100%{filter:none}
+}
+.entity-facing.round-heal-alt{
+  animation:roundHealAlt .95s ease-out;
+}
+@keyframes roundHealAlt{
   0%{filter:none}
   25%{filter:brightness(1.55) saturate(1.25) drop-shadow(0 0 4px rgba(90,255,150,.25))}
   55%{filter:brightness(1.25) saturate(1.12) drop-shadow(0 0 13px rgba(90,255,150,.85))}
@@ -2617,53 +2628,131 @@ function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padSt
 function rand(a,b){return a+Math.random()*(b-a)}
 function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
 function localPlayer(){return state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||state.players.find(p=>p.local)||state.players[0]}
+function serializeWarEntityForNetwork(e,now){
+ const out={
+   id:e.id,type:e.type,x:e.x,y:e.y,team:e.team,color:e.color||'#ffffff',
+   hp:Number(e.hp)||0,maxHp:Number(e.maxHp)||0,shield:Number(e.shield)||0,maxShield:Number(e.maxShield)||0,
+   alive:!!e.alive,moving:!!e.moving,facing:Number(e.facing)||1,heading:Number(e.heading)||0,
+   attackSerial:Number(e.attackSerial)||0,comboStep:Number(e.comboStep)||0,
+   hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
+   deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
+   variant:e.variant||'male',ownerId:e.ownerId??null
+ };
+
+ if(e.type==='golem'){
+   out.golemAttackKind=e.golemAttackKind??null;
+   out.golemAttackSerial=Number(e.golemAttackSerial)||0;
+   if(e.pendingGolemAttack){
+     const p=e.pendingGolemAttack;
+     out.pendingGolemAttack={
+       kind:p.kind,reason:p.reason||'normal',serial:Number(p.serial)||Number(e.golemAttackSerial)||0,
+       targetId:p.targetId??null,duration:Number(p.duration)||GOLEM_NORMAL_DURATION,
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       impactRemainingMs:Math.max(0,Number(p.impactAt)-now),
+       impacted:!!p.impacted
+     };
+   }
+ }else if(e.type==='mage'){
+   out.mageAttackKind=e.mageAttackKind??null;
+   out.mageAttackSerial=Number(e.mageAttackSerial)||0;
+   if(e.pendingMageAttack){
+     const p=e.pendingMageAttack;
+     out.pendingMageAttack={
+       kind:p.kind,targetId:p.targetId??null,
+       originX:Number.isFinite(Number(p.originX))?Number(p.originX):e.x,
+       originY:Number.isFinite(Number(p.originY))?Number(p.originY):e.y,
+       angle:Number.isFinite(Number(p.angle))?Number(p.angle):0,
+       length:Number.isFinite(Number(p.length))?Number(p.length):245,
+       duration:Number(p.duration)||(p.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION),
+       remainingMs:Math.max(0,Number(p.endAt)-now)
+     };
+   }
+ }else if(e.type==='king'){
+   out.kingSpecialSerial=Number(e.kingSpecialSerial)||0;
+   if(e.pendingKingSpecial){
+     const p=e.pendingKingSpecial;
+     out.pendingKingSpecial={
+       serial:Number(p.serial)||Number(e.kingSpecialSerial)||0,
+       duration:Number(p.duration)||KING_SPECIAL_DURATION,
+       bodyDuration:Number(p.bodyDuration)||KING_BODY_SPECIAL_DURATION,
+       powerDelay:Number(p.powerDelay)||KING_POWER_DELAY_MS,
+       originX:Number.isFinite(Number(p.originX))?Number(p.originX):e.x,
+       originY:Number.isFinite(Number(p.originY))?Number(p.originY):e.y,
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       impactRemainingMs:Math.max(0,Number(p.damageAt)-now),
+       impacted:!!p.impacted
+     };
+   }
+ }else if(e.type==='dragon'){
+   out.dragonFlightState=e.dragonFlightState||'ground';
+   out.dragonTakeoffSerial=Number(e.dragonTakeoffSerial)||0;
+   out.dragonAttackSerial=Number(e.dragonAttackSerial)||0;
+   if(e.dragonTakeoffEndAt)out.dragonTakeoffRemainingMs=Math.max(0,Number(e.dragonTakeoffEndAt)-now);
+   if(e.pendingDragonAttack){
+     out.pendingDragonAttack={
+       serial:Number(e.pendingDragonAttack.serial)||Number(e.dragonAttackSerial)||0,
+       remainingMs:Math.max(0,Number(e.pendingDragonAttack.endAt)-now)
+     };
+   }
+ }
+
+ if(e.dragonBurnUntil){
+   out.dragonBurnRemainingMs=Math.max(0,Number(e.dragonBurnUntil)-now);
+   out.dragonBurnSerial=Number(e.dragonBurnSerial)||0;
+   out.dragonBurnFlameCount=Number(e.dragonBurnFlameCount)||2;
+ }
+
+ return out;
+}
+
 function serializeGame(){
  const now=performance.now();
- const entities=state.entities.map(e=>{
-   const out={...e,targetId:e.target?.id??e.targetId??null};
-   delete out.target;
-   if(out.pendingMageAttack){
-     out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
-   }
-   if(out.pendingKingSpecial){
-     out.pendingKingSpecial={
-       ...out.pendingKingSpecial,
-       remainingMs:Math.max(0,out.pendingKingSpecial.endAt-now),
-       impactRemainingMs:Math.max(0,out.pendingKingSpecial.damageAt-now)
-     };
-   }
-   // Nunca envia timestamps absolutos de performance.now() do host para outro aparelho.
-   // Cada cliente reconstrói o relógio local do ataque do Golem pelos tempos restantes.
-   if(out.pendingGolemAttack){
-     out.pendingGolemAttack={
-       ...out.pendingGolemAttack,
-       serial:Number(out.pendingGolemAttack.serial)||Number(out.golemAttackSerial)||0,
-       remainingMs:Math.max(0,out.pendingGolemAttack.endAt-now),
-       impactRemainingMs:Math.max(0,out.pendingGolemAttack.impactAt-now)
-     };
-   }
-   if(out.dragonTakeoffEndAt){
-     out.dragonTakeoffRemainingMs=Math.max(0,out.dragonTakeoffEndAt-now);
-     delete out.dragonTakeoffEndAt;
-     delete out.dragonTakeoffStartedAt;
-   }
-   if(out.pendingDragonAttack){
-     out.pendingDragonAttack={...out.pendingDragonAttack,remainingMs:Math.max(0,out.pendingDragonAttack.endAt-now)};
-   }
-   if(out.dragonBurnUntil){
-     out.dragonBurnRemainingMs=Math.max(0,out.dragonBurnUntil-now);
-     delete out.dragonBurnUntil;
-     delete out.dragonBurnStartedAt;
-     delete out.dragonBurnNextTick;
-   }
-   return out;
- });
+ const entities=state.mode==='war'
+   ? state.entities.map(e=>serializeWarEntityForNetwork(e,now))
+   : state.entities.map(e=>{
+       const out={...e,targetId:e.target?.id??e.targetId??null};
+       delete out.target;
+       if(out.pendingMageAttack){
+         out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
+       }
+       if(out.pendingKingSpecial){
+         out.pendingKingSpecial={
+           ...out.pendingKingSpecial,
+           remainingMs:Math.max(0,out.pendingKingSpecial.endAt-now),
+           impactRemainingMs:Math.max(0,out.pendingKingSpecial.damageAt-now)
+         };
+       }
+       if(out.pendingGolemAttack){
+         out.pendingGolemAttack={
+           ...out.pendingGolemAttack,
+           serial:Number(out.pendingGolemAttack.serial)||Number(out.golemAttackSerial)||0,
+           remainingMs:Math.max(0,out.pendingGolemAttack.endAt-now),
+           impactRemainingMs:Math.max(0,out.pendingGolemAttack.impactAt-now)
+         };
+       }
+       if(out.dragonTakeoffEndAt){
+         out.dragonTakeoffRemainingMs=Math.max(0,out.dragonTakeoffEndAt-now);
+         delete out.dragonTakeoffEndAt;
+         delete out.dragonTakeoffStartedAt;
+       }
+       if(out.pendingDragonAttack){
+         out.pendingDragonAttack={...out.pendingDragonAttack,remainingMs:Math.max(0,out.pendingDragonAttack.endAt-now)};
+       }
+       if(out.dragonBurnUntil){
+         out.dragonBurnRemainingMs=Math.max(0,out.dragonBurnUntil-now);
+         delete out.dragonBurnUntil;
+         delete out.dragonBurnStartedAt;
+         delete out.dragonBurnNextTick;
+       }
+       return out;
+     });
  const dragonProjectiles=(state.dragonProjectiles||[]).map(p=>({
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0
  }));
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
 }
+
 function applyRemoteGame(game){
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
@@ -3452,10 +3541,9 @@ function startEntityDeath(e,dx=0,dy=0){
    s.activateAt=now+1800;
  }
 
- // Ninguém pode continuar "preso" a um alvo que já morreu.
- for(const other of state.entities){
-   if(other.target===e)other.target=null;
- }
+ // A limpeza é agrupada no fim do frame. Em mortes em área isso evita
+ // repetir uma varredura completa de todas as tropas para cada vítima.
+ deadTargetIds.add(e.id);
 }
 
 function cleanupDeadEntities(now){
@@ -3577,12 +3665,13 @@ function acquireGolemRockNode(){
  if(!rock){rock=document.createElement('img');rock.className='golem-rock-fragment';rock.src=ASSETS.golemRocks}
  if(!rock.hasAttribute('src'))rock.src=ASSETS.golemRocks;
  if(rock.parentElement!==combatFxLayer)combatFxLayer?.appendChild(rock);
- rock.style.visibility='visible';
+ if(rock._rockVisible!==true){rock._rockVisible=true;rock.style.visibility='visible'}
  return rock;
 }
 function recycleGolemRockNode(rock){
  if(!rock)return;
- rock.style.visibility='hidden';
+ if(rock._rockVisible!==false){rock._rockVisible=false;rock.style.visibility='hidden'}
+ rock._rockPxSize=NaN;
  if(golemRockPool.length<MAX_GOLEM_ROCK_POOL)golemRockPool.push(rock);
  else rock.remove();
 }
@@ -3683,18 +3772,22 @@ function updateGolemRockEffects(now){
    const margin=100;
    const onScreen=sx>=-margin && sx<=screenW+margin && sy>=-margin && sy<=screenH+margin;
    if(!onScreen){
-     if(fx.el)fx.el.style.visibility='hidden';
+     if(fx.el&&fx.el._rockVisible!==false){fx.el._rockVisible=false;fx.el.style.visibility='hidden'}
      continue;
    }
    let el=fx.el;
    if(!el){
      el=acquireGolemRockNode();
      fx.el=el;
+   }else if(el._rockVisible!==true){
+     el._rockVisible=true;el.style.visibility='visible';
    }
-   el.style.visibility='visible';
    const pxSize=fx.size*zoom;
-   el.style.width=pxSize+'px';
-   el.style.height=pxSize+'px';
+   if(el._rockPxSize!==pxSize){
+     el._rockPxSize=pxSize;
+     el.style.width=pxSize+'px';
+     el.style.height=pxSize+'px';
+   }
    el.style.left=sx+'px';
    el.style.top=sy+'px';
    el.style.opacity=String(Math.max(0,opacity));
@@ -3793,21 +3886,13 @@ function resolveGolemImpact(e,pending){
  pending.impacted=true;
 
  if(pending.kind==='special'){
-   // Depois que o especial foi lançado, o impacto visual SEMPRE completa.
    spawnGolemRockBurst(e);
-
-   // O dano só entra se o Golem ainda estiver vivo.
    if(!e.alive)return;
 
-   const radius=230;
-   const victims=state.entities.filter(t=>
-     isRealCombatTarget(t) &&
-     t!==e &&
-     t.team!==e.team &&
-     dist(e,t)<=radius
-   );
-
-   for(const t of victims){
+   const radius=230,r2=radius*radius;
+   forEachWarSpatialCandidate(e.x-radius,e.y-radius,e.x+radius,e.y+radius,t=>{
+     if(!isRealCombatTarget(t)||t===e||t.team===e.team)return;
+     const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy>r2)return;
      applyCombatHit(t,e,70,{
        knockForce:1120,
        knockTime:.50,
@@ -3815,12 +3900,11 @@ function resolveGolemImpact(e,pending){
        shake:22,
        shakeDuration:.58
      });
-   }
+   });
  }else{
    if(!e.alive)return;
-   const target=state.entities.find(t=>t.id===pending.targetId&&isRealCombatTarget(t));
-   // Ataque normal é corpo-a-corpo. Se o alvo fugir durante o wind-up, o golpe erra.
-   if(target && target.team!==e.team && dist(e,target)<=112){
+   const target=warEntityById.get(pending.targetId)||state.entities.find(t=>t.id===pending.targetId&&isRealCombatTarget(t));
+   if(target && isRealCombatTarget(target) && target.team!==e.team && dist(e,target)<=112){
      applyCombatHit(target,e,40,{
        knockForce:760,
        knockTime:.40,
@@ -3911,42 +3995,41 @@ function updateMageAttackState(e,now){
  const p=e.pendingMageAttack;if(!p)return;
  if(p.kind==='special'){
    e.moving=false;
-   // Uma explosão = um instante de dano. Espera o GIF chegar ao momento visual
-   // do golpe e então aplica a área uma única vez.
    if(!p.impacted && now>=(p.damageAt||p.startedAt||0)){
      p.impacted=true;
      p.hitIds=p.hitIds||{};
+     const ox=p.originX,oy=p.originY,r=MAGE_SPECIAL_RADIUS,r2=r*r;
 
-     // Dano em área do especial.
-     for(const t of state.entities.filter(t=>t.alive&&t!==e&&t.team!==e.team&&Math.hypot(t.x-p.originX,t.y-p.originY)<=MAGE_SPECIAL_RADIUS)){
-       if(p.hitIds[t.id])continue;p.hitIds[t.id]=true;
+     // Dano: mesmas regras e mesma distância final; só deixamos de testar
+     // entidades que estão em células impossíveis de alcançar.
+     forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,t=>{
+       if(!t.alive||t===e||t.team===e.team)return;
+       const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
+       if(p.hitIds[t.id])return;p.hitIds[t.id]=true;
        applyCombatHit(t,e,MAGE_SPECIAL_DAMAGE,{knockForce:260,knockTime:.18,tilt:10});
-     }
+     });
 
-     // Cura o próprio Mago e SOMENTE aliados vivos dentro da mesma área.
-     // HP é limitado ao máximo; regenSerial sincroniza a animação também nos clientes online.
-     for(const ally of state.entities.filter(t=>t.alive&&t.team===e.team&&Math.hypot(t.x-p.originX,t.y-p.originY)<=MAGE_SPECIAL_RADIUS)){
+     // Cura mantém exatamente a regra anterior, inclusive o próprio Mago.
+     forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,ally=>{
+       if(!ally.alive||ally.team!==e.team)return;
+       const dx=ally.x-ox,dy=ally.y-oy;if(dx*dx+dy*dy>r2)return;
        const before=Number(ally.hp)||0;
        ally.hp=Math.min(Number(ally.maxHp)||before,before+MAGE_SPECIAL_HEAL);
        if(ally.hp>before)ally.regenSerial=(ally.regenSerial||0)+1;
-     }
+     });
    }
  }else if(now>=p.nextTickAt && now>=(p.damageStartAt||0) && now<=(p.damageEndAt||p.endAt)){
-   // O ataque normal NÃO é cancelado se o alvo andar, morrer ou sair da faixa.
-   // Ele continua até endAt, usando a direção e o comprimento definidos no lançamento.
    const angle=p.angle??(e.heading||0),length=p.length||245;
    const ox=p.originX??e.x,oy=p.originY??e.y;
    const ax=ox+Math.cos(angle)*32,ay=oy-18,bx=ax+Math.cos(angle)*length,by=ay+Math.sin(angle)*length;
-   for(const t of state.entities.filter(t=>t.alive&&t!==e&&t.team!==e.team)){
-     // Hitbox estreita para acompanhar a parte realmente visível da rajada.
-     // Antes era 38 + raio inteiro do alvo (quase 70 px contra outro mago),
-     // permitindo dano mesmo com o sprite claramente fora do fogo.
-     const fireHalfWidth=22;
+   const fireHalfWidth=22,pad=fireHalfWidth+16;
+   forEachWarSpatialCandidate(Math.min(ax,bx)-pad,Math.min(ay,by)-pad,Math.max(ax,bx)+pad,Math.max(ay,by)+pad,t=>{
+     if(!t.alive||t===e||t.team===e.team)return;
      const targetBodyRadius=Math.min(16,(t.r||25)*0.5);
      if(distanceToSegment(t.x,t.y,ax,ay,bx,by)<=fireHalfWidth+targetBodyRadius){
        applyCombatHit(t,e,5,{knockForce:90,knockTime:.06,tilt:5});
      }
-   }
+   });
    p.nextTickAt=now+MAGE_FIRE_TICK;
  }
  if(now>=p.endAt){e.pendingMageAttack=null;e.mageAttackKind=null}
@@ -3974,12 +4057,15 @@ function updateKingSpecialState(e,now){
  e.moving=false;
  if(!p.impacted&&now>=(p.damageAt||p.startedAt||0)){
    p.impacted=true;p.hitIds=p.hitIds||{};
-   for(const t of state.entities.filter(t=>isRealCombatTarget(t)&&t!==e&&t.team!==e.team&&Math.hypot(t.x-p.originX,t.y-p.originY)<=KING_SPECIAL_RADIUS)){
-     if(p.hitIds[t.id])continue;
+   const ox=p.originX,oy=p.originY,r=KING_SPECIAL_RADIUS,r2=r*r;
+   forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,t=>{
+     if(!isRealCombatTarget(t)||t===e||t.team===e.team)return;
+     const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
+     if(p.hitIds[t.id])return;
      p.hitIds[t.id]=true;
      applyCombatHit(t,e,KING_SPECIAL_DAMAGE,{knockForce:260,knockTime:.18,tilt:10,allowFlying:true});
      if(t.alive)igniteDragonBurn(t,e);
-   }
+   });
  }
  if(now>=p.endAt){
    e.pendingKingSpecial=null;
@@ -4174,7 +4260,9 @@ function territoryFor(i,n){
  return {x:n===1?state.world.w/2:pad+i*lane,y:i%2===0?240:state.world.h-240};
 }
 function setupWarRound(){
- state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
+ state.entities=[];state.particles=[];state.dragonProjectiles=[];
+ warCandidateCache.clear();warCombatGrid.clear();warBurningEntities.clear();deadTargetIds.clear();
+ clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
    p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);
    p.troops=0;
@@ -4338,9 +4426,14 @@ function startCombatPhase(){
 }
 const WAR_AI_GRID_CELL=220;
 const WAR_AI_LOCAL_RADIUS=560;
+const WAR_AI_DECISION_INTERVAL_MS=70;
 // PERFORMANCE SWEEP 2026-09-07: caches de frame sem alterar decisao/alcance da IA.
 const warFrameEnemiesByTeam=new Map();
 const warEntityById=new Map();
+const warCombatGrid=new Map();
+const warCandidateCache=new Map();
+const warBurningEntities=new Set();
+const deadTargetIds=new Set();
 function rebuildWarEntityIdMap(){
  warEntityById.clear();
  for(const e of state.entities)warEntityById.set(e.id,e);
@@ -4364,13 +4457,31 @@ function rebuildWarFrameEnemyCache(living){
  return teams;
 }
 function buildWarAIGrid(living){
- const cells=new Map();
+ const cells=warCombatGrid;cells.clear();
  for(const e of living){
    const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=cx+','+cy;
    let bucket=cells.get(key);if(!bucket){bucket=[];cells.set(key,bucket)}bucket.push(e);
  }
  return cells;
 }
+
+// Itera somente células que podem conter o efeito. O +1 de margem preserva
+// acertos mesmo que as entidades tenham se movido alguns pixels após a grade
+// ter sido montada no início do frame; a hitbox final continua exatamente igual.
+function forEachWarSpatialCandidate(minX,minY,maxX,maxY,visit){
+ if(state.mode!=='war'||state.phase!=='combat'||!warCombatGrid.size){
+   for(const t of state.entities)visit(t);
+   return;
+ }
+ const cs=WAR_AI_GRID_CELL;
+ const startX=Math.floor(minX/cs)-1,endX=Math.floor(maxX/cs)+1;
+ const startY=Math.floor(minY/cs)-1,endY=Math.floor(maxY/cs)+1;
+ for(let x=startX;x<=endX;x++)for(let y=startY;y<=endY;y++){
+   const bucket=warCombatGrid.get(x+','+y);if(!bucket)continue;
+   for(const t of bucket)visit(t);
+ }
+}
+
 function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  const cs=WAR_AI_GRID_CELL,cx=Math.floor(e.x/cs),cy=Math.floor(e.y/cs);
  const maxR=Math.ceil(Math.max(state.world.w,state.world.h)/cs)+1;
@@ -4393,7 +4504,14 @@ function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  }
  return best;
 }
-function warCandidatesFor(e,grid,nonDragonOnly=false){
+function warCandidatesFor(e,grid,nonDragonOnly=false,now=performance.now()){
+ const cached=warCandidateCache.get(e.id);
+ if(cached&&cached.nonDragonOnly===nonDragonOnly&&now<cached.until){
+   if(cached.items.length===0)return cached.items;
+   for(const t of cached.items){
+     if(t.alive&&t!==e&&t.team!==e.team&&(!nonDragonOnly||t.type!=='dragon')&&canEngageTarget(e,t))return cached.items;
+   }
+ }
  const cs=WAR_AI_GRID_CELL,r=WAR_AI_LOCAL_RADIUS,r2=r*r;
  const minX=Math.floor((e.x-r)/cs),maxX=Math.floor((e.x+r)/cs);
  const minY=Math.floor((e.y-r)/cs),maxY=Math.floor((e.y+r)/cs);
@@ -4405,9 +4523,10 @@ function warCandidatesFor(e,grid,nonDragonOnly=false){
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
    }
  }
- if(local.length)return local;
- const nearest=nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
- return nearest?[nearest]:[];
+ const nearest=local.length?null:nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
+ const result=local.length?local:(nearest?[nearest]:[]);
+ warCandidateCache.set(e.id,{nonDragonOnly,until:now+WAR_AI_DECISION_INTERVAL_MS,items:result});
+ return result;
 }
 function updateWar(dt){
  if(state.phase==='prep'){
@@ -4424,7 +4543,7 @@ function updateWar(dt){
    const combatGrid=buildWarAIGrid(living);
    for(const e of living){
      const avoidDragons=(e.type==='warrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
-     aiFight(e,dt,null,warCandidatesFor(e,combatGrid,avoidDragons));
+     aiFight(e,dt,null,warCandidatesFor(e,combatGrid,avoidDragons,now));
    }
    state.timeLeft-=dt;
    if(teams.length<=1 || state.timeLeft<=0)finishWarRound();
@@ -4606,19 +4725,23 @@ function beginDragonTakeoff(e){
            target.dragonBurnNextTick=now+DRAGON_BURN_TICK_MS;target.dragonBurnSourceId=source?.id??null;
            target.dragonBurnSourceX=source?.x??target.x;target.dragonBurnSourceY=source?.y??target.y;
            target.dragonBurnFlameCount=2+(target.dragonBurnSerial%2);
+           warBurningEntities.add(target);
           }
           function dragonBurnAttacker(target,entityById=warEntityById){
            return entityById.get(target.dragonBurnSourceId)||{id:'dragon-burn',type:'dragon',x:Number(target.dragonBurnSourceX)||target.x,y:Number(target.dragonBurnSourceY)||target.y,heading:0,lastCombatAt:0};
           }
           function updateDragonBurns(now,entityById=warEntityById){
-           for(const target of state.entities){
-             if(!target.alive||!target.dragonBurnUntil)continue;
+           for(const target of warBurningEntities){
+             if(!target.alive||!target.dragonBurnUntil){warBurningEntities.delete(target);continue}
              while(target.alive&&target.dragonBurnNextTick&&now>=target.dragonBurnNextTick&&target.dragonBurnNextTick<=target.dragonBurnUntil){
                const burnSource=dragonBurnAttacker(target,entityById);
                applyCombatHit(target,burnSource,DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:burnSource.type==='king'});
                target.dragonBurnNextTick+=DRAGON_BURN_TICK_MS;
              }
-             if(now>target.dragonBurnUntil){target.dragonBurnUntil=0;target.dragonBurnStartedAt=0;target.dragonBurnNextTick=0;target.dragonBurnSourceId=null}
+             if(now>target.dragonBurnUntil||!target.alive){
+               target.dragonBurnUntil=0;target.dragonBurnStartedAt=0;target.dragonBurnNextTick=0;target.dragonBurnSourceId=null;
+               warBurningEntities.delete(target);
+             }
            }
           }
           function launchDragonFireball(e,target,{emergency=false}={}){
@@ -4774,7 +4897,7 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
    const allEnemies=cachedEnemies?.all||state.entities.filter(t=>t.alive&&t!==e&&(forcedTeam?t.team===forcedTeam:t.team!==e.team)&&isRealCombatTarget(t));
    const nonDragonEnemies=cachedEnemies?.nonDragon||allEnemies.filter(t=>t.type!=='dragon');
    if(nonDragonEnemies.length){
-     candidates=preparedCandidates||nonDragonEnemies.filter(t=>canEngageTarget(e,t));
+     candidates=(preparedCandidates||nonDragonEnemies).filter(t=>canEngageTarget(e,t));
    }else{
      if(tryWarriorFleeFlyingDragon(e,dt))return;
      candidates=[];
@@ -5114,6 +5237,12 @@ function updateEntities(dt){
      e.y=clamp(e.y,35,state.world.h-35);
      if(e.knockTime<=0){e.knockVX=0;e.knockVY=0}
    }
+ }
+ if(deadTargetIds.size){
+   for(const other of state.entities){
+     if(other.target&&deadTargetIds.has(other.target.id))other.target=null;
+   }
+   deadTargetIds.clear();
  }
  separateLivingEntities();
  cleanupDeadEntities(now);
@@ -5799,13 +5928,19 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    if((el._lastRegenSerial||0)!==(e.regenSerial||0)){
      el._lastRegenSerial=e.regenSerial||0;
      if(e.regenSerial>0){
-       el._facing.classList.remove('round-heal');
-       el._hp?.classList.remove('heal-pulse');
-       void el._facing.offsetWidth;
-       void el._hp?.offsetWidth;
-       el._facing.classList.add('round-heal');
-       el._hp?.classList.add('heal-pulse');
-       setTimeout(()=>{el._facing?.classList.remove('round-heal');el._hp?.classList.remove('heal-pulse')},1000);
+       const alt=((e.regenSerial||0)&1)===0;
+       const faceClass=alt?'round-heal-alt':'round-heal';
+       const hpClass=alt?'heal-pulse-alt':'heal-pulse';
+       const regenToken=(el._regenAnimToken||0)+1;el._regenAnimToken=regenToken;
+       el._facing.classList.remove('round-heal','round-heal-alt');
+       el._hp?.classList.remove('heal-pulse','heal-pulse-alt');
+       el._facing.classList.add(faceClass);
+       el._hp?.classList.add(hpClass);
+       setTimeout(()=>{
+         if(el._regenAnimToken!==regenToken)return;
+         el._facing?.classList.remove(faceClass);
+         el._hp?.classList.remove(hpClass);
+       },1000);
      }
    }
 
