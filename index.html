@@ -420,6 +420,23 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .entity-sword.attacking2{
   animation:swordStrike2 .30s cubic-bezier(.18,.75,.25,1);
 }
+
+/* Rei Guerreiro: mantém o encaixe/ataque do Guerreiro, com corpo próprio. */
+.entity-visual.king-visual{width:88px;height:112px}
+.entity-visual.king-visual .entity-facing,
+.entity-visual.king-visual .entity-weapon-facing{width:88px;height:104px}
+.entity-visual.king-visual .entity-body{left:0;top:0;width:88px;height:104px}
+.entity-visual.king-visual .entity-bars{left:9px;top:-5px;width:70px}
+.entity-visual.king-visual .hp-bg,
+.entity-visual.king-visual .shield-bg{width:70px}
+.entity-visual.king-visual .entity-sword{left:30px}
+.king-special-power{
+  position:absolute;left:44px;top:52px;width:430px;height:430px;
+  object-fit:contain;transform:translate(-50%,-50%);opacity:0;
+  visibility:hidden;pointer-events:none;z-index:0;
+}
+.entity-visual.king-visual .entity-body{z-index:2}
+.entity-visual.king-visual .entity-weapon-facing{z-index:3}
 @keyframes swordStrike2{
   0%{transform:rotate(18deg)}
   18%{transform:rotate(108deg)}
@@ -1924,10 +1941,10 @@ button::-moz-focus-inner{border:0}
 }
 #shop.open{display:flex !important}
 #shop .shop-sprite-grid{
-  width:min(470px,58vw,78vh) !important;
+  width:min(620px,72vw,110vh) !important;
   max-width:calc(100vw - 120px) !important;
   display:grid !important;
-  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
   grid-template-rows:repeat(2,minmax(0,1fr)) !important;
   gap:8px !important;
   padding:7px !important;
@@ -1978,7 +1995,7 @@ button::-moz-focus-inner{border:0}
     bottom:calc(var(--safe-bottom) + 5px) !important;
   }
   #shop .shop-sprite-grid{
-    width:min(410px,52vw,78vh) !important;
+    width:min(520px,65vw,110vh) !important;
     max-width:calc(100vw - 92px) !important;
     gap:6px !important;
     padding:5px !important;
@@ -2168,8 +2185,8 @@ window.dispatchEvent(new Event('firebase-ready'));
       <img src="assets/ui/cla-guerreiros.png" alt="" loading="lazy" decoding="async">
       <div>
         <h3>Guerreiros</h3>
-        <div class="small">Guerreiro/Guerreira • Mago/Maga • Golem • Dragão</div>
-        <div class="small">Quatro tropas disponíveis na preparação da guerra.</div>
+        <div class="small">Guerreiro/Guerreira • Rei Guerreiro • Mago/Maga • Golem • Dragão</div>
+        <div class="small">Cinco tropas disponíveis na preparação da guerra.</div>
       </div>
     </div>
     <div class="divider"></div>
@@ -2202,6 +2219,9 @@ window.dispatchEvent(new Event('firebase-ready'));
       <div class="shop-sprite-grid">
         <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 75 gemas" title="Guerreiro — 75 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
+        </button>
+        <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 250 gemas" title="Rei Guerreiro — 250 gemas">
+          <img src="assets/king/card.png" alt="Rei Guerreiro" draggable="false" decoding="async">
         </button>
         <button id="buyMage" class="shop-sprite-card" aria-label="Comprar Mago por 550 gemas" title="Mago — 550 gemas">
           <img src="assets/ui/war-shop/card-magos-guerreiros.png" alt="Mago Guerreiro" draggable="false" decoding="async">
@@ -2267,6 +2287,13 @@ const ASSETS = {
   femaleIdle:'assets/warrior/guerreira-parada.gif',
   femaleWalk:'assets/warrior/guerreira-andando.gif',
 
+  // Rei Guerreiro — clã Guerreiros
+  kingIdle:'assets/king/idle.gif',
+  kingWalk:'assets/king/walk.gif',
+  kingSpecial:'assets/king/special.gif',
+  kingPower:'assets/king/power.gif',
+  kingSword:'assets/king/sword.png',
+
   // Golem Guerreiro — clã Guerreiros
   golemIdle:'assets/golem/golem-parado.gif',
   golemWalk:'assets/golem/golem-andando.gif',
@@ -2321,12 +2348,17 @@ let MAGE_SPECIAL_FEMALE_DURATION=3000;
 let MAGE_POWER_SPECIAL_DURATION=3000;
 let GOLEM_NORMAL_DURATION=3000;
 let GOLEM_SPECIAL_DURATION=3300;
+let KING_SPECIAL_DURATION=3000;
+let KING_BODY_SPECIAL_DURATION=3000;
+let KING_POWER_DURATION=3000;
 const MAGE_FIRE_TICK=300;
 const MAGE_DAMAGE_DELAY=1000;
 const MAGE_SPECIAL_COOLDOWN=10;
 const MAGE_SPECIAL_RADIUS=215;
 const MAGE_SPECIAL_DAMAGE=100;
 const MAGE_SPECIAL_HEAL=30;
+const KING_SPECIAL_RADIUS=MAGE_SPECIAL_RADIUS;
+const KING_SPECIAL_DAMAGE=50;
 
 // DRAGON WARRIOR SYSTEM
 let DRAGON_TAKEOFF_DURATION=1200;
@@ -2371,7 +2403,7 @@ function validGifDuration(ms,fallback){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','dragonTakeoff','dragonAttack','dragonFireball'];
+ const gifKeys=['golemAttack','golemSpecial','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -2386,6 +2418,8 @@ function validGifDuration(ms,fallback){
      if(key==='magePowerSpecial')MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,MAGE_POWER_SPECIAL_DURATION);
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
+     if(key==='kingSpecial')KING_BODY_SPECIAL_DURATION=validGifDuration(duration,KING_BODY_SPECIAL_DURATION);
+     if(key==='kingPower')KING_POWER_DURATION=validGifDuration(duration,KING_POWER_DURATION);
      if(key==='dragonTakeoff')DRAGON_TAKEOFF_DURATION=validGifDuration(duration,DRAGON_TAKEOFF_DURATION);
      if(key==='dragonAttack')DRAGON_ATTACK_VISUAL_MS=validGifDuration(duration,DRAGON_ATTACK_VISUAL_MS);
    }catch(_){
@@ -2399,6 +2433,7 @@ function validGifDuration(ms,fallback){
    }
  }));
  MAGE_SPECIAL_DURATION=Math.max(MAGE_SPECIAL_MALE_DURATION,MAGE_SPECIAL_FEMALE_DURATION,MAGE_POWER_SPECIAL_DURATION);
+ KING_SPECIAL_DURATION=Math.max(KING_BODY_SPECIAL_DURATION,KING_POWER_DURATION);
 })();
 // Não deixa uma falha de rede impedir o mago de atacar para sempre.
 setTimeout(()=>{magePowerAssetReady=true},2000);
@@ -2541,6 +2576,13 @@ function serializeGame(){
    if(out.pendingMageAttack){
      out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
    }
+   if(out.pendingKingSpecial){
+     out.pendingKingSpecial={
+       ...out.pendingKingSpecial,
+       remainingMs:Math.max(0,out.pendingKingSpecial.endAt-now),
+       impactRemainingMs:Math.max(0,out.pendingKingSpecial.damageAt-now)
+     };
+   }
    // Nunca envia timestamps absolutos de performance.now() do host para outro aparelho.
    // Cada cliente reconstrói o relógio local do ataque do Golem pelos tempos restantes.
    if(out.pendingGolemAttack){
@@ -2588,6 +2630,27 @@ function applyRemoteGame(game){
      if(out.pendingMageAttack?.remainingMs!=null){
        const duration=out.pendingMageAttack.duration||(out.pendingMageAttack.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION);
        out.pendingMageAttack={...out.pendingMageAttack,endAt:localNow+out.pendingMageAttack.remainingMs,duration};
+     }
+     if(out.pendingKingSpecial?.remainingMs!=null){
+       const p=out.pendingKingSpecial;
+       const duration=p.duration||KING_SPECIAL_DURATION;
+       const remaining=Math.max(0,Number(p.remainingMs)||0);
+       const impactRemaining=Math.max(0,Number(p.impactRemainingMs)||0);
+       const oldPending=old?.pendingKingSpecial;
+       const sameSerial=!!oldPending&&Number(oldPending.serial)===Number(p.serial);
+       if(remaining<=0){
+         out.pendingKingSpecial=null;
+       }else if(sameSerial&&Number.isFinite(Number(oldPending.endAt))){
+         out.pendingKingSpecial={
+           ...p,duration,
+           startedAt:Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining),
+           damageAt:p.impacted?Math.min(Number(oldPending.damageAt)||localNow,localNow):Number(oldPending.damageAt)||localNow+impactRemaining,
+           endAt:Math.min(Number(oldPending.endAt),localNow+remaining),
+           impacted:!!(oldPending.impacted||p.impacted)
+         };
+       }else{
+         out.pendingKingSpecial={...p,duration,startedAt:localNow-Math.max(0,duration-remaining),damageAt:localNow+impactRemaining,endAt:localNow+remaining};
+       }
      }
      if(out.pendingGolemAttack?.remainingMs!=null){
        const p=out.pendingGolemAttack;
@@ -2681,6 +2744,7 @@ function handleHostCommands(commands){
    const p=state.players.find(x=>x.id===uid);
    if(p&&state.mode==='war'&&state.phase==='prep'){
      if(cmd.type==='buy-warrior')buyForPlayer(p,false);
+     if(cmd.type==='buy-king')buyKingForPlayer(p,false);
      if(cmd.type==='buy-golem')buyGolemForPlayer(p,false);
      if(cmd.type==='buy-mage')buyMageForPlayer(p,false);
      if(cmd.type==='buy-dragon')buyDragonForPlayer(p,false);
@@ -3145,6 +3209,7 @@ function entityBase(type,x,y,team,color){
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
  golemPhase:'seek',golemCrowdSpecialUsed:false,golemLastAttackCompletedAt:0,
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
+ pendingKingSpecial:null,kingSpecialSerial:0,kingNormalCount:0,
  pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
  dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,dragonCloseShotAt:0,
  dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
@@ -3156,6 +3221,17 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
  e.controlled=controlled;
  e.ownerId=ownerId;
  e.variant=variant==='female'?'female':'male';
+ state.entities.push(e);
+ return e;
+}
+function spawnKing(x,y,team,color){
+ const e=entityBase('king',x,y,team,color);
+ if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
+ e.hp=e.maxHp=150;
+ e.shield=e.maxShield=150;
+ e.damage=15;
+ e.r=29;
+ e.kingNormalCount=0;
  state.entities.push(e);
  return e;
 }
@@ -3219,7 +3295,7 @@ function burst(x,y,color){
 
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
- if(target.type==='dragon'&&target.dragonFlightState==='flying'&&attacker.type==='warrior')return;
+ if(!options.allowFlying&&target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return;
 
  // Escudo absorve primeiro.
  let remaining=amount;
@@ -3252,7 +3328,7 @@ function applyCombatHit(target,attacker,amount,options={}){
  let knockForce=options.knockForce??430;
  let knockTime=options.knockTime??.28;
  let applyKnockback=true;
- const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='mage');
+ const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='king' || attacker.type==='mage');
 
  // Golem: contra Guerreiro/Mago o dano entra normalmente, mas ele é muito mais estável.
  // Mantém o ciclo já definido: 1 impacto empurra, os 3 seguintes não.
@@ -3307,6 +3383,7 @@ function startEntityDeath(e,dx=0,dy=0){
  e.golemPhase='dead';
  e.pendingMageAttack=null;
  e.mageAttackKind=null;
+ e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
  // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
@@ -3567,11 +3644,11 @@ function updateGolemRockEffects(now){
 function isRealCombatTarget(t){
  // A IA nunca pode selecionar GIFs, poderes, fragmentos ou outros efeitos visuais.
  // Só personagens/unidades reais do combate entram na lista de alvos.
- return !!t && t.alive && ['warrior','mage','golem','dragon','enemy'].includes(t.type);
+ return !!t && t.alive && ['warrior','king','mage','golem','dragon','enemy'].includes(t.type);
 }
 function canEngageTarget(attacker,target){
  if(!isRealCombatTarget(target)||!attacker)return false;
- if(target.type==='dragon'&&target.dragonFlightState==='flying'&&attacker.type==='warrior')return false;
+ if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return false;
  return true;
 }
 
@@ -3814,9 +3891,44 @@ function updateMageAttackState(e,now){
  if(now>=p.endAt){e.pendingMageAttack=null;e.mageAttackKind=null}
 }
 
+function startKingSpecial(e){
+ if(!e.alive||e.type!=='king'||e.pendingKingSpecial||e.attackCooldown>0||e.knockTime>0)return false;
+ const now=performance.now(),duration=KING_SPECIAL_DURATION;
+ e.moving=false;
+ e.lastAttackAt=now;
+ e.lastCombatAt=now;
+ e.attackCooldown=duration/1000+.12;
+ e.kingSpecialSerial=(e.kingSpecialSerial||0)+1;
+ e.pendingKingSpecial={
+   serial:e.kingSpecialSerial,duration,originX:e.x,originY:e.y,startedAt:now,
+   damageAt:now+Math.min(1200,Math.max(650,duration*.40)),
+   endAt:now+duration,impacted:false,hitIds:{}
+ };
+ return true;
+}
+
+function updateKingSpecialState(e,now){
+ const p=e.pendingKingSpecial;if(!p)return;
+ e.moving=false;
+ if(!p.impacted&&now>=(p.damageAt||p.startedAt||0)){
+   p.impacted=true;p.hitIds=p.hitIds||{};
+   for(const t of state.entities.filter(t=>isRealCombatTarget(t)&&t!==e&&t.team!==e.team&&Math.hypot(t.x-p.originX,t.y-p.originY)<=KING_SPECIAL_RADIUS)){
+     if(p.hitIds[t.id])continue;
+     p.hitIds[t.id]=true;
+     applyCombatHit(t,e,KING_SPECIAL_DAMAGE,{knockForce:260,knockTime:.18,tilt:10,allowFlying:true});
+     if(t.alive)igniteDragonBurn(t,e);
+   }
+ }
+ if(now>=p.endAt){
+   e.pendingKingSpecial=null;
+   e.kingNormalCount=0;
+ }
+}
+
 function performAttack(e,preparedCandidates=null){
  if(e.type==='golem'||e.type==='mage')return;
- if(!e.alive||e.attackCooldown>0||e.knockTime>0)return;
+ if(!e.alive||e.attackCooldown>0||e.knockTime>0||e.pendingKingSpecial)return;
+ if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=8){startKingSpecial(e);return}
  const now=performance.now();
  if(now-e.lastAttackAt<=900)e.comboStep=e.comboStep===1?2:1;
  else e.comboStep=1;
@@ -3826,6 +3938,7 @@ function performAttack(e,preparedCandidates=null){
  e.attackCooldown=.38;
  e.attackAnim=.30;
  e.attackSerial++;
+ if(e.type==='king')e.kingNormalCount=Math.min(8,(Number(e.kingNormalCount)||0)+1);
 
  const candidates=preparedCandidates||state.entities;
  for(const t of candidates){
@@ -4020,9 +4133,10 @@ $('#shop').onclick=(ev)=>{if(ev.target===$('#shop'))$('#shop').classList.remove(
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
- else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
+ else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-king')buyKingForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
+$('#buyKing').onclick=()=>requestWarPurchase('buy-king');
 $('#buyGolem').onclick=()=>requestWarPurchase('buy-golem');
 $('#buyMage').onclick=()=>requestWarPurchase('buy-mage');
 $('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');
@@ -4039,6 +4153,14 @@ function buyForPlayer(p,bot){
 
  // Próxima compra usa a outra aparência.
  p.nextWarriorVariant=variant==='male'?'female':'male';
+ return true;
+}
+function buyKingForPlayer(p,bot){
+ if(p.gems<250)return false;
+ p.gems-=250;
+ p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*84;
+ spawnKing(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
 }
 function buyGolemForPlayer(p,bot){
@@ -4065,7 +4187,7 @@ function buyDragonForPlayer(p,bot){
 
 
 function warCompositionForTeam(teamId){
- const out={warrior:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,king:0,mage:0,golem:0,dragon:0};
  for(const e of state.entities){
    if(!e.alive||e.team!==teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -4073,7 +4195,7 @@ function warCompositionForTeam(teamId){
  return out;
 }
 function enemyWarComposition(teamId){
- const out={warrior:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,king:0,mage:0,golem:0,dragon:0};
  for(const e of state.entities){
    if(!e.alive||e.team===teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -4083,6 +4205,7 @@ function enemyWarComposition(teamId){
 function affordableBotWarTypes(p){
  const types=[];
  if(p.gems>=75)types.push('warrior');
+ if(p.gems>=250)types.push('king');
  if(p.gems>=350){types.push('golem');types.push('dragon')}
  if(p.gems>=550)types.push('mage');
  return types;
@@ -4091,7 +4214,7 @@ function chooseBotWarPurchase(p){
  const affordable=affordableBotWarTypes(p);
  if(!affordable.length)return null;
  const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
- const enemyTotal=enemy.warrior+enemy.mage+enemy.golem+enemy.dragon;
+ const enemyTotal=enemy.warrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon;
  const opening=(Number(p.botWarPurchases)||0)<2;
 
  // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
@@ -4100,16 +4223,17 @@ function chooseBotWarPurchase(p){
    return affordable[Math.floor(Math.random()*affordable.length)];
  }
 
- const score={warrior:1,mage:1,golem:1,dragon:1};
+ const score={warrior:1,king:1,mage:1,golem:1,dragon:1};
  // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
  // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
- score.golem+=enemy.warrior*1.65+enemy.mage*.35+enemy.dragon*.45;
- score.mage+=enemy.golem*1.85+enemy.dragon*2.15+enemy.warrior*.55;
- score.dragon+=enemy.golem*1.35+enemy.mage*.85+enemy.warrior*.45+enemy.dragon*.70;
+ score.king+=enemy.warrior*.75+enemy.king*.55+enemy.mage*1.25+enemy.golem*.35;
+ score.golem+=(enemy.warrior+enemy.king)*1.65+enemy.mage*.35+enemy.dragon*.45;
+ score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55;
+ score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
- if(enemy.dragon>0)score.warrior*=.10;
+ if(enemy.dragon>0){score.warrior*=.10;score.king*=.10}
 
  // Pequeno redutor por repetição mantém composição variada, sem transformar
  // a escolha adaptativa numa regra rígida e previsível.
@@ -4123,6 +4247,7 @@ function chooseBotWarPurchase(p){
  return bestType;
 }
 function buyBotWarType(p,type){
+ if(type==='king')return buyKingForPlayer(p,true);
  if(type==='dragon')return buyDragonForPlayer(p,true);
  if(type==='golem')return buyGolemForPlayer(p,true);
  if(type==='mage')return buyMageForPlayer(p,true);
@@ -4417,7 +4542,8 @@ function beginDragonTakeoff(e){
            for(const target of state.entities){
              if(!target.alive||!target.dragonBurnUntil)continue;
              while(target.alive&&target.dragonBurnNextTick&&now>=target.dragonBurnNextTick&&target.dragonBurnNextTick<=target.dragonBurnUntil){
-               applyCombatHit(target,dragonBurnAttacker(target),DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4});
+               const burnSource=dragonBurnAttacker(target);
+               applyCombatHit(target,burnSource,DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:burnSource.type==='king'});
                target.dragonBurnNextTick+=DRAGON_BURN_TICK_MS;
              }
              if(now>target.dragonBurnUntil){target.dragonBurnUntil=0;target.dragonBurnStartedAt=0;target.dragonBurnNextTick=0;target.dragonBurnSourceId=null}
@@ -4531,7 +4657,7 @@ function beginDragonTakeoff(e){
 
 
 function tryWarriorFleeFlyingDragon(e,dt){
- if(e.type!=='warrior'||state.mode!=='war'||state.phase!=='combat'||!e.alive)return false;
+ if((e.type!=='warrior'&&e.type!=='king')||state.mode!=='war'||state.phase!=='combat'||!e.alive)return false;
 
  // Fuga é uma regra de fim de combate, não uma preferência de alvo:
  // se existir QUALQUER tropa inimiga que não seja Dragão, o Guerreiro luta normalmente.
@@ -4565,8 +4691,9 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
  if(!e.alive||e.knockTime>0){e.moving=false;return;}
+ if(e.type==='king'&&e.pendingKingSpecial){e.moving=false;return;}
  let candidates;
- if(e.type==='warrior'&&state.mode==='war'&&state.phase==='combat'){
+ if((e.type==='warrior'||e.type==='king')&&state.mode==='war'&&state.phase==='combat'){
    // Regra absoluta: enquanto existir QUALQUER tropa inimiga que não seja Dragão,
    // o Guerreiro ignora os Dragões e escolhe apenas entre essas tropas.
    // Não usa o recorte local do grid aqui, evitando conflito entre fuga e aquisição de alvo.
@@ -4798,7 +4925,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
-const buyWarriorPerfEl=$('#buyWarrior'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
+const buyWarriorPerfEl=$('#buyWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
 function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
@@ -4896,6 +5023,9 @@ function updateEntities(dt){
    }
    if(e.type==='mage' && e.pendingMageAttack){
      updateMageAttackState(e,now);
+   }
+   if(e.type==='king' && e.pendingKingSpecial){
+     updateKingSpecialState(e,now);
    }
    if(e.type==='dragon')updateDragonState(e,now);
 
@@ -5156,6 +5286,23 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
        <div class="hp-bg"><div class="hp-fill"></div></div>
        <div class="shield-bg"><div class="shield-fill"></div></div>
      </div>`;
+ }else if(e.type==='king'){
+   el.classList.add('king-visual');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="king-special-power" data-asset-key="kingPower" draggable="false">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="kingIdle" src="${ASSETS.kingIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="kingWalk" src="${ASSETS.kingWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-king-special" data-asset-key="kingSpecial" draggable="false" style="opacity:0">
+     </div>
+     <div class="entity-weapon-facing">
+       <div class="entity-slash"></div>
+       <img class="entity-sword" src="${ASSETS.kingSword}" draggable="false">
+     </div>
+     <div class="entity-bars">
+       <div class="hp-bg"><div class="hp-fill"></div></div>
+       <div class="shield-bg"><div class="shield-fill"></div></div>
+     </div>`;
  }else if(e.type==='dragon'){
    el.classList.add('dragon-visual');
    el.innerHTML=`
@@ -5199,6 +5346,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
  el._mageHand=el.querySelector('.mage-hand');
+ el._kingSpecial=el.querySelector('.entity-king-special');
+ el._kingPower=el.querySelector('.king-special-power');
  el._dragonGround=el.querySelector('.entity-dragon-ground');
  el._dragonTakeoff=el.querySelector('.entity-dragon-takeoff');
  el._dragonFly=el.querySelector('.entity-dragon-fly');
@@ -5211,12 +5360,14 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
  el.dataset.golemAttackSerial='-1';
  el.dataset.golemRockSerial='-1';
  el.dataset.mageAttackSerial='-1';
+ el.dataset.kingSpecialSerial='-1';
  el.dataset.dragonTakeoffSerial='-1';
  el.dataset.dragonAttackSerial='-1';
  // Chaves dos GIFs visíveis por estado. Quando o estado muda, reiniciamos o
  // GIF que está entrando para ele aparecer desde o quadro 0.
  if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
  else if(e.type==='mage')el._gifKeys={idle:e.variant==='female'?'femaleMageIdle':'mageIdle',walk:e.variant==='female'?'femaleMageWalk':'mageWalk',special:e.variant==='female'?'femaleMageSpecial':'mageSpecial'};
+ else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
  else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};
  el._lastHitSerial=0;
@@ -5224,7 +5375,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._golemAttack,el._golemSpecial,el._mageSpecial,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._golemAttack,el._golemSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -5237,7 +5388,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
        const transientState=img===el._golemAttack?'attack':
-         (img===el._golemSpecial||img===el._mageSpecial?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
+         (img===el._golemSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
@@ -5259,6 +5410,7 @@ function setEntitySpriteState(el,desired){
  const sprites=[
    [el._idle,'idle'],[el._walk,'walk'],[el._golemAttack,'attack'],
    [el._golemSpecial,'special'],[el._mageSpecial,'special'],
+   [el._kingSpecial,'special'],
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
  const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
@@ -5293,6 +5445,8 @@ function setEntitySpriteState(el,desired){
    if(previous==='special'&&desired!=='special'){
      stopGif(el._golemSpecial);
      stopGif(el._mageSpecial);
+     stopGif(el._kingSpecial);
+     stopGif(el._kingPower);
    }
    if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
    if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
@@ -5344,9 +5498,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    // durante pan/zoom rápido, uma entidade podia continuar no DOM mesmo já
    // estando fora da área realmente visível. Agora ela é escondida imediatamente
    // usando a posição final em pixels da tela.
+   const entityPadX=e.type==='king'&&e.pendingKingSpecial?240*zoom:padX;
+   const entityPadY=e.type==='king'&&e.pendingKingSpecial?240*zoom:padY;
    const onScreen=
-     sx>=-padX && sx<=screenW+padX &&
-     sy>=-padY && sy<=screenH+padY;
+     sx>=-entityPadX && sx<=screenW+entityPadX &&
+     sy>=-entityPadY && sy<=screenH+entityPadY;
 
    if(!onScreen){
      setEntityNodeVisible(el,false);
@@ -5356,6 +5512,9 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
        setEntitySpriteState(el,e.moving?'walk':'idle');
      }else if(e.type==='mage'&&el.dataset.anim==='special'&&
               !(e.pendingMageAttack?.kind==='special'&&e.pendingMageAttack.endAt>localNow)){
+       setEntitySpriteState(el,e.moving?'walk':'idle');
+     }else if(e.type==='king'&&el.dataset.anim==='special'&&
+              !(e.pendingKingSpecial&&e.pendingKingSpecial.endAt>localNow)){
        setEntitySpriteState(el,e.moving?'walk':'idle');
      }
      continue;
@@ -5506,6 +5665,28 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
        el.dataset.mageAttackSerial=String(e.mageAttackSerial);
        if(e.mageAttackSerial>0&&special)restartGif(el._mageSpecial,e.variant==='female'?'femaleMageSpecial':'mageSpecial',e.mageAttackSerial);
      }
+   }else if(e.type==='king'){
+     const p=e.pendingKingSpecial;
+     const special=!!p&&p.endAt>localNow;
+     setEntitySpriteState(el,special?'special':e.moving?'walk':'idle');
+     if(special&&el.dataset.kingSpecialSerial!==String(e.kingSpecialSerial||0)){
+       el.dataset.kingSpecialSerial=String(e.kingSpecialSerial||0);
+       restartGif(el._kingSpecial,'kingSpecial',e.kingSpecialSerial);
+       restartGif(el._kingPower,'kingPower',e.kingSpecialSerial);
+     }
+     if(el._weaponFacing)el._weaponFacing.style.visibility=special?'hidden':'visible';
+     if(el._kingPower){
+       if(special){
+         const duration=p.duration||KING_SPECIAL_DURATION;
+         const progress=clamp(1-Math.max(0,p.endAt-localNow)/duration,0,1);
+         const alpha=Math.min(clamp(progress/.16,0,1),clamp((1-progress)/.22,0,1));
+         el._kingPower.style.opacity=String(alpha);
+         el._kingPower.style.visibility=alpha>.01?'visible':'hidden';
+       }else{
+         el._kingPower.style.opacity='0';
+         el._kingPower.style.visibility='hidden';
+       }
+     }
    }else if(e.type==='dragon'){
      const flight=e.dragonFlightState||'ground';
      const takeoffSerial=Number(e.dragonTakeoffSerial)||0;
@@ -5547,7 +5728,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
 
    if(el.dataset.attackSerial!==String(e.attackSerial)){
      el.dataset.attackSerial=String(e.attackSerial);
-     if(e.type==='warrior' && e.attackSerial>0&&!e.deathStarted && el._sword && el._slash){
+     if((e.type==='warrior'||e.type==='king') && e.attackSerial>0&&!e.deathStarted&&!e.pendingKingSpecial && el._sword && el._slash){
        el._sword.classList.remove('attacking','attacking2');
        el._slash.classList.remove('attacking','attacking2');
        void el._sword.offsetWidth;
@@ -5565,7 +5746,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    if(!visibleIds.has(id)||!presentIds.has(id)){
      setEntityNodeVisible(el,false);
      const entity=presentMap.get(id);
-     const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
+     const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
      if(entity && !transient && localNow-lastSeen>1400){
        el.querySelectorAll('img').forEach(releaseGifObjectUrl);
@@ -5606,6 +5787,7 @@ function updateHUD(){
     perfSetText(timerPerfEl,state.phase==='prep'?fmt(state.prepLeft):fmt(state.timeLeft));
     perfSetText(aliveCountPerfEl,'');
     perfSetDisabled(buyWarriorPerfEl,state.phase!=='prep'||gems<75);
+    perfSetDisabled(buyKingPerfEl,state.phase!=='prep'||gems<250);
     perfSetDisabled(buyGolemPerfEl,state.phase!=='prep'||gems<350);
     perfSetDisabled(buyMagePerfEl,state.phase!=='prep'||gems<550);
     perfSetDisabled(buyDragonPerfEl,state.phase!=='prep'||gems<350);
