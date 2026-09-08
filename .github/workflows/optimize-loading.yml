@@ -38,7 +38,15 @@ jobs:
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
           grep -q 'FIREBASE RTDB, HOST AUTORITATIVO' index.html
           ! grep -q 'i.postimg.cc' index.html
-          test "$(find assets -type f | wc -l)" -eq 33
+          test -f assets/king/idle.gif
+          test -f assets/king/walk.gif
+          test -f assets/king/special.gif
+          test -f assets/king/power.gif
+          test -f assets/king/sword.png
+          test -f assets/king/card.png
+          test -f assets/golem/golem-especial.gif
+          test -f assets/mage/poder-mago-especial.gif
+          test -f assets/dragon/dragao-guerreiro-atacando.gif
 
       - name: Publish correction
         run: |
