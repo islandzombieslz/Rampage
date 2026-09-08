@@ -1,0 +1,102 @@
+name: War damage goal and menu fix
+
+on:
+  push:
+    branches:
+      - war-damage-goal-menu-fix-20260908
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: war-damage-goal-menu-fix-20260908
+          fetch-depth: 0
+
+      - name: Snapshot original index
+        run: cp index.html /tmp/index-before.html
+
+      - name: Apply patch
+        run: python .github/patch_war_damage_goal_menu.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          start=t.rfind('<script>')
+          end=t.rfind('</script>')
+          if start<0 or end<start:
+              raise SystemExit('script block not found')
+          Path('/tmp/rampage-last-script.js').write_text(t[start+8:end],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-last-script.js
+
+      - name: Verify requested changes and preserved combat
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          before=Path('/tmp/index-before.html').read_text(encoding='utf-8')
+          required=[
+            "const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});",
+            "const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});",
+            "damage:{target:100,reward:50}",
+            "function addWarDamageProgress(teamId,amount)",
+            "const actualDamage=Math.max(0,beforeDurability-afterDurability);",
+            "addWarDamageProgress(attacker.team,actualDamage)",
+            "dragonBurnSourceTeam",
+            "perfSetText(hudSubPerfEl,`💎 ${gems}`);",
+            "/* Mestre da Guerra: mantém todos os controles dentro da área útil do sprite. */",
+            "grid-template-columns:28px minmax(32px,1fr) 28px;"
+          ]
+          for marker in required:
+              if marker not in t:
+                  raise SystemExit('missing marker: '+marker)
+          forbidden=[
+            "✨ ${specials}/${WAR_GOALS.specials.target}",
+            "Guerreiro 50 • Rei 300 • Dragão 450 • Golem 550 • Mago 550 gemas.",
+            "Rodada: vencedor +200 • perdedores +100 • empate +100 para todos.",
+            "Metas: 5 especiais +70 • 3 ataques à distância +40 gemas."
+          ]
+          for marker in forbidden:
+              if marker in t:
+                  raise SystemExit('forbidden stale UI marker: '+marker)
+          # Mantém os atributos e danos existentes das unidades.
+          combat_markers=[
+            "e.hp=e.maxHp=200;",
+            "e.shield=e.maxShield=200;",
+            "e.damage=25;",
+            "e.hp=e.maxHp=600;",
+            "e.shield=e.maxShield=50;e.damage=5",
+            "e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=DRAGON_FIREBALL_DAMAGE",
+            "const MAGE_SPECIAL_DAMAGE=100;",
+            "const KING_SPECIAL_DAMAGE=50;",
+            "const DRAGON_FIREBALL_DAMAGE=35;",
+            "applyCombatHit(t,e,70,{",
+            "applyCombatHit(target,e,40,{"
+          ]
+          for marker in combat_markers:
+              if marker not in t or marker not in before:
+                  raise SystemExit('combat marker missing/changed: '+marker)
+          if 'FIREBASE RTDB, HOST AUTORITATIVO' not in t:
+              raise SystemExit('Firebase host-authoritative marker missing')
+          print('validation ok')
+          PY
+
+      - name: Commit validated change
+        run: |
+          git config user.name islandzombieslz
+          git config user.email island.zombie.slz@gmail.com
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No index change to commit'
+          else
+            git commit -m "Add damage goal and fix war setup menu"
+            git push origin HEAD:war-damage-goal-menu-fix-20260908
+          fi
