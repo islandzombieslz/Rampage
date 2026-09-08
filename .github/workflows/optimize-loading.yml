@@ -19,7 +19,12 @@ jobs:
           fetch-depth: 0
 
       - name: Apply reviewed patch
-        run: python .github/patch_war_performance.py
+        run: |
+          if grep -q 'const dragonProjectilePool=\[\];' index.html && grep -q "'attacking-alt'" index.html; then
+            echo 'Deep performance patch already present; skipping re-application.'
+          else
+            python .github/patch_war_performance.py
+          fi
 
       - name: Preserve exact visual placement
         run: |
@@ -53,6 +58,11 @@ jobs:
           grep -q 'syncKingPowerEffects(left,top,zoom,vw,vh)' index.html
           grep -q "e.type==='mage'?0.96" index.html
           grep -q '7.78px 28.3px' index.html
+          grep -q 'const warEntityById=new Map()' index.html
+          grep -q 'const dragonProjectilePool=\[\];' index.html
+          grep -q 'const golemRockPool=\[\];' index.html
+          grep -q "'attacking-alt'" index.html
+          grep -q "'hit-react-alt'" index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
           ! grep -q 'i.postimg.cc' index.html
           test -f assets/king/idle.gif
