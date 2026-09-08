@@ -5410,7 +5410,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
              const fire=`url("${ASSETS.dragonFireball}")`;
              layer.style.backgroundImage=count===3?`${fire},${fire},${fire}`:`${fire},${fire}`;
              layer.style.backgroundSize=count===3?'27px 27px,27px 27px,27px 27px':'27px 27px,27px 27px';
-             layer.style.backgroundPosition=count===3?'28% 55%,68% 38%,51% 70%':'28% 55%,68% 38%';
+             layer.style.backgroundPosition=count===3?'7.78px 28.3px,38.18px 15.38px,25.26px 39.7px':'7.78px 28.3px,38.18px 15.38px';
              layer.style.backgroundRepeat='no-repeat';
              layer.dataset.serial=String(serial);layer.dataset.count=String(count);
            }
@@ -5754,7 +5754,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
    const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='mage'?.96:e.type==='dragon'?1.16:e.type==='king'?.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
