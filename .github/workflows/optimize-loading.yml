@@ -21,6 +21,17 @@ jobs:
       - name: Apply reviewed patch
         run: python .github/patch_war_performance.py
 
+      - name: Preserve exact visual placement
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace("const typeScale=e.type==='golem'?1.34:e.type==='mage'?.96:e.type==='dragon'?1.16:e.type==='king'?.96:1;", "const typeScale=e.type==='golem'?1.34:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;")
+          t=t.replace("layer.style.backgroundPosition=count===3?'28% 55%,68% 38%,51% 70%':'28% 55%,68% 38%';", "layer.style.backgroundPosition=count===3?'7.78px 28.3px,38.18px 15.38px,25.26px 39.7px':'7.78px 28.3px,38.18px 15.38px';")
+          p.write_text(t,encoding='utf-8')
+          PY
+
       - name: Check JavaScript syntax
         run: |
           python -c "import re; from pathlib import Path; t=Path('index.html').read_text(encoding='utf-8'); s=re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>',t,re.S); assert s; Path('/tmp/rampage-main.js').write_text(s[-1],encoding='utf-8')"
@@ -40,6 +51,8 @@ jobs:
           grep -q 'const kingPowerNodes=new Map()' index.html
           grep -q 'function syncKingPowerEffects' index.html
           grep -q 'syncKingPowerEffects(left,top,zoom,vw,vh)' index.html
+          grep -q "e.type==='mage'?0.96" index.html
+          grep -q '7.78px 28.3px' index.html
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
           ! grep -q 'i.postimg.cc' index.html
           test -f assets/king/idle.gif
