@@ -9,6 +9,7 @@ on:
       - '.github/patch_war_inner_bounds.py'
       - '.github/patch_gif_stability.py'
       - '.github/patch_war_fps.py'
+      - '.github/patch_war_fps_followup.py'
 
 permissions:
   contents: write
@@ -98,6 +99,9 @@ jobs:
       - name: Apply deep War FPS sweep
         run: python .github/patch_war_fps.py
 
+      - name: Guard cached War candidates
+        run: python .github/patch_war_fps_followup.py
+
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
@@ -184,6 +188,9 @@ jobs:
             "if(key==='game'&&this.isHost)return;",
             "const networkPushInterval=state.mode==='war'?125:100;",
             'const hitRangeSq=92*92;',
+            'WAR FPS CANDIDATE SAFETY 2026-09-09',
+            '(forcedTeam&&candidate.team!==forcedTeam)||!canEngageTarget(e,candidate)',
+            '(forcedTeam&&t.team!==forcedTeam)||!canEngageTarget(e,t)',
           ]
           missing=[m for m in required if m not in t]
           assert not missing, 'Missing markers: '+repr(missing)
@@ -224,5 +231,5 @@ jobs:
             echo 'No generated index changes needed.'
             exit 0
           fi
-          git commit -m 'Optimize War target sweeps and sprite culling'
+          git commit -m 'Guard cached War targets without extra scans'
           git push
