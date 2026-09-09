@@ -83,7 +83,7 @@ jobs:
       - name: Apply War arena scene
         run: python .github/patch_war_scene.py
 
-      - name: Apply War inner arena bounds
+      - name: Apply War inner arena bounds and depth
         run: python .github/patch_war_inner_bounds.py
 
       - name: Check JavaScript syntax
@@ -127,6 +127,7 @@ jobs:
           grep -q 'REMOTE WAR ROUND TRANSITION SYNC' index.html
 
           grep -q 'id="warBarrierSprite"' index.html
+          grep -q 'id="warBarrierTopSprite"' index.html
           grep -q 'https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png' index.html
           grep -q 'https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png' index.html
           test "$(grep -o 'https://i.postimg.cc/' index.html | wc -l)" -eq 2
@@ -135,12 +136,17 @@ jobs:
           grep -q 'world:{w:state.world.w,h:state.world.h}' index.html
           grep -q 'pointer-events:none' index.html
 
-          grep -q 'const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};' index.html
+          grep -q 'const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};' index.html
           grep -q 'const WAR_SPAWN_INSET=125;' index.html
           grep -q 'function warArenaBounds(radius=0)' index.html
           grep -q 'function constrainWarEntityToArena(e)' index.html
           grep -q "if(state.mode==='war')constrainWarEntitiesToArena();" index.html
           grep -q 'const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;' index.html
+          grep -q '#warBarrierTopSprite{z-index:1' index.html
+          grep -q '#warBarrierSprite{z-index:4' index.html
+          grep -q 'clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)' index.html
+          grep -q 'function syncWarBarrierNode(node,x,y,w,h)' index.html
+          grep -q 'syncWarBarrierNode(warBarrierTopSprite,x,y,w,h);' index.html
 
           test -f assets/king/idle.gif
           test -f assets/king/walk.gif
@@ -158,5 +164,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Move War limits inside arena barrier'
+          git commit -m 'Tighten War arena and layer top wall behind troops'
           git push
