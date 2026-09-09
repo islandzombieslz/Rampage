@@ -8,6 +8,7 @@ on:
       - '.github/patch_war_scene.py'
       - '.github/patch_war_inner_bounds.py'
       - '.github/patch_gif_stability.py'
+      - '.github/patch_war_fps.py'
 
 permissions:
   contents: write
@@ -94,6 +95,9 @@ jobs:
       - name: Apply GIF switch stability
         run: python .github/patch_gif_stability.py
 
+      - name: Apply deep War FPS sweep
+        run: python .github/patch_war_fps.py
+
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
@@ -106,7 +110,7 @@ jobs:
           PY
           node --check /tmp/rampage-main.js
 
-      - name: Validate preserved systems and new fixes
+      - name: Validate preserved systems and FPS fixes
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -144,7 +148,6 @@ jobs:
             'const WAR_SPAWN_INSET=125;',
             'function warArenaBounds(radius=0)',
             'function constrainWarEntityToArena(e)',
-            "if(state.mode==='war')constrainWarEntitiesToArena();",
             'const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;',
             '#warBarrierTopSprite{z-index:1',
             '#warBarrierSprite{z-index:4',
@@ -164,7 +167,23 @@ jobs:
             "restartGif(el._kingSpecial,'kingSpecial'",
             "restartGif(el._dragonTakeoff,'dragonTakeoff'",
             "restartGif(el._dragonAttack,'dragonAttack'",
-            'suspendEntityLoopGif(el);',
+            'WAR FPS SWEEP 2026-09-09',
+            "const REAL_COMBAT_TYPES=new Set(['warrior','king','mage','golem','dragon','enemy']);",
+            'function nearestEngageableCandidate(e,candidates,forcedTeam=null,nonDragonOnly=false)',
+            'const WAR_AI_DECISION_INTERVAL_MS=90;',
+            'const WAR_AI_GRID_REFRESH_MS=90;',
+            'const WAR_SEPARATION_INTERVAL_SEC=1/30;',
+            'const warLivingScratch=[];',
+            'if(!warCombatGrid.size||now-warAIGridBuiltAt>=WAR_AI_GRID_REFRESH_MS)',
+            'warSeparationAccumulator+=dt;',
+            'const margin=170;',
+            'const ENTITY_OFFSCREEN_GIF_GRACE_MS=900;',
+            'const ENTITY_NODE_RETENTION_MS=5000;',
+            'function scheduleEntityOffscreenSuspend(el)',
+            'const visualMoving=entityVisualMoving(el,e,localNow);',
+            "if(key==='game'&&this.isHost)return;",
+            "const networkPushInterval=state.mode==='war'?125:100;",
+            'const hitRangeSq=92*92;',
           ]
           missing=[m for m in required if m not in t]
           assert not missing, 'Missing markers: '+repr(missing)
@@ -172,6 +191,10 @@ jobs:
           forbidden=[
             "if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)stopGif(entitySpriteForState(el,previous));",
             "function spawnGolemRockBurst(golem){\nfunction acquireGolemRockNode()",
+            'function tryWarriorFleeFlyingDragon',
+            'if(tryWarriorFleeFlyingDragon(e,dt))return;',
+            "['warrior','king','mage','golem','dragon','enemy'].includes(t.type)",
+            'localNow-lastSeen>1400',
           ]
           present=[m for m in forbidden if m in t]
           assert not present, 'Forbidden old behavior remains: '+repr(present)
@@ -188,7 +211,7 @@ jobs:
             'assets/king/power.gif','assets/king/sword.png'
           ]:
               assert Path(p).is_file(), 'Missing asset: '+p
-          print('All War/GIF validations passed.')
+          print('All War/GIF/FPS validations passed.')
           PY
 
       - name: Publish correction
@@ -201,5 +224,5 @@ jobs:
             echo 'No generated index changes needed.'
             exit 0
           fi
-          git commit -m 'Stabilize GIF transitions and tighten War bounds'
+          git commit -m 'Optimize War target sweeps and sprite culling'
           git push
