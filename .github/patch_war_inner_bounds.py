@@ -16,8 +16,8 @@ def replace_once(old,new,label):
 # =========================================================
 # LIMITES FÍSICOS MAIS INTERNOS
 # =========================================================
-OLD_INSET="const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};"
-NEW_INSET="const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};"
+OLD_INSET="const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};"
+NEW_INSET="const WAR_ARENA_INSET={left:250,right:250,top:255,bottom:245};"
 
 old_territory="""function territoryFor(i,n){
  const pad=140, lane=(state.world.w-2*pad)/Math.max(1,n-1);
@@ -190,4 +190,4 @@ for marker in [
         raise SystemExit(f'Visual da arena foi alterado inesperadamente: {marker}')
 
 path.write_text(text,encoding='utf-8')
-print('Limites reduzidos e muralha superior dividida em profundidade visual.')
+print('Limites do topo/laterais reduzidos; base inferior preservada.')
