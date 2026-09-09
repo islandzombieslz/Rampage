@@ -1,0 +1,94 @@
+name: Room lifecycle maintenance
+
+on:
+  push:
+    paths:
+      - '.github/patch_room_lifecycle.py'
+      - '.github/workflows/room-lifecycle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply room lifecycle patch
+        run: python .github/patch_room_lifecycle.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts, 'No inline script found'
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate room lifecycle and preserved game systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'ROOM LIFECYCLE 2026-09-09',
+            "const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];",
+            'const ROOM_INACTIVITY_MS=10*60*1000;',
+            'const ROOM_HEARTBEAT_MS=30*1000;',
+            'const ROOM_CLEANUP_MS=60*1000;',
+            'function roomIsExpired(room,now)',
+            'lastSeen:F.serverTimestamp()',
+            'async touchPresence()',
+            'startRoomHeartbeat()',
+            'async removeRoomIfEmpty(code,notifyCurrent=true)',
+            'async cleanupRooms()',
+            "F.ref(F.firebaseDb,'.info/serverTimeOffset')",
+            "F.ref(F.firebaseDb,'rooms')",
+            "if(key==='players'&&!s.exists()){this.removeRoomIfEmpty(code).catch(()=>{});return}",
+            'else await this.removeRoomIfEmpty(code,false);',
+            'NetworkAdapter.startRoomMaintenance();',
+            "const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:400,golem:550,mage:550,dragon:450});",
+            'e.hp=e.maxHp=280;',
+            'e.shield=e.maxShield=280;',
+            'e.damage=35;',
+            'e.hp=e.maxHp=150;',
+            'e.shield=e.maxShield=100;',
+            "if(b.dataset.target==='gems') state.gems=clamp(state.gems+dir*100,300,3000);",
+            'p.gems=Math.max(0,state.gems+(p.bonusGems||0));',
+            'WAR CAMERA COMPOSITOR 2026-09-09',
+            'WAR FPS SWEEP 2026-09-09',
+            'GIF SWITCH STABILITY 2026-09-08',
+            'FIREBASE RTDB, HOST AUTORITATIVO',
+          ]
+          missing=[m for m in required if m not in t]
+          assert not missing, 'Missing markers: '+repr(missing)
+          forbidden=[
+            "const ROOM_CODES=['REI','PLEBEU','CONDE'];",
+            'const ROOM_COLOR_NAMES=[',
+          ]
+          present=[m for m in forbidden if m in t]
+          assert not present, 'Old room configuration remains: '+repr(present)
+          assert t.count('https://i.postimg.cc/')==2, 'Arena external asset count changed'
+          print('Room lifecycle validation passed.')
+          PY
+
+      - name: Publish room lifecycle changes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No generated index changes needed.'
+            exit 0
+          fi
+          git commit -m 'Expand room codes and clean stale Firebase rooms'
+          git push
