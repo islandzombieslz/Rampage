@@ -136,7 +136,7 @@ jobs:
           grep -q 'world:{w:state.world.w,h:state.world.h}' index.html
           grep -q 'pointer-events:none' index.html
 
-          grep -q 'const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};' index.html
+          grep -q 'const WAR_ARENA_INSET={left:250,right:250,top:255,bottom:245};' index.html
           grep -q 'const WAR_SPAWN_INSET=125;' index.html
           grep -q 'function warArenaBounds(radius=0)' index.html
           grep -q 'function constrainWarEntityToArena(e)' index.html
@@ -164,5 +164,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Tighten War arena and layer top wall behind troops'
+          git commit -m 'Tighten War top and side bounds'
           git push
