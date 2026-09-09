@@ -81,7 +81,12 @@ jobs:
           PY
 
       - name: Apply War arena scene
-        run: python .github/patch_war_scene.py
+        run: |
+          if grep -q 'id="warBarrierSprite"' index.html && grep -q "warFloorImage.src='https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png'" index.html; then
+            echo 'War arena scene already present; skipping base scene patch.'
+          else
+            python .github/patch_war_scene.py
+          fi
 
       - name: Apply War inner arena bounds and depth
         run: python .github/patch_war_inner_bounds.py
