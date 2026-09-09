@@ -345,6 +345,8 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 #gameScreen{padding:0;background:#080b10}
 #world{position:absolute;inset:0;width:100%;height:100%;display:block;background:#665642;touch-action:none}
 #entityLayer{position:absolute;inset:0;overflow:hidden;overflow:clip;pointer-events:none;z-index:2;contain:layout paint;transform:translateZ(0)}
+#entityCameraLayer,#combatCameraLayer,#golemRockLayer{position:absolute;inset:0;pointer-events:none;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+#entityCameraLayer,#combatCameraLayer{will-change:auto}
 #warBarrierTopSprite,#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #warBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
 #warBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}
@@ -2418,8 +2420,8 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div id="deathFade"></div>
   <canvas id="world"></canvas>
   <img id="warBarrierTopSprite" draggable="false" alt="">
-  <div id="entityLayer"></div>
-  <div id="combatFxLayer"></div>
+  <div id="entityLayer"><div id="entityCameraLayer"></div></div>
+  <div id="combatFxLayer"><div id="combatCameraLayer"></div><div id="golemRockLayer"></div></div>
   <img id="warBarrierSprite" src="https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png" draggable="false" alt="">
   <div id="hud">
     <div class="hud-top">
@@ -3889,7 +3891,7 @@ function acquireGolemRockNode(){
  let rock=golemRockPool.pop();
  if(!rock){rock=document.createElement('img');rock.className='golem-rock-fragment';rock.src=ASSETS.golemRocks}
  if(!rock.hasAttribute('src'))rock.src=ASSETS.golemRocks;
- if(rock.parentElement!==combatFxLayer)combatFxLayer?.appendChild(rock);
+ if(rock.parentElement!==golemRockLayer)golemRockLayer?.appendChild(rock);
  if(rock._rockVisible!==true){rock._rockVisible=true;rock.style.visibility='visible'}
  return rock;
 }
@@ -5657,10 +5659,11 @@ function draw(){
  ctx.restore();
 
  syncWarArenaOverlay(left,top,zoom);
- syncEntityVisuals(visible,left,top,zoom,vw,vh);
- syncKingPowerEffects(left,top,zoom,vw,vh);
- syncMagePowerEffects(left,top,zoom,vw,vh);
- syncDragonProjectileEffects(left,top,zoom,vw,vh);
+ const domCamera=prepareCameraComposite(left,top,zoom);
+ syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ syncMagePowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
 }
 function drawEntityMarker(e){
  if(state.mode==='pve'||!e.alive)return;
@@ -5672,6 +5675,66 @@ function drawEntityMarker(e){
 
 const entityLayer=$('#entityLayer');
 const combatFxLayer=$('#combatFxLayer');
+const entityCameraLayer=$('#entityCameraLayer');
+const combatCameraLayer=$('#combatCameraLayer');
+const golemRockLayer=$('#golemRockLayer');
+
+// WAR CAMERA COMPOSITOR 2026-09-09
+// Durante pan/zoom, a câmera move duas subcamadas compostas pela GPU.
+// As unidades continuam atualizando posição/IA normalmente, mas deixam de receber
+// left/top/scale novos só porque a câmera mudou. Isso evita picos de layout/paint.
+const CAMERA_COMPOSITE_SETTLE_MS=180;
+const CAMERA_COMPOSITE_REBASE_PX=260;
+const CAMERA_COMPOSITE_MIN_RATIO=.78;
+const CAMERA_COMPOSITE_MAX_RATIO=1.28;
+const CAMERA_EFFECT_RETENTION_MS=650;
+const cameraComposite={initialized:false,active:false,baseLeft:0,baseTop:0,baseZoom:1,lastLeft:0,lastTop:0,lastZoom:1,motionUntil:0};
+function applyCameraLayerTransform(transform,active){
+ for(const layer of [entityCameraLayer,combatCameraLayer]){
+   if(!layer)continue;
+   if(layer._cameraTransform!==transform){layer._cameraTransform=transform;layer.style.transform=transform}
+   const will=active?'transform':'auto';
+   if(layer._cameraWillChange!==will){layer._cameraWillChange=will;layer.style.willChange=will}
+ }
+}
+function resetCameraComposite(){
+ const c=cameraComposite;
+ c.initialized=false;c.active=false;c.motionUntil=0;
+ applyCameraLayerTransform('translate3d(0,0,0)',false);
+}
+function prepareCameraComposite(left,top,zoom){
+ if(state.mode!=='war'||!entityCameraLayer||!combatCameraLayer){
+   if(cameraComposite.initialized||cameraComposite.active)resetCameraComposite();
+   return {left,top,zoom};
+ }
+ const c=cameraComposite,now=performance.now();
+ if(!c.initialized){
+   c.initialized=true;c.baseLeft=left;c.baseTop=top;c.baseZoom=zoom;
+   c.lastLeft=left;c.lastTop=top;c.lastZoom=zoom;
+ }
+ const moved=Math.abs(left-c.lastLeft)>.04||Math.abs(top-c.lastTop)>.04||Math.abs(zoom-c.lastZoom)>.00025;
+ if(moved)c.motionUntil=now+CAMERA_COMPOSITE_SETTLE_MS;
+ c.lastLeft=left;c.lastTop=top;c.lastZoom=zoom;
+ const interaction=!!state.camera.intro||rightDragging||touches.size>0||Math.abs(state.camera.velX)>2||Math.abs(state.camera.velY)>2;
+ let active=interaction||now<c.motionUntil;
+ if(active){
+   let ratio=zoom/c.baseZoom;
+   let tx=(c.baseLeft-left)*zoom,ty=(c.baseTop-top)*zoom;
+   // Rebasa ocasionalmente para manter a escala composta pequena e nítida.
+   // Isso ocorre poucas vezes durante um gesto, em vez de reescrever N sprites a cada frame.
+   if(Math.max(Math.abs(tx),Math.abs(ty))>CAMERA_COMPOSITE_REBASE_PX||ratio<CAMERA_COMPOSITE_MIN_RATIO||ratio>CAMERA_COMPOSITE_MAX_RATIO){
+     c.baseLeft=left;c.baseTop=top;c.baseZoom=zoom;ratio=1;tx=0;ty=0;
+   }
+   c.active=true;
+   applyCameraLayerTransform(`translate3d(${tx}px,${ty}px,0) scale(${ratio})`,true);
+   return {left:c.baseLeft,top:c.baseTop,zoom:c.baseZoom};
+ }
+ if(c.active||c.baseLeft!==left||c.baseTop!==top||c.baseZoom!==zoom){
+   c.baseLeft=left;c.baseTop=top;c.baseZoom=zoom;c.active=false;
+   applyCameraLayerTransform('translate3d(0,0,0)',false);
+ }
+ return {left,top,zoom};
+}
 const entityNodes=new Map();
 const magePowerNodes=new Map();
 const kingPowerNodes=new Map();
@@ -5724,31 +5787,35 @@ function recycleDragonProjectileNode(img){
  }
 }
 
-function syncMagePowerEffects(left,top,zoom,screenW,screenH){
- const layer=combatFxLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
+function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+ const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
  for(const e of state.entities){
    const p=e.pendingMageAttack;if(!e.alive||!p)continue;
    // Poderes completamente fora da câmera não ganham DOM/GIF. Dano e estado seguem intactos.
    let effectVisible=false;
    if(p.kind==='special'){
      const radius=MAGE_SPECIAL_RADIUS*1.25;
-     const sx=((p.originX??e.x)-left)*zoom,sy=((p.originY??e.y)-top)*zoom,pr=radius*zoom;
+     const sx=((p.originX??e.x)-cullLeft)*cullZoom,sy=((p.originY??e.y)-cullTop)*cullZoom,pr=radius*cullZoom;
      effectVisible=sx+pr>=-40&&sx-pr<=screenW+40&&sy+pr>=-40&&sy-pr<=screenH+40;
    }else{
      const angle=p.angle??(e.heading||0),length=p.length||245,ox=p.originX??e.x,oy=p.originY??e.y;
-     const x1=(ox-left)*zoom,y1=(oy-top)*zoom,x2=(ox+Math.cos(angle)*length-left)*zoom,y2=(oy+Math.sin(angle)*length-top)*zoom;
+     const x1=(ox-cullLeft)*cullZoom,y1=(oy-cullTop)*cullZoom,x2=(ox+Math.cos(angle)*length-cullLeft)*cullZoom,y2=(oy+Math.sin(angle)*length-cullTop)*cullZoom;
      effectVisible=Math.max(x1,x2)>=-120&&Math.min(x1,x2)<=screenW+120&&Math.max(y1,y2)>=-120&&Math.min(y1,y2)<=screenH+120;
    }
    if(!effectVisible){
      const old=magePowerNodes.get(e.id);
+     if(old&&(cameraComposite.active||now-Number(old._lastEffectVisibleAt||0)<CAMERA_EFFECT_RETENTION_MS)){
+       active.add(e.id);old.style.visibility='hidden';continue;
+     }
      if(old){releaseGifObjectUrl(old);old.remove();magePowerNodes.delete(e.id)}
      continue;
    }
    active.add(e.id);
    let img=magePowerNodes.get(e.id);
    if(!img){img=document.createElement('img');img.draggable=false;layer.appendChild(img);magePowerNodes.set(e.id,img);img.dataset.serial='-1'}
+   img._lastEffectVisibleAt=now;
    const serial=String(e.mageAttackSerial||0);
-   const desiredLayer=p.kind==='special'?entityLayer:layer;if(img.parentElement!==desiredLayer)desiredLayer.appendChild(img);
+   const desiredLayer=p.kind==='special'?entityCameraLayer:layer;if(img.parentElement!==desiredLayer)desiredLayer.appendChild(img);
    if(img.dataset.serial!==serial){
      img.dataset.serial=serial;
      img.className=p.kind==='special'?'mage-power-special':'mage-power-normal';
@@ -5781,8 +5848,8 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH){
  }
 }
 
-function syncKingPowerEffects(left,top,zoom,screenW,screenH){
- const layer=entityLayer,active=kingPowerActiveIds;active.clear();const now=performance.now();
+function syncKingPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+ const layer=entityCameraLayer,active=kingPowerActiveIds;active.clear();const now=performance.now();
  for(const e of state.entities){
    const p=e.pendingKingSpecial;
    if(!p||Number(p.endAt||0)<=now)continue;
@@ -5799,11 +5866,15 @@ function syncKingPowerEffects(left,top,zoom,screenW,screenH){
    }
    const ox=Number.isFinite(Number(p.originX))?Number(p.originX):e.x;
    const oy=Number.isFinite(Number(p.originY))?Number(p.originY):e.y;
-   const half=215*zoom;
+   const half=215*cullZoom;
+   const cullSx=(ox-cullLeft)*cullZoom,cullSy=(oy-cullTop)*cullZoom;
+   const effectVisible=cullSx+half>=-40&&cullSx-half<=screenW+40&&cullSy+half>=-40&&cullSy-half<=screenH+40;
    const sx=(ox-left)*zoom,sy=(oy-top)*zoom;
-   const effectVisible=sx+half>=-40&&sx-half<=screenW+40&&sy+half>=-40&&sy-half<=screenH+40;
    if(!effectVisible){
      const old=kingPowerNodes.get(e.id);
+     if(old&&(cameraComposite.active||now-Number(old._lastEffectVisibleAt||0)<CAMERA_EFFECT_RETENTION_MS)){
+       active.add(e.id);old.style.visibility='hidden';continue;
+     }
      if(old){releaseGifObjectUrl(old);old.remove();kingPowerNodes.delete(e.id)}
      continue;
    }
@@ -5813,6 +5884,7 @@ function syncKingPowerEffects(left,top,zoom,screenW,screenH){
      img=document.createElement('img');img.className='king-special-power';img.draggable=false;
      img.dataset.serial='-1';layer.appendChild(img);kingPowerNodes.set(e.id,img);
    }
+   img._lastEffectVisibleAt=now;
    const serial=String(p.serial||e.kingSpecialSerial||0);
    if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,'kingPower',serial)}
    const visibleDuration=Math.max(1,Number(p.endAt)-showAt);
@@ -5830,12 +5902,19 @@ function syncKingPowerEffects(left,top,zoom,screenW,screenH){
  }
 }
 
-function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
-           const layer=combatFxLayer,active=dragonProjectileActiveIds;active.clear();
+function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+           const layer=combatCameraLayer,active=dragonProjectileActiveIds;active.clear();const now=performance.now();
            for(const p of state.dragonProjectiles||[]){
-             const sx=(p.x-left)*zoom,sy=(p.y-top)*zoom,margin=90;if(sx<-margin||sx>screenW+margin||sy<-margin||sy>screenH+margin)continue;
+             const cullSx=(p.x-cullLeft)*cullZoom,cullSy=(p.y-cullTop)*cullZoom,margin=120;
+             if(cullSx<-margin||cullSx>screenW+margin||cullSy<-margin||cullSy>screenH+margin){
+               const old=dragonProjectileNodes.get(p.id);
+               if(old&&(cameraComposite.active||now-Number(old._lastEffectVisibleAt||0)<CAMERA_EFFECT_RETENTION_MS)){active.add(p.id);old.style.visibility='hidden'}
+               continue;
+             }
+             const sx=(p.x-left)*zoom,sy=(p.y-top)*zoom;
              active.add(p.id);let img=dragonProjectileNodes.get(p.id);
              if(!img){img=acquireDragonProjectileNode(layer);dragonProjectileNodes.set(p.id,img)}
+             img._lastEffectVisibleAt=now;
              const angle=Math.atan2(Number(p.vy)||0,Number(p.vx)||1);
              if(img._projectileZoom!==zoom){
                img._projectileZoom=zoom;
@@ -6017,7 +6096,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH){
      }
    });
  });
- entityLayer.appendChild(el);
+ entityCameraLayer.appendChild(el);
  entityNodes.set(e.id,el);
  return el;
 }
@@ -6186,7 +6265,7 @@ function setEntityNodeVisible(el,visible){
  el.style.opacity=visible?'1':'0';
 }
 
-function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
+function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const visibleIds=renderVisibleIds;visibleIds.clear();
  const presentIds=renderPresentIds;presentIds.clear();
  const presentMap=renderPresentMap;presentMap.clear();
@@ -6196,25 +6275,23 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH){
  }
  const localNow=performance.now();
 
- // Tamanho visual aproximado máximo do guerreiro + espada.
- // Fazemos o culling em COORDENADAS DE TELA, não só no mundo.
- const padX=150*zoom;
- const padY=170*zoom;
+ // Culling usa a câmera real; posicionamento usa a câmera-base do compositor.
 
  for(const e of visible){
    let el=entityNodes.get(e.id)||makeEntityNode(e);
 
    const sx=(e.x-left)*zoom,sy=(e.y-top)*zoom;
+   const cullSx=(e.x-cullLeft)*cullZoom,cullSy=(e.y-cullTop)*cullZoom;
 
    // Correção de "sprites grudados nos cantos":
    // durante pan/zoom rápido, uma entidade podia continuar no DOM mesmo já
    // estando fora da área realmente visível. Agora ela é escondida imediatamente
    // usando a posição final em pixels da tela.
-   const entityPadX=e.type==='king'&&e.pendingKingSpecial?240*zoom:padX;
-   const entityPadY=e.type==='king'&&e.pendingKingSpecial?240*zoom:padY;
+   const entityPadX=e.type==='king'&&e.pendingKingSpecial?240*cullZoom:150*cullZoom;
+   const entityPadY=e.type==='king'&&e.pendingKingSpecial?240*cullZoom:170*cullZoom;
    const onScreen=
-     sx>=-entityPadX && sx<=screenW+entityPadX &&
-     sy>=-entityPadY && sy<=screenH+entityPadY;
+     cullSx>=-entityPadX && cullSx<=screenW+entityPadX &&
+     cullSy>=-entityPadY && cullSy<=screenH+entityPadY;
 
    if(!onScreen){
      setEntityNodeVisible(el,false);
@@ -6492,8 +6569,10 @@ function clearEntityVisuals(){
    if(img._poolGifSuspendTimer)clearTimeout(img._poolGifSuspendTimer);
    stopGif(img);
  }
- entityLayer.innerHTML='';
- if(combatFxLayer)combatFxLayer.innerHTML='';
+ if(entityCameraLayer)entityCameraLayer.innerHTML='';
+ if(combatCameraLayer)combatCameraLayer.innerHTML='';
+ if(golemRockLayer)golemRockLayer.innerHTML='';
+ resetCameraComposite();
  state.golemRockEffects=[];
  magePowerNodes.clear();
  kingPowerNodes.clear();
