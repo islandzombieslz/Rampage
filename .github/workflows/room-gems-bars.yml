@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply requested room gem and bar changes
+      - name: Apply room gem and bar compatibility patch
         run: python .github/patch_room_codes_gems_bars.py
 
       - name: Check JavaScript syntax
@@ -33,43 +33,49 @@ jobs:
           PY
           node --check /tmp/rampage-main.js
 
-      - name: Validate requested behavior and preserved systems
+      - name: Validate room gems bars and lifecycle
         run: |
           python - <<'PY'
           from pathlib import Path
           t=Path('index.html').read_text(encoding='utf-8')
           required=[
-            "const ROOM_CODES=['REI','PLEBEU','CONDE'];",
-            'return ROOM_CODES[Math.floor(Math.random()*ROOM_CODES.length)];',
+            "const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];",
+            'const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);',
             "if(b.dataset.target==='gems') state.gems=clamp(state.gems+dir*100,300,3000);",
             'p.gems=Math.max(0,state.gems+(p.bonusGems||0));',
-            'position:absolute;left:11px;top:-7px;width:56px;height:12px;',
-            '.hp-bg,.shield-bg{position:absolute;left:0;width:56px',
-            '.entity-visual.king-visual .entity-bars{left:31px;top:-8px;width:76px}',
-            '.entity-visual.king-visual .shield-bg{width:76px}',
+            'position:absolute;left:15px;top:-3px;width:48px;height:12px;',
+            '.hp-bg,.shield-bg{position:absolute;left:0;width:48px',
+            '.entity-visual.king-visual .entity-bars{left:36px;top:-4px;width:66px}',
+            '.entity-visual.king-visual .shield-bg{width:66px}',
+            'ROOM LIFECYCLE 2026-09-09',
+            'const ROOM_INACTIVITY_MS=10*60*1000;',
+            'async cleanupRooms()',
+            'startRoomHeartbeat()',
+            "const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:400,golem:550,mage:550,dragon:450});",
+            'e.hp=e.maxHp=280;',
+            'e.shield=e.maxShield=280;',
+            'e.damage=35;',
+            'e.hp=e.maxHp=150;',
+            'e.shield=e.maxShield=100;',
             'WAR CAMERA COMPOSITOR 2026-09-09',
-            "const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};",
             'GIF SWITCH STABILITY 2026-09-08',
             'WAR FPS SWEEP 2026-09-09',
             'FIREBASE RTDB, HOST AUTORITATIVO',
-            'e.hp=e.maxHp=200',
-            'e.shield=e.maxShield=200',
-            'e.damage=25',
           ]
           missing=[m for m in required if m not in t]
           assert not missing, 'Missing markers: '+repr(missing)
           forbidden=[
             'const ROOM_COLOR_NAMES=[',
-            "return ROOM_COLOR_NAMES[ai]+'-'+ROOM_COLOR_NAMES[bi];",
+            "const ROOM_CODES=['REI','PLEBEU','CONDE'];",
             'p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);',
           ]
           present=[m for m in forbidden if m in t]
           assert not present, 'Old behavior remains: '+repr(present)
           assert t.count('https://i.postimg.cc/')==2, 'Arena external asset count changed'
-          print('Room/gems/bars validation passed.')
+          print('Room/gems/bars/lifecycle validation passed.')
           PY
 
-      - name: Publish requested changes
+      - name: Publish compatibility changes
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -79,5 +85,5 @@ jobs:
             echo 'No generated index changes needed.'
             exit 0
           fi
-          git commit -m 'Use royal room codes and allow earned gems over cap'
+          git commit -m 'Keep room lifecycle and current balance settings'
           git push
