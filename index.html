@@ -4464,9 +4464,38 @@ function startWarMode(){
  beginWarCameraIntro();
  flash('PREPARE SUAS TROPAS',1.2);
 }
+// A muralha é somente visual, mas ocupa parte da borda do sprite.
+// Estes recuos definem o retângulo físico realmente livre para as tropas.
+// O tamanho visual do mapa/sprite continua 1850x1542.
+const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};
+const WAR_SPAWN_INSET=125;
+function warArenaBounds(radius=0){
+ const r=Math.max(0,Number(radius)||0);
+ return {
+   left:WAR_ARENA_INSET.left+r,
+   right:state.world.w-WAR_ARENA_INSET.right-r,
+   top:WAR_ARENA_INSET.top+r,
+   bottom:state.world.h-WAR_ARENA_INSET.bottom-r
+ };
+}
+function constrainWarEntityToArena(e){
+ if(state.mode!=='war'||!e?.alive)return;
+ const b=warArenaBounds(e.r||0);
+ e.x=clamp(e.x,b.left,b.right);
+ e.y=clamp(e.y,b.top,b.bottom);
+}
+function constrainWarEntitiesToArena(){
+ if(state.mode!=='war')return;
+ for(const e of state.entities)constrainWarEntityToArena(e);
+}
 function territoryFor(i,n){
- const pad=140, lane=(state.world.w-2*pad)/Math.max(1,n-1);
- return {x:n===1?state.world.w/2:pad+i*lane,y:i%2===0?240:state.world.h-240};
+ const b=warArenaBounds(0);
+ const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;
+ const lane=(maxX-minX)/Math.max(1,n-1);
+ return {
+   x:n===1?(minX+maxX)/2:minX+i*lane,
+   y:i%2===0?b.top+WAR_SPAWN_INSET:b.bottom-WAR_SPAWN_INSET
+ };
 }
 function setupWarRound(){
  state.world.w=1850;state.world.h=1542;
@@ -5493,6 +5522,9 @@ function updateEntities(dt){
    deadTargetIds.clear();
  }
  separateLivingEntities();
+ // Knockback e separação podem empurrar a unidade alguns pixels depois da IA.
+ // O clamp final garante que ninguém atravesse visualmente a muralha.
+ if(state.mode==='war')constrainWarEntitiesToArena();
  cleanupDeadEntities(now);
 }
 function updateParticles(dt){
