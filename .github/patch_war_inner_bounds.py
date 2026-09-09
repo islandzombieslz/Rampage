@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 path=Path('index.html')
 text=path.read_text(encoding='utf-8')
@@ -16,8 +17,8 @@ def replace_once(old,new,label):
 # =========================================================
 # LIMITES FÍSICOS MAIS INTERNOS
 # =========================================================
-OLD_INSET="const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};"
-NEW_INSET="const WAR_ARENA_INSET={left:250,right:250,top:255,bottom:245};"
+# Ajuste fino atual: topo/laterais um pouco mais internos; base preservada.
+NEW_INSET="const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};"
 
 old_territory="""function territoryFor(i,n){
  const pad=140, lane=(state.world.w-2*pad)/Math.max(1,n-1);
@@ -59,12 +60,13 @@ function territoryFor(i,n){{
 }}
 """
 
-if "function warArenaBounds(radius=0)" not in text:
+inset_pattern=r"const WAR_ARENA_INSET=\{left:\d+,right:\d+,top:\d+,bottom:\d+\};"
+match=re.search(inset_pattern,text)
+if match:
+    if match.group(0)!=NEW_INSET:
+        text=text[:match.start()]+NEW_INSET+text[match.end():]
+else:
     replace_once(old_territory,new_territory,'territórios/spawn internos da Guerra')
-elif NEW_INSET not in text:
-    if OLD_INSET not in text:
-        raise SystemExit('Constante anterior dos limites internos não encontrada')
-    text=text.replace(OLD_INSET,NEW_INSET,1)
 
 old_update=""" separateLivingEntities();
  cleanupDeadEntities(now);
@@ -84,44 +86,44 @@ if "if(state.mode==='war')constrainWarEntitiesToArena();" not in text:
 # =========================================================
 # PROFUNDIDADE VISUAL DA MURALHA SUPERIOR
 # =========================================================
-# O sprite continua sendo um único desenho. Duas cópias do mesmo PNG são
-# recortadas: somente o trecho central da muralha superior fica atrás das tropas;
-# laterais/torres e toda a parte inferior continuam na frente delas.
-old_css="#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;z-index:4;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}"
-new_css="""#warBarrierTopSprite,#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+# Só aplica a divisão se ainda não existir. Em execuções seguintes a camada é
+# preservada e o script mexe apenas nos limites físicos.
+if 'id="warBarrierTopSprite"' not in text:
+    old_css="#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;z-index:4;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}"
+    new_css="""#warBarrierTopSprite,#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #warBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
 #warBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}"""
-replace_once(old_css,new_css,'camadas de profundidade da muralha')
+    replace_once(old_css,new_css,'camadas de profundidade da muralha')
 
-old_spectator="""#gameScreen.spectator-mode #world,
+    old_spectator="""#gameScreen.spectator-mode #world,
 #gameScreen.spectator-mode #entityLayer,
 #gameScreen.spectator-mode #warBarrierSprite{"""
-new_spectator="""#gameScreen.spectator-mode #world,
+    new_spectator="""#gameScreen.spectator-mode #world,
 #gameScreen.spectator-mode #warBarrierTopSprite,
 #gameScreen.spectator-mode #entityLayer,
 #gameScreen.spectator-mode #warBarrierSprite{"""
-replace_once(old_spectator,new_spectator,'filtro espectador das duas camadas da muralha')
+    replace_once(old_spectator,new_spectator,'filtro espectador das duas camadas da muralha')
 
-barrier_url='https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png'
-old_html=f"""  <canvas id=\"world\"></canvas>
+    barrier_url='https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png'
+    old_html=f"""  <canvas id=\"world\"></canvas>
   <div id=\"entityLayer\"></div>
   <div id=\"combatFxLayer\"></div>
   <img id=\"warBarrierSprite\" src=\"{barrier_url}\" draggable=\"false\" alt=\"\">"""
-new_html=f"""  <canvas id=\"world\"></canvas>
+    new_html=f"""  <canvas id=\"world\"></canvas>
   <img id=\"warBarrierTopSprite\" draggable=\"false\" alt=\"\">
   <div id=\"entityLayer\"></div>
   <div id=\"combatFxLayer\"></div>
   <img id=\"warBarrierSprite\" src=\"{barrier_url}\" draggable=\"false\" alt=\"\">"""
-replace_once(old_html,new_html,'segunda camada visual da muralha')
+    replace_once(old_html,new_html,'segunda camada visual da muralha')
 
-old_const="const warBarrierSprite=$('#warBarrierSprite');\n"
-new_const="""const warBarrierSprite=$('#warBarrierSprite');
+    old_const="const warBarrierSprite=$('#warBarrierSprite');\n"
+    new_const="""const warBarrierSprite=$('#warBarrierSprite');
 const warBarrierTopSprite=$('#warBarrierTopSprite');
 if(warBarrierTopSprite&&warBarrierSprite)warBarrierTopSprite.src=warBarrierSprite.src;
 """
-replace_once(old_const,new_const,'referência da camada superior atrás das entidades')
+    replace_once(old_const,new_const,'referência da camada superior atrás das entidades')
 
-old_sync="""function syncWarArenaOverlay(left,top,zoom){
+    old_sync="""function syncWarArenaOverlay(left,top,zoom){
  if(!warBarrierSprite)return;
  if(state.mode!=='war'){
    if(warBarrierSprite.style.display!=='none')warBarrierSprite.style.display='none';
@@ -135,7 +137,7 @@ old_sync="""function syncWarArenaOverlay(left,top,zoom){
  if(warBarrierSprite._arenaH!==h){warBarrierSprite._arenaH=h;warBarrierSprite.style.height=h+'px'}
 }
 """
-new_sync="""function syncWarBarrierNode(node,x,y,w,h){
+    new_sync="""function syncWarBarrierNode(node,x,y,w,h){
  if(!node)return;
  if(node.style.display!=='block')node.style.display='block';
  if(node._arenaX!==x){node._arenaX=x;node.style.left=x+'px'}
@@ -158,9 +160,9 @@ function syncWarArenaOverlay(left,top,zoom){
  syncWarBarrierNode(warBarrierSprite,x,y,w,h);
 }
 """
-replace_once(old_sync,new_sync,'sincronização das duas camadas da muralha')
+    replace_once(old_sync,new_sync,'sincronização das duas camadas da muralha')
 
-
+barrier_url='https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png'
 checks=[
  NEW_INSET,
  "const WAR_SPAWN_INSET=125;",
@@ -180,7 +182,6 @@ for marker in checks:
     if marker not in text:
         raise SystemExit(f'Validação dos limites/camadas falhou: {marker}')
 
-# A arena visual e os sprites não mudam de tamanho nem de arquivo.
 for marker in [
  "state.world.w=1850;state.world.h=1542;",
  "https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png",
@@ -190,4 +191,4 @@ for marker in [
         raise SystemExit(f'Visual da arena foi alterado inesperadamente: {marker}')
 
 path.write_text(text,encoding='utf-8')
-print('Limites do topo/laterais reduzidos; base inferior preservada.')
+print('Topo/laterais reduzidos um pouco mais; base e profundidade preservadas.')
