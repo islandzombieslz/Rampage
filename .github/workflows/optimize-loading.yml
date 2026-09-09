@@ -6,6 +6,7 @@ on:
       - '.github/workflows/optimize-loading.yml'
       - '.github/patch_war_performance.py'
       - '.github/patch_war_scene.py'
+      - '.github/patch_war_inner_bounds.py'
 
 permissions:
   contents: write
@@ -82,6 +83,9 @@ jobs:
       - name: Apply War arena scene
         run: python .github/patch_war_scene.py
 
+      - name: Apply War inner arena bounds
+        run: python .github/patch_war_inner_bounds.py
+
       - name: Check JavaScript syntax
         run: |
           python -c "import re; from pathlib import Path; t=Path('index.html').read_text(encoding='utf-8'); s=re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>',t,re.S); assert s; Path('/tmp/rampage-main.js').write_text(s[-1],encoding='utf-8')"
@@ -131,6 +135,13 @@ jobs:
           grep -q 'world:{w:state.world.w,h:state.world.h}' index.html
           grep -q 'pointer-events:none' index.html
 
+          grep -q 'const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};' index.html
+          grep -q 'const WAR_SPAWN_INSET=125;' index.html
+          grep -q 'function warArenaBounds(radius=0)' index.html
+          grep -q 'function constrainWarEntityToArena(e)' index.html
+          grep -q "if(state.mode==='war')constrainWarEntitiesToArena();" index.html
+          grep -q 'const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;' index.html
+
           test -f assets/king/idle.gif
           test -f assets/king/walk.gif
           test -f assets/king/special.gif
@@ -147,5 +158,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Add War arena floor and barrier scene'
+          git commit -m 'Move War limits inside arena barrier'
           git push
