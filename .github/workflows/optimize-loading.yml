@@ -10,6 +10,7 @@ on:
       - '.github/patch_gif_stability.py'
       - '.github/patch_war_fps.py'
       - '.github/patch_war_fps_followup.py'
+      - '.github/patch_camera_compositor.py'
 
 permissions:
   contents: write
@@ -102,6 +103,9 @@ jobs:
       - name: Guard cached War candidates
         run: python .github/patch_war_fps_followup.py
 
+      - name: Apply War camera compositor
+        run: python .github/patch_camera_compositor.py
+
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
@@ -130,7 +134,7 @@ jobs:
             'entity-visual.king-visual .entity-king-special',
             'const kingPowerNodes=new Map()',
             'function syncKingPowerEffects',
-            'syncKingPowerEffects(left,top,zoom,vw,vh)',
+            'syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom)',
             "e.type==='mage'?0.96",
             '7.78px 28.3px',
             'const warEntityById=new Map()',
@@ -191,6 +195,19 @@ jobs:
             'WAR FPS CANDIDATE SAFETY 2026-09-09',
             '(forcedTeam&&candidate.team!==forcedTeam)||!canEngageTarget(e,candidate)',
             '(forcedTeam&&t.team!==forcedTeam)||!canEngageTarget(e,t)',
+            'WAR CAMERA COMPOSITOR 2026-09-09',
+            'id="entityCameraLayer"',
+            'id="combatCameraLayer"',
+            'id="golemRockLayer"',
+            'const CAMERA_COMPOSITE_SETTLE_MS=180;',
+            'const CAMERA_COMPOSITE_REBASE_PX=260;',
+            'function prepareCameraComposite(left,top,zoom)',
+            'applyCameraLayerTransform(`translate3d(${tx}px,${ty}px,0) scale(${ratio})`,true);',
+            'entityCameraLayer.appendChild(el);',
+            'golemRockLayer?.appendChild(rock);',
+            'const domCamera=prepareCameraComposite(left,top,zoom);',
+            'syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);',
+            'CAMERA_EFFECT_RETENTION_MS=650',
           ]
           missing=[m for m in required if m not in t]
           assert not missing, 'Missing markers: '+repr(missing)
@@ -202,6 +219,10 @@ jobs:
             'if(tryWarriorFleeFlyingDragon(e,dt))return;',
             "['warrior','king','mage','golem','dragon','enemy'].includes(t.type)",
             'localNow-lastSeen>1400',
+            ' entityLayer.appendChild(el);',
+            'const layer=combatFxLayer,active=magePowerActiveIds',
+            'const layer=entityLayer,active=kingPowerActiveIds',
+            'const layer=combatFxLayer,active=dragonProjectileActiveIds',
           ]
           present=[m for m in forbidden if m in t]
           assert not present, 'Forbidden old behavior remains: '+repr(present)
@@ -218,7 +239,7 @@ jobs:
             'assets/king/power.gif','assets/king/sword.png'
           ]:
               assert Path(p).is_file(), 'Missing asset: '+p
-          print('All War/GIF/FPS validations passed.')
+          print('All War/GIF/FPS/camera validations passed.')
           PY
 
       - name: Publish correction
@@ -231,5 +252,5 @@ jobs:
             echo 'No generated index changes needed.'
             exit 0
           fi
-          git commit -m 'Guard cached War targets without extra scans'
+          git commit -m 'Composite War camera pan and zoom'
           git push
