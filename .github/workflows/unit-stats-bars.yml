@@ -54,7 +54,11 @@ jobs:
             "function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null){",
             'e.hp=e.maxHp=150;',
             'e.shield=e.maxShield=100;',
-            "const ROOM_CODES=['REI','PLEBEU','CONDE'];",
+            "const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];",
+            'ROOM LIFECYCLE 2026-09-09',
+            'const ROOM_INACTIVITY_MS=10*60*1000;',
+            'async cleanupRooms()',
+            'startRoomHeartbeat()',
             "if(b.dataset.target==='gems') state.gems=clamp(state.gems+dir*100,300,3000);",
             'p.gems=Math.max(0,state.gems+(p.bonusGems||0));',
             'WAR CAMERA COMPOSITOR 2026-09-09',
@@ -71,11 +75,12 @@ jobs:
             'const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});',
             'aria-label="Comprar Rei Guerreiro por 300 gemas"',
             'title="Rei Guerreiro — 300 gemas"',
+            "const ROOM_CODES=['REI','PLEBEU','CONDE'];",
           ]
           present=[m for m in forbidden if m in t]
           assert not present, 'Old tuning remains: '+repr(present)
           assert t.count('https://i.postimg.cc/')==2, 'Arena external asset count changed'
-          print('Unit stats/bars validation passed.')
+          print('Unit stats/bars/lifecycle validation passed.')
           PY
 
       - name: Publish requested tuning
