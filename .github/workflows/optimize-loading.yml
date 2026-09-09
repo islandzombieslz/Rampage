@@ -7,6 +7,7 @@ on:
       - '.github/patch_war_performance.py'
       - '.github/patch_war_scene.py'
       - '.github/patch_war_inner_bounds.py'
+      - '.github/patch_gif_stability.py'
 
 permissions:
   contents: write
@@ -91,6 +92,9 @@ jobs:
       - name: Apply War inner arena bounds and depth
         run: python .github/patch_war_inner_bounds.py
 
+      - name: Apply GIF switch stability
+        run: python .github/patch_gif_stability.py
+
       - name: Check JavaScript syntax
         run: |
           python -c "import re; from pathlib import Path; t=Path('index.html').read_text(encoding='utf-8'); s=re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>',t,re.S); assert s; Path('/tmp/rampage-main.js').write_text(s[-1],encoding='utf-8')"
@@ -141,7 +145,7 @@ jobs:
           grep -q 'world:{w:state.world.w,h:state.world.h}' index.html
           grep -q 'pointer-events:none' index.html
 
-          grep -q 'const WAR_ARENA_INSET={left:250,right:250,top:255,bottom:245};' index.html
+          grep -q 'const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};' index.html
           grep -q 'const WAR_SPAWN_INSET=125;' index.html
           grep -q 'function warArenaBounds(radius=0)' index.html
           grep -q 'function constrainWarEntityToArena(e)' index.html
@@ -152,6 +156,16 @@ jobs:
           grep -q 'clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)' index.html
           grep -q 'function syncWarBarrierNode(node,x,y,w,h)' index.html
           grep -q 'syncWarBarrierNode(warBarrierTopSprite,x,y,w,h);' index.html
+
+          grep -q 'GIF SWITCH STABILITY 2026-09-08' index.html
+          grep -q 'const ENTITY_LOOP_GIF_GRACE_MS=1400;' index.html
+          grep -q 'function scheduleEntityLoopGifSuspend(el,stateName)' index.html
+          grep -q "img.style.display=active?'block':'none';" index.html
+          grep -q 'scheduleEntityLoopGifSuspend(el,previous);' index.html
+          grep -q 'for(const stateName of ENTITY_LOOP_STATE_LIST)' index.html
+          grep -q 'const DRAGON_PROJECTILE_GIF_GRACE_MS=850;' index.html
+          grep -q "for(const img of el.querySelectorAll('img'))img.decoding='async';" index.html
+          ! grep -q "if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)stopGif(entitySpriteForState(el,previous));" index.html
 
           test -f assets/king/idle.gif
           test -f assets/king/walk.gif
@@ -169,5 +183,5 @@ jobs:
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Tighten War top and side bounds'
+          git commit -m 'Stabilize GIF transitions and tighten War bounds'
           git push
