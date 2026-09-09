@@ -440,9 +440,9 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .entity-visual.king-visual .entity-facing,
 .entity-visual.king-visual .entity-weapon-facing{width:138px;height:160px}
 .entity-visual.king-visual .entity-body{left:0;top:-8px;width:138px;height:160px}
-.entity-visual.king-visual .entity-bars{left:26px;top:-8px;width:86px}
+.entity-visual.king-visual .entity-bars{left:31px;top:-8px;width:76px}
 .entity-visual.king-visual .hp-bg,
-.entity-visual.king-visual .shield-bg{width:86px}
+.entity-visual.king-visual .shield-bg{width:76px}
 /* A mão/espada do Rei fica claramente mais baixa e proporcional ao corpo maior. */
 .entity-visual.king-visual .entity-sword{left:46px;top:20px;width:34px;height:98px}
 /* O GIF do corpo no especial é bem maior que idle/walk. */
@@ -544,9 +544,9 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   100%{opacity:0;transform:rotate(110deg) scale(1.28)}
 }
 .entity-bars{
-  position:absolute;left:7px;top:-7px;width:64px;height:12px;
+  position:absolute;left:11px;top:-7px;width:56px;height:12px;
 }
-.hp-bg,.shield-bg{position:absolute;left:0;width:64px;background:#000b;overflow:hidden}
+.hp-bg,.shield-bg{position:absolute;left:0;width:56px;background:#000b;overflow:hidden}
 .hp-bg{top:0;height:6px}.shield-bg{top:8px;height:4px}
 .hp-fill{height:100%;background:#3fb950;transition:width .55s cubic-bezier(.2,.78,.25,1)}.shield-fill{height:100%;background:#58a6ff;transition:width .45s ease}
 .hp-fill.heal-pulse{animation:hpHealPulse .72s ease-out}
@@ -2795,12 +2795,8 @@ function navigateScreen(id){
  if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id);
  else screen(id);
 }
-const ROOM_COLOR_NAMES=[
- 'AZUL','VERDE','VERMELHO','AMARELO','LARANJA','ROXO','ROSA','PRETO','BRANCO','CINZA','MARROM','BEGE',
- 'DOURADO','PRATA','CORAL','TURQUESA','VIOLETA','LILAS','MAGENTA','CIANO','BORDO','VINHO','SALMAO','CREME',
- 'CARAMELO','MOSTARDA','ESMERALDA','SAFIRA','RUBI','AMBAR','JADE','OLIVA','MENTA','LIMA','INDIGO','ANIL',
- 'COBRE','BRONZE','GRAFITE','PEROLA','AREIA','CHOCOLATE','CARMIM','ESCARLATE','FERRUGEM'
-];
+/* ROOM/GEMS/BARS TUNING 2026-09-09 */
+const ROOM_CODES=['REI','PLEBEU','CONDE'];
 function normalizeRoomCode(value){
  const raw=String(value||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
  // Compatibilidade: salas antigas de 6 caracteres continuam acessíveis enquanto existirem.
@@ -2808,11 +2804,7 @@ function normalizeRoomCode(value){
  return raw.replace(/\s+/g,'-').replace(/[^A-Z-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'');
 }
 function generateCode(){
- const n=ROOM_COLOR_NAMES.length;
- const ai=Math.floor(Math.random()*n);
- let bi=Math.floor(Math.random()*(n-1));
- if(bi>=ai)bi++;
- return ROOM_COLOR_NAMES[ai]+'-'+ROOM_COLOR_NAMES[bi];
+ return ROOM_CODES[Math.floor(Math.random()*ROOM_CODES.length)];
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
@@ -4531,7 +4523,7 @@ function setupWarRound(){
  warAIGridBuiltAt=0;warSeparationAccumulator=0;
  clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
-   p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);
+   p.gems=Math.max(0,state.gems+(p.bonusGems||0));
    p.troops=0;
    p.warGoals={specials:0,ranged:0,damage:0,specialsClaimed:false,rangedClaimed:false,damageClaimed:false};
    p.territory=territoryFor(i,state.players.length);
