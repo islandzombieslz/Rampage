@@ -1,10 +1,15 @@
 from pathlib import Path
-import struct
 
 INDEX = Path('index.html')
-FLOOR = Path('assets/war/arena-floor.png')
-BARRIER = Path('assets/war/arena-barrier.png')
 text = INDEX.read_text(encoding='utf-8')
+
+FLOOR_URL = 'https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png'
+BARRIER_URL = 'https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png'
+
+# O sprite solicitado foi produzido em 1920x1600. A Guerra fica um pouco menor
+# que o antigo 2200x1400 e preserva praticamente a mesma proporção do desenho.
+WAR_W = 1850
+WAR_H = 1542
 
 
 def replace_once(old: str, new: str, label: str):
@@ -25,28 +30,6 @@ def insert_after_once(marker: str, addition: str, label: str):
     text = text.replace(marker, marker + addition, 1)
 
 
-def png_size(path: Path):
-    data = path.read_bytes()[:24]
-    if len(data) < 24 or data[:8] != b'\x89PNG\r\n\x1a\n':
-        raise SystemExit(f'Asset não é PNG válido: {path}')
-    return struct.unpack('>II', data[16:24])
-
-
-if not FLOOR.exists() or not BARRIER.exists():
-    raise SystemExit('Sprites da arena ainda não foram baixados para assets/war/')
-
-floor_w, floor_h = png_size(FLOOR)
-barrier_w, barrier_h = png_size(BARRIER)
-if floor_w < 256 or floor_h < 256 or barrier_w < 256 or barrier_h < 256:
-    raise SystemExit('Sprites da arena parecem inválidos ou pequenos demais')
-
-# Reduz a largura da Guerra de 2200 para 1850 e preserva a proporção do sprite
-# do chão para não deformar o desenho. Mantemos um limite razoável de altura.
-WAR_W = 1850
-WAR_H = round(WAR_W * floor_h / floor_w)
-if not 1300 <= WAR_H <= 1700:
-    WAR_H = 1500
-
 # =========================================================
 # CAMADA VISUAL DA BARREIRA
 # =========================================================
@@ -64,7 +47,7 @@ replace_once(
 
 replace_once(
     "  <canvas id=\"world\"></canvas>\n  <div id=\"entityLayer\"></div>\n  <div id=\"combatFxLayer\"></div>\n  <div id=\"hud\">",
-    "  <canvas id=\"world\"></canvas>\n  <div id=\"entityLayer\"></div>\n  <div id=\"combatFxLayer\"></div>\n  <img id=\"warBarrierSprite\" src=\"assets/war/arena-barrier.png\" draggable=\"false\" alt=\"\">\n  <div id=\"hud\">",
+    f"  <canvas id=\"world\"></canvas>\n  <div id=\"entityLayer\"></div>\n  <div id=\"combatFxLayer\"></div>\n  <img id=\"warBarrierSprite\" src=\"{BARRIER_URL}\" draggable=\"false\" alt=\"\">\n  <div id=\"hud\">",
     'HTML da barreira visual da Guerra',
 )
 
@@ -100,25 +83,25 @@ if remote_world.strip() not in text:
 # CHÃO DA GUERRA NO CANVAS + BARREIRA EM DOM
 # =========================================================
 canvas_marker = "const assetWarning=document.getElementById('assetWarning');\n"
-canvas_add = """
+canvas_add = f"""
 const warBarrierSprite=$('#warBarrierSprite');
 const warFloorImage=new Image();
 warFloorImage.decoding='async';
-warFloorImage.src='assets/war/arena-floor.png';
+warFloorImage.src='{FLOOR_URL}';
 
-function syncWarArenaOverlay(left,top,zoom){
+function syncWarArenaOverlay(left,top,zoom){{
  if(!warBarrierSprite)return;
- if(state.mode!=='war'){
+ if(state.mode!=='war'){{
    if(warBarrierSprite.style.display!=='none')warBarrierSprite.style.display='none';
    return;
- }
+ }}
  if(warBarrierSprite.style.display!=='block')warBarrierSprite.style.display='block';
  const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
- if(warBarrierSprite._arenaX!==x){warBarrierSprite._arenaX=x;warBarrierSprite.style.left=x+'px'}
- if(warBarrierSprite._arenaY!==y){warBarrierSprite._arenaY=y;warBarrierSprite.style.top=y+'px'}
- if(warBarrierSprite._arenaW!==w){warBarrierSprite._arenaW=w;warBarrierSprite.style.width=w+'px'}
- if(warBarrierSprite._arenaH!==h){warBarrierSprite._arenaH=h;warBarrierSprite.style.height=h+'px'}
-}
+ if(warBarrierSprite._arenaX!==x){{warBarrierSprite._arenaX=x;warBarrierSprite.style.left=x+'px'}}
+ if(warBarrierSprite._arenaY!==y){{warBarrierSprite._arenaY=y;warBarrierSprite.style.top=y+'px'}}
+ if(warBarrierSprite._arenaW!==w){{warBarrierSprite._arenaW=w;warBarrierSprite.style.width=w+'px'}}
+ if(warBarrierSprite._arenaH!==h){{warBarrierSprite._arenaH=h;warBarrierSprite.style.height=h+'px'}}
+}}
 """
 insert_after_once(canvas_marker, canvas_add, 'preload/sync dos sprites da arena')
 
@@ -138,8 +121,8 @@ replace_once(
     'sprite do chão da Guerra',
 )
 
-# O contorno antigo continua sendo a lógica de colisão, mas deixa de aparecer na
-# Guerra porque o sprite de muralha passa a representá-lo visualmente.
+# O contorno antigo deixa de aparecer na Guerra, mas a colisão continua usando
+# exatamente os limites state.world.
 replace_once(
     " ctx.globalAlpha=1;\n ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4);\n ctx.restore();",
     " ctx.globalAlpha=1;\n if(state.mode!=='war'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}\n ctx.restore();",
@@ -152,11 +135,11 @@ replace_once(
     'sincronizar muralha com câmera',
 )
 
-# Sanidade: camada visual não pode capturar input nem substituir a colisão real.
 checks = [
     "id=\"warBarrierSprite\"",
     "pointer-events:none",
-    "warFloorImage.src='assets/war/arena-floor.png'",
+    FLOOR_URL,
+    BARRIER_URL,
     "syncWarArenaOverlay(left,top,zoom)",
     f"state.world.w={WAR_W};state.world.h={WAR_H}",
     "world:{w:state.world.w,h:state.world.h}",
@@ -166,4 +149,4 @@ for marker in checks:
         raise SystemExit(f'Validação da arena falhou: {marker}')
 
 INDEX.write_text(text,encoding='utf-8')
-print(f'Arena da Guerra aplicada: chão {floor_w}x{floor_h}, barreira {barrier_w}x{barrier_h}, mapa {WAR_W}x{WAR_H}.')
+print(f'Arena da Guerra aplicada: mapa {WAR_W}x{WAR_H}, chão e barreira por sprite.')
