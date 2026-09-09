@@ -345,6 +345,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 #gameScreen{padding:0;background:#080b10}
 #world{position:absolute;inset:0;width:100%;height:100%;display:block;background:#665642;touch-action:none}
 #entityLayer{position:absolute;inset:0;overflow:hidden;overflow:clip;pointer-events:none;z-index:2;contain:layout paint;transform:translateZ(0)}
+#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;z-index:4;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #hud{position:absolute;inset:0;pointer-events:none;z-index:5}
 
 .entity-visual{
@@ -1099,7 +1100,8 @@ html,body{
 #deathFade.fade-out{opacity:0}
 
 #gameScreen.spectator-mode #world,
-#gameScreen.spectator-mode #entityLayer{
+#gameScreen.spectator-mode #entityLayer,
+#gameScreen.spectator-mode #warBarrierSprite{
   filter:grayscale(1) blur(1.7px) contrast(.92) brightness(.78);
 }
 #gameScreen.spectator-mode #world{
@@ -2414,6 +2416,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   <canvas id="world"></canvas>
   <div id="entityLayer"></div>
   <div id="combatFxLayer"></div>
+  <img id="warBarrierSprite" src="https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png" draggable="false" alt="">
   <div id="hud">
     <div class="hud-top">
       <div class="hud-box">
@@ -2927,7 +2930,7 @@ function serializeGame(){
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0
  }));
- return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
+ return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
 }
 
 function applyRemoteGame(game){
@@ -2936,6 +2939,7 @@ function applyRemoteGame(game){
  const firstFrame=$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
+ if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
  if(Array.isArray(game.entities)){
    const previous=new Map(state.entities.map(e=>[e.id,e]));
@@ -3304,6 +3308,25 @@ const canvas=$('#world'), ctx=canvas.getContext('2d');
 const landscapeRoot=document.getElementById('landscapeRoot');
 const mobileStartHint=document.getElementById('mobileStartHint');
 const assetWarning=document.getElementById('assetWarning');
+
+const warBarrierSprite=$('#warBarrierSprite');
+const warFloorImage=new Image();
+warFloorImage.decoding='async';
+warFloorImage.src='https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png';
+
+function syncWarArenaOverlay(left,top,zoom){
+ if(!warBarrierSprite)return;
+ if(state.mode!=='war'){
+   if(warBarrierSprite.style.display!=='none')warBarrierSprite.style.display='none';
+   return;
+ }
+ if(warBarrierSprite.style.display!=='block')warBarrierSprite.style.display='block';
+ const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
+ if(warBarrierSprite._arenaX!==x){warBarrierSprite._arenaX=x;warBarrierSprite.style.left=x+'px'}
+ if(warBarrierSprite._arenaY!==y){warBarrierSprite._arenaY=y;warBarrierSprite.style.top=y+'px'}
+ if(warBarrierSprite._arenaW!==w){warBarrierSprite._arenaW=w;warBarrierSprite.style.width=w+'px'}
+ if(warBarrierSprite._arenaH!==h){warBarrierSprite._arenaH=h;warBarrierSprite.style.height=h+'px'}
+}
 
 function isMobileLike(){
   return matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -4337,6 +4360,7 @@ function startPVE(){
  beginPVERound();
 }
 function beginPVERound(){
+ state.world.w=2200;state.world.h=1400;
  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
  $('#gameScreen').classList.remove('spectator-mode');
  const deathFade=$('#deathFade'); if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0';}
@@ -4445,6 +4469,7 @@ function territoryFor(i,n){
  return {x:n===1?state.world.w/2:pad+i*lane,y:i%2===0?240:state.world.h-240};
 }
 function setupWarRound(){
+ state.world.w=1850;state.world.h=1542;
  state.entities=[];state.particles=[];state.dragonProjectiles=[];
  warCandidateCache.clear();warCombatGrid.clear();warBurningEntities.clear();deadTargetIds.clear();
  clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
@@ -5544,8 +5569,17 @@ function draw(){
  ctx.scale(zoom,zoom);
  ctx.translate(-left,-top);
 
- ctx.fillStyle='#665642';
- ctx.fillRect(left,top,right-left,bottom-top);
+ if(state.mode==='war'&&warFloorImage.complete&&warFloorImage.naturalWidth>0){
+   const dw=right-left,dh=bottom-top;
+   const sx=left/state.world.w*warFloorImage.naturalWidth;
+   const sy=top/state.world.h*warFloorImage.naturalHeight;
+   const sw=dw/state.world.w*warFloorImage.naturalWidth;
+   const sh=dh/state.world.h*warFloorImage.naturalHeight;
+   ctx.drawImage(warFloorImage,sx,sy,sw,sh,left,top,dw,dh);
+ }else{
+   ctx.fillStyle='#665642';
+   ctx.fillRect(left,top,right-left,bottom-top);
+ }
 
  if(state.mode==='war'&&state.players.some(p=>p.territory)){
    state.players.forEach(p=>{
@@ -5569,9 +5603,10 @@ function draw(){
    ctx.globalAlpha=clamp(p.life*2,0,1);ctx.fillStyle=p.color;ctx.fillRect(p.x-3,p.y-3,6,6);
  });
  ctx.globalAlpha=1;
- ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4);
+ if(state.mode!=='war'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
  ctx.restore();
 
+ syncWarArenaOverlay(left,top,zoom);
  syncEntityVisuals(visible,left,top,zoom,vw,vh);
  syncKingPowerEffects(left,top,zoom,vw,vh);
  syncMagePowerEffects(left,top,zoom,vw,vh);
