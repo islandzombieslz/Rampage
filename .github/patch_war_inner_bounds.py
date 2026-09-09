@@ -13,46 +13,58 @@ def replace_once(old,new,label):
     text=text.replace(old,new,1)
 
 
+# =========================================================
+# LIMITES FÍSICOS MAIS INTERNOS
+# =========================================================
+OLD_INSET="const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};"
+NEW_INSET="const WAR_ARENA_INSET={left:215,right:215,top:220,bottom:245};"
+
 old_territory="""function territoryFor(i,n){
  const pad=140, lane=(state.world.w-2*pad)/Math.max(1,n-1);
  return {x:n===1?state.world.w/2:pad+i*lane,y:i%2===0?240:state.world.h-240};
 }
 """
-new_territory="""// A muralha é somente visual, mas ocupa parte da borda do sprite.
+new_territory=f"""// A muralha é somente visual, mas ocupa parte da borda do sprite.
 // Estes recuos definem o retângulo físico realmente livre para as tropas.
 // O tamanho visual do mapa/sprite continua 1850x1542.
-const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};
+{NEW_INSET}
 const WAR_SPAWN_INSET=125;
-function warArenaBounds(radius=0){
+function warArenaBounds(radius=0){{
  const r=Math.max(0,Number(radius)||0);
- return {
+ return {{
    left:WAR_ARENA_INSET.left+r,
    right:state.world.w-WAR_ARENA_INSET.right-r,
    top:WAR_ARENA_INSET.top+r,
    bottom:state.world.h-WAR_ARENA_INSET.bottom-r
- };
-}
-function constrainWarEntityToArena(e){
+ }};
+}}
+function constrainWarEntityToArena(e){{
  if(state.mode!=='war'||!e?.alive)return;
  const b=warArenaBounds(e.r||0);
  e.x=clamp(e.x,b.left,b.right);
  e.y=clamp(e.y,b.top,b.bottom);
-}
-function constrainWarEntitiesToArena(){
+}}
+function constrainWarEntitiesToArena(){{
  if(state.mode!=='war')return;
  for(const e of state.entities)constrainWarEntityToArena(e);
-}
-function territoryFor(i,n){
+}}
+function territoryFor(i,n){{
  const b=warArenaBounds(0);
  const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;
  const lane=(maxX-minX)/Math.max(1,n-1);
- return {
+ return {{
    x:n===1?(minX+maxX)/2:minX+i*lane,
    y:i%2===0?b.top+WAR_SPAWN_INSET:b.bottom-WAR_SPAWN_INSET
- };
-}
+ }};
+}}
 """
-replace_once(old_territory,new_territory,'territórios/spawn internos da Guerra')
+
+if "function warArenaBounds(radius=0)" not in text:
+    replace_once(old_territory,new_territory,'territórios/spawn internos da Guerra')
+elif NEW_INSET not in text:
+    if OLD_INSET not in text:
+        raise SystemExit('Constante anterior dos limites internos não encontrada')
+    text=text.replace(OLD_INSET,NEW_INSET,1)
 
 old_update=""" separateLivingEntities();
  cleanupDeadEntities(now);
@@ -65,29 +77,117 @@ new_update=""" separateLivingEntities();
  cleanupDeadEntities(now);
 }
 """
-replace_once(old_update,new_update,'clamp físico final da arena')
+if "if(state.mode==='war')constrainWarEntitiesToArena();" not in text:
+    replace_once(old_update,new_update,'clamp físico final da arena')
+
+
+# =========================================================
+# PROFUNDIDADE VISUAL DA MURALHA SUPERIOR
+# =========================================================
+# O sprite continua sendo um único desenho. Duas cópias do mesmo PNG são
+# recortadas: somente o trecho central da muralha superior fica atrás das tropas;
+# laterais/torres e toda a parte inferior continuam na frente delas.
+old_css="#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;z-index:4;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}"
+new_css="""#warBarrierTopSprite,#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+#warBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
+#warBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}"""
+replace_once(old_css,new_css,'camadas de profundidade da muralha')
+
+old_spectator="""#gameScreen.spectator-mode #world,
+#gameScreen.spectator-mode #entityLayer,
+#gameScreen.spectator-mode #warBarrierSprite{"""
+new_spectator="""#gameScreen.spectator-mode #world,
+#gameScreen.spectator-mode #warBarrierTopSprite,
+#gameScreen.spectator-mode #entityLayer,
+#gameScreen.spectator-mode #warBarrierSprite{"""
+replace_once(old_spectator,new_spectator,'filtro espectador das duas camadas da muralha')
+
+barrier_url='https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png'
+old_html=f"""  <canvas id=\"world\"></canvas>
+  <div id=\"entityLayer\"></div>
+  <div id=\"combatFxLayer\"></div>
+  <img id=\"warBarrierSprite\" src=\"{barrier_url}\" draggable=\"false\" alt=\"\">"""
+new_html=f"""  <canvas id=\"world\"></canvas>
+  <img id=\"warBarrierTopSprite\" draggable=\"false\" alt=\"\">
+  <div id=\"entityLayer\"></div>
+  <div id=\"combatFxLayer\"></div>
+  <img id=\"warBarrierSprite\" src=\"{barrier_url}\" draggable=\"false\" alt=\"\">"""
+replace_once(old_html,new_html,'segunda camada visual da muralha')
+
+old_const="const warBarrierSprite=$('#warBarrierSprite');\n"
+new_const="""const warBarrierSprite=$('#warBarrierSprite');
+const warBarrierTopSprite=$('#warBarrierTopSprite');
+if(warBarrierTopSprite&&warBarrierSprite)warBarrierTopSprite.src=warBarrierSprite.src;
+"""
+replace_once(old_const,new_const,'referência da camada superior atrás das entidades')
+
+old_sync="""function syncWarArenaOverlay(left,top,zoom){
+ if(!warBarrierSprite)return;
+ if(state.mode!=='war'){
+   if(warBarrierSprite.style.display!=='none')warBarrierSprite.style.display='none';
+   return;
+ }
+ if(warBarrierSprite.style.display!=='block')warBarrierSprite.style.display='block';
+ const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
+ if(warBarrierSprite._arenaX!==x){warBarrierSprite._arenaX=x;warBarrierSprite.style.left=x+'px'}
+ if(warBarrierSprite._arenaY!==y){warBarrierSprite._arenaY=y;warBarrierSprite.style.top=y+'px'}
+ if(warBarrierSprite._arenaW!==w){warBarrierSprite._arenaW=w;warBarrierSprite.style.width=w+'px'}
+ if(warBarrierSprite._arenaH!==h){warBarrierSprite._arenaH=h;warBarrierSprite.style.height=h+'px'}
+}
+"""
+new_sync="""function syncWarBarrierNode(node,x,y,w,h){
+ if(!node)return;
+ if(node.style.display!=='block')node.style.display='block';
+ if(node._arenaX!==x){node._arenaX=x;node.style.left=x+'px'}
+ if(node._arenaY!==y){node._arenaY=y;node.style.top=y+'px'}
+ if(node._arenaW!==w){node._arenaW=w;node.style.width=w+'px'}
+ if(node._arenaH!==h){node._arenaH=h;node.style.height=h+'px'}
+}
+function hideWarBarrierNode(node){
+ if(node&&node.style.display!=='none')node.style.display='none';
+}
+function syncWarArenaOverlay(left,top,zoom){
+ if(!warBarrierSprite)return;
+ if(state.mode!=='war'){
+   hideWarBarrierNode(warBarrierTopSprite);
+   hideWarBarrierNode(warBarrierSprite);
+   return;
+ }
+ const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
+ syncWarBarrierNode(warBarrierTopSprite,x,y,w,h);
+ syncWarBarrierNode(warBarrierSprite,x,y,w,h);
+}
+"""
+replace_once(old_sync,new_sync,'sincronização das duas camadas da muralha')
+
 
 checks=[
- "const WAR_ARENA_INSET={left:160,right:160,top:155,bottom:175};",
+ NEW_INSET,
  "const WAR_SPAWN_INSET=125;",
  "function warArenaBounds(radius=0)",
  "function constrainWarEntityToArena(e)",
  "function constrainWarEntitiesToArena()",
  "if(state.mode==='war')constrainWarEntitiesToArena();",
  "const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;",
+ "id=\"warBarrierTopSprite\"",
+ "#warBarrierTopSprite{z-index:1",
+ "#warBarrierSprite{z-index:4",
+ "clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)",
+ "function syncWarBarrierNode(node,x,y,w,h)",
+ "syncWarBarrierNode(warBarrierTopSprite,x,y,w,h);",
 ]
 for marker in checks:
     if marker not in text:
-        raise SystemExit(f'Validação dos limites internos falhou: {marker}')
+        raise SystemExit(f'Validação dos limites/camadas falhou: {marker}')
 
-# A arena visual e os sprites não podem ser alterados por este ajuste.
+# A arena visual e os sprites não mudam de tamanho nem de arquivo.
 for marker in [
  "state.world.w=1850;state.world.h=1542;",
  "https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png",
- "https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png",
+ barrier_url,
 ]:
     if marker not in text:
         raise SystemExit(f'Visual da arena foi alterado inesperadamente: {marker}')
 
 path.write_text(text,encoding='utf-8')
-print('Limites internos da arena e territórios de spawn reposicionados.')
+print('Limites reduzidos e muralha superior dividida em profundidade visual.')
