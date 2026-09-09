@@ -440,9 +440,9 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .entity-visual.king-visual .entity-facing,
 .entity-visual.king-visual .entity-weapon-facing{width:138px;height:160px}
 .entity-visual.king-visual .entity-body{left:0;top:-8px;width:138px;height:160px}
-.entity-visual.king-visual .entity-bars{left:31px;top:-8px;width:76px}
+.entity-visual.king-visual .entity-bars{left:36px;top:-4px;width:66px}
 .entity-visual.king-visual .hp-bg,
-.entity-visual.king-visual .shield-bg{width:76px}
+.entity-visual.king-visual .shield-bg{width:66px}
 /* A mão/espada do Rei fica claramente mais baixa e proporcional ao corpo maior. */
 .entity-visual.king-visual .entity-sword{left:46px;top:20px;width:34px;height:98px}
 /* O GIF do corpo no especial é bem maior que idle/walk. */
@@ -544,9 +544,9 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   100%{opacity:0;transform:rotate(110deg) scale(1.28)}
 }
 .entity-bars{
-  position:absolute;left:11px;top:-7px;width:56px;height:12px;
+  position:absolute;left:15px;top:-3px;width:48px;height:12px;
 }
-.hp-bg,.shield-bg{position:absolute;left:0;width:56px;background:#000b;overflow:hidden}
+.hp-bg,.shield-bg{position:absolute;left:0;width:48px;background:#000b;overflow:hidden}
 .hp-bg{top:0;height:6px}.shield-bg{top:8px;height:4px}
 .hp-fill{height:100%;background:#3fb950;transition:width .55s cubic-bezier(.2,.78,.25,1)}.shield-fill{height:100%;background:#58a6ff;transition:width .45s ease}
 .hp-fill.heal-pulse{animation:hpHealPulse .72s ease-out}
@@ -2444,7 +2444,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 50 gemas" title="Guerreiro — 50 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
         </button>
-        <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 300 gemas" title="Rei Guerreiro — 300 gemas">
+        <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 400 gemas" title="Rei Guerreiro — 400 gemas">
           <img src="assets/king/card.png" alt="Rei Guerreiro" draggable="false" decoding="async">
         </button>
         <button id="buyMage" class="shop-sprite-card" aria-label="Comprar Mago por 550 gemas" title="Mago — 550 gemas">
@@ -2566,7 +2566,8 @@ const speedMap={slow:145,normal:195,fast:255};
 // Modo Guerra: cada tropa mantém sua própria velocidade-base, apenas reduzida.
 const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
-const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:300,golem:550,mage:550,dragon:450});
+/* UNIT STATS/BARS TUNING 2026-09-09 */
+const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:400,golem:550,mage:550,dragon:450});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -3571,6 +3572,8 @@ function entityBase(type,x,y,team,color){
 function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null){
  const e=entityBase('warrior',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
+ e.hp=e.maxHp=150;
+ e.shield=e.maxShield=100;
  e.controlled=controlled;
  e.ownerId=ownerId;
  e.variant=variant==='female'?'female':'male';
@@ -3580,9 +3583,9 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
 function spawnKing(x,y,team,color){
  const e=entityBase('king',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
- e.hp=e.maxHp=200;
- e.shield=e.maxShield=200;
- e.damage=25;
+ e.hp=e.maxHp=280;
+ e.shield=e.maxShield=280;
+ e.damage=35;
  e.r=29;
  e.kingNormalCount=0;
  state.entities.push(e);
