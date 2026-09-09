@@ -4959,7 +4959,12 @@ function aiFightGolem(e,dt,forcedTeam,preparedCandidates=null){
 
  let nearbySpecialTarget=null,nearbySpecialBestSq=Infinity,nearbySpecialCount=0;
  const golemSpecialRadiusSq=145*145;
+ // WAR FPS CANDIDATE SAFETY 2026-09-09
  for(const candidate of candidates){
+   // O cache de alvo dura poucos ms; um candidato pode morrer entre dois refreshes.
+   // Ignora stale/aliado sem recriar arrays com filter().
+   if(!candidate||!candidate.alive||candidate===e||candidate.team===e.team||
+      (forcedTeam&&candidate.team!==forcedTeam)||!canEngageTarget(e,candidate))continue;
    const ndx=candidate.x-e.x,ndy=candidate.y-e.y,ds=ndx*ndx+ndy*ndy;
    if(ds<=golemSpecialRadiusSq){
      nearbySpecialCount++;
@@ -5155,6 +5160,8 @@ function beginDragonTakeoff(e){
    let nearbyForSpecial=0;
    const mageSpecialRadiusSq=MAGE_SPECIAL_RADIUS*MAGE_SPECIAL_RADIUS;
    for(const t of candidates){
+     if(!t||!t.alive||t===e||t.team===e.team||
+        (forcedTeam&&t.team!==forcedTeam)||!canEngageTarget(e,t))continue;
      const sdx=t.x-e.x,sdy=t.y-e.y;
      if(sdx*sdx+sdy*sdy<=mageSpecialRadiusSq)nearbyForSpecial++;
    }
