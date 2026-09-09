@@ -2476,13 +2476,131 @@ window.dispatchEvent(new Event('firebase-ready'));
 const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,pushing:false,remoteFinishScheduled:false,
+  presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){const F=await this.waitFirebase();if(F.firebaseAuth.currentUser){this.localPlayerId=F.firebaseAuth.currentUser.uid;return F.firebaseAuth.currentUser}const c=await F.signInAnonymously(F.firebaseAuth);this.localPlayerId=c.user.uid;return c.user},
   get online(){return !!this.roomId},
   get isHost(){return !!this.roomId&&this.hostUid===this.localPlayerId},
-  async createRoom(snapshot){const F=await this.waitFirebase(),user=await this.ensureAuth();let code=null;const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);for(const c of roomCandidates){const s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));if(!s.exists()){code=c;break}}if(!code)throw Error('Falha ao gerar sala');const settings={mode:snapshot.mode,pveTime:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.speed,gems:snapshot.gems};await F.set(F.ref(F.firebaseDb,`rooms/${code}`),{code,hostUid:user.uid,status:'lobby',npcCount:0,createdAt:F.serverTimestamp(),settings,players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],joinedAt:F.serverTimestamp()}}});this.roomId=code;this.hostUid=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {code,offline:false}},
-  async joinRoom(code){const F=await this.waitFirebase(),user=await this.ensureAuth();code=normalizeRoomCode(code);const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);if(!snap.exists())return {ok:false,reason:'not-found'};const room=snap.val();if(room.status!=='lobby')return {ok:false,reason:'started'};const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],joinedAt:F.serverTimestamp()});this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;await this.attachPresence(code,user.uid);this.subscribeRoom(code);return {ok:true,room,offline:false}},
-  async attachPresence(code,uid){const F=await this.waitFirebase();try{await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`)).remove();await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`)).remove()}catch(_){}},
+  async createRoom(snapshot){
+    const F=await this.waitFirebase(),user=await this.ensureAuth();
+    await this.cleanupRooms();
+    let code=null;
+    const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);
+    for(const c of roomCandidates){
+      const s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));
+      if(!s.exists()){code=c;break}
+    }
+    if(!code)throw Error('Falha ao gerar sala');
+    const settings={mode:snapshot.mode,pveTime:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.speed,gems:snapshot.gems};
+    await F.set(F.ref(F.firebaseDb,`rooms/${code}`),{
+      code,hostUid:user.uid,status:'lobby',npcCount:0,createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
+      players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
+    });
+    this.roomId=code;this.hostUid=user.uid;
+    await this.attachPresence(code,user.uid);
+    this.subscribeRoom(code);
+    return {code,offline:false};
+  },
+  async joinRoom(code){
+    const F=await this.waitFirebase(),user=await this.ensureAuth();
+    await this.cleanupRooms();
+    code=normalizeRoomCode(code);
+    const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);
+    if(!snap.exists())return {ok:false,reason:'not-found'};
+    const room=snap.val();
+    if(roomIsExpired(room,this.serverNow())){await F.remove(rr);return {ok:false,reason:'not-found'}}
+    if(room.status!=='lobby')return {ok:false,reason:'started'};
+    const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;
+    if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
+    const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
+    await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
+    await F.update(rr,{lastActivityAt:F.serverTimestamp()});
+    this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;
+    await this.attachPresence(code,user.uid);
+    this.subscribeRoom(code);
+    return {ok:true,room,offline:false};
+  },
+  async attachPresence(code,uid){
+    const F=await this.waitFirebase();
+    try{
+      await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`)).remove();
+      await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`)).remove();
+    }catch(_){}
+    this.startRoomHeartbeat();
+  },
+  serverNow(){return Date.now()+(Number(this.serverTimeOffset)||0)},
+  async touchPresence(){
+    const code=this.roomId,uid=this.localPlayerId;if(!code||!uid)return;
+    const F=await this.waitFirebase(),rr=F.ref(F.firebaseDb,`rooms/${code}`);
+    try{
+      const snap=await F.get(rr);
+      if(!snap.exists()){this.expireLocalRoom(code);return}
+      const room=snap.val(),now=this.serverNow();
+      if(roomIsExpired(room,now)){await F.remove(rr);this.expireLocalRoom(code);return}
+      if(!room.players?.[uid]){this.expireLocalRoom(code);return}
+      const patch={lastActivityAt:F.serverTimestamp()};
+      patch[`players/${uid}/lastSeen`]=F.serverTimestamp();
+      await F.update(rr,patch);
+    }catch(_){}
+  },
+  startRoomHeartbeat(){
+    this.stopRoomHeartbeat();
+    this.touchPresence().catch(()=>{});
+    this.presenceTimer=setInterval(()=>this.touchPresence().catch(()=>{}),ROOM_HEARTBEAT_MS);
+  },
+  stopRoomHeartbeat(){if(this.presenceTimer){clearInterval(this.presenceTimer);this.presenceTimer=null}},
+  expireLocalRoom(code){
+    if(this.roomId!==code||this.leaving)return;
+    this.stopRoomHeartbeat();
+    this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
+    this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
+    try{state.running=false}catch(_){}
+    try{navigateScreen('menuScreen')}catch(_){}
+  },
+  async removeRoomIfEmpty(code,notifyCurrent=true){
+    if(!code)return false;
+    const F=await this.waitFirebase(),rr=F.ref(F.firebaseDb,`rooms/${code}`);
+    try{
+      const snap=await F.get(F.ref(F.firebaseDb,`rooms/${code}/players`));
+      if(snap.exists())return false;
+      await F.remove(rr);
+      if(notifyCurrent)this.expireLocalRoom(code);
+      return true;
+    }catch(_){return false}
+  },
+  async cleanupRooms(){
+    if(this.cleanupRunning)return;
+    this.cleanupRunning=true;
+    try{
+      const F=await this.waitFirebase(),now=this.serverNow();
+      let codes=[];
+      try{
+        const all=await F.get(F.ref(F.firebaseDb,'rooms'));
+        if(all.exists())codes=Object.keys(all.val()||{});
+      }catch(_){codes=[...ROOM_CODES]}
+      if(!codes.length)return;
+      for(const code of [...new Set(codes)]){
+        try{
+          const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);
+          if(!snap.exists())continue;
+          const room=snap.val();
+          if(roomIsExpired(room,now)){
+            await F.remove(rr);
+            this.expireLocalRoom(code);
+          }
+        }catch(_){}
+      }
+    }finally{this.cleanupRunning=false}
+  },
+  startRoomMaintenance(){
+    if(this.maintenanceStarted)return;
+    this.maintenanceStarted=true;
+    this.waitFirebase().then(F=>{
+      try{this.serverOffsetUnsub=F.onValue(F.ref(F.firebaseDb,'.info/serverTimeOffset'),s=>{this.serverTimeOffset=Number(s.val())||0})}catch(_){}
+      this.cleanupRooms().catch(()=>{});
+      this.cleanupTimer=setInterval(()=>this.cleanupRooms().catch(()=>{}),ROOM_CLEANUP_MS);
+    }).catch(()=>{this.maintenanceStarted=false});
+  },
   subscribeRoom(code){
     this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};
     this.lastRemoteSeq=0;this.remoteFinishScheduled=false;this.processedCommands.clear();
@@ -2490,6 +2608,7 @@ const NetworkAdapter = {
       for(const key of ['hostUid','status','settings','players','npcCount','inputs','commands','game']){
         const unsubscribe=F.onValue(F.ref(F.firebaseDb,`rooms/${code}/${key}`),s=>{
           this.roomCache[key]=s.exists()?s.val():null;
+          if(key==='players'&&!s.exists()){this.removeRoomIfEmpty(code).catch(()=>{});return}
           // O host acabou de gerar esse snapshot; processá-lo outra vez localmente
           // só repete trabalho de sala/DOM sem mudar a autoridade do jogo.
           if(key==='game'&&this.isHost)return;
@@ -2499,7 +2618,19 @@ const NetworkAdapter = {
       }
     });
   },
-  async leaveRoom(){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),code=this.roomId;try{await F.remove(F.ref(F.firebaseDb,`rooms/${code}/players/${this.localPlayerId}`));await F.remove(F.ref(F.firebaseDb,`rooms/${code}/inputs/${this.localPlayerId}`));if(this.isHost)await F.remove(F.ref(F.firebaseDb,`rooms/${code}`))}catch(_){}this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle'},
+  async leaveRoom(){
+    if(!this.roomId||!this.localPlayerId)return;
+    const F=await this.waitFirebase(),code=this.roomId,uid=this.localPlayerId,wasHost=this.isHost;
+    this.leaving=true;this.stopRoomHeartbeat();
+    try{
+      await F.remove(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`));
+      await F.remove(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`));
+      if(wasHost)await F.remove(F.ref(F.firebaseDb,`rooms/${code}`));
+      else await this.removeRoomIfEmpty(code,false);
+    }catch(_){}
+    this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
+    this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';this.leaving=false;
+  },
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
   async sendInput(input){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase();await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...input,t:F.serverTimestamp()})},
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
@@ -2797,7 +2928,23 @@ function navigateScreen(id){
  else screen(id);
 }
 /* ROOM/GEMS/BARS TUNING 2026-09-09 */
-const ROOM_CODES=['REI','PLEBEU','CONDE'];
+/* ROOM LIFECYCLE 2026-09-09 */
+const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];
+const ROOM_INACTIVITY_MS=10*60*1000;
+const ROOM_HEARTBEAT_MS=30*1000;
+const ROOM_CLEANUP_MS=60*1000;
+function roomPlayers(room){return Object.values(room?.players||{})}
+function roomLatestSeenAt(room){
+ const players=roomPlayers(room);let latest=0;
+ for(const p of players)latest=Math.max(latest,Number(p?.lastSeen)||Number(p?.joinedAt)||0);
+ return Math.max(latest,Number(room?.lastActivityAt)||0,Number(room?.createdAt)||0);
+}
+function roomIsExpired(room,now){
+ const players=roomPlayers(room);
+ if(!players.length)return true;
+ const last=roomLatestSeenAt(room);
+ return !last || now-last>ROOM_INACTIVITY_MS;
+}
 function normalizeRoomCode(value){
  const raw=String(value||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
  // Compatibilidade: salas antigas de 6 caracteres continuam acessíveis enquanto existirem.
@@ -3096,7 +3243,7 @@ function syncFirebaseRoom(room){
  updateLobbyAuthority();
 }
 async function initFirebaseAccountUI(){const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');try{await F.getRedirectResult(F.firebaseAuth)}catch(_){}F.onAuthStateChanged(F.firebaseAuth,user=>{NetworkAdapter.localPlayerId=user?.uid||null;if(user){const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';$('#guestLogin').style.display='none';$('#googleLogin').style.display='none';$('#saveNick').style.display='block';$('#logoutBtn').style.display='block'}else{name.textContent='Entrar';status.textContent='Escolha convidado ou Google.';$('#guestLogin').style.display='block';$('#googleLogin').style.display='block';$('#saveNick').style.display='none';$('#logoutBtn').style.display='none'}})}
-window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge)initFirebaseAccountUI().catch(console.error);
+window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
 $('#accountButton').onclick=e=>{e.stopPropagation();$('#accountMenu').classList.toggle('open')};$('#accountMenu').onclick=e=>e.stopPropagation();document.addEventListener('click',()=>$('#accountMenu')?.classList.remove('open'));
 $('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#accountName').textContent=n};
 $('#googleLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();try{const cred=await F.signInWithPopup(F.firebaseAuth,F.googleProvider);NetworkAdapter.localPlayerId=cred.user.uid;if(cred.user.displayName&&!localStorage.getItem('rampageNick'))localStorage.setItem('rampageNick',cred.user.displayName.slice(0,18))}catch(err){if(/popup|blocked|operation-not-supported/i.test(String(err?.code||err?.message)))await F.signInWithRedirect(F.firebaseAuth,F.googleProvider);else{$('#accountStatus').textContent='Erro no login Google.';console.error(err)}}};
