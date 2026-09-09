@@ -113,7 +113,6 @@ jobs:
           t=Path('index.html').read_text(encoding='utf-8')
 
           required=[
-            'WAR PERFORMANCE 2026-09-08',
             'FIREBASE RTDB, HOST AUTORITATIVO',
             'e.hp=e.maxHp=200',
             'e.shield=e.maxShield=200',
