@@ -126,9 +126,13 @@ jobs:
 
           required=[
             'FIREBASE RTDB, HOST AUTORITATIVO',
-            'e.hp=e.maxHp=200',
-            'e.shield=e.maxShield=200',
-            'e.damage=25',
+            'UNIT STATS/BARS TUNING 2026-09-09',
+            'e.hp=e.maxHp=280',
+            'e.shield=e.maxShield=280',
+            'e.damage=35',
+            'e.hp=e.maxHp=150',
+            'e.shield=e.maxShield=100',
+            'const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:400,golem:550,mage:550,dragon:450});',
             'kingNormalCount)||0)>=6',
             'entity-visual.king-visual',
             'entity-visual.king-visual .entity-king-special',
@@ -239,7 +243,7 @@ jobs:
             'assets/king/power.gif','assets/king/sword.png'
           ]:
               assert Path(p).is_file(), 'Missing asset: '+p
-          print('All War/GIF/FPS/camera validations passed.')
+          print('All War/GIF/FPS/camera/stat validations passed.')
           PY
 
       - name: Publish correction
