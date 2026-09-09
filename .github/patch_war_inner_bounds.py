@@ -79,7 +79,11 @@ new_update=""" separateLivingEntities();
  cleanupDeadEntities(now);
 }
 """
-if "if(state.mode==='war')constrainWarEntitiesToArena();" not in text:
+# Compatível tanto com a versão antiga (clamp em uma linha) quanto com o FPS sweep,
+# em que a separação da Guerra roda a 30 Hz mas o clamp físico continua todo frame.
+has_fps_clamp=("warSeparationAccumulator+=dt;" in text and "constrainWarEntitiesToArena();" in text)
+has_legacy_clamp="if(state.mode==='war')constrainWarEntitiesToArena();" in text
+if not (has_fps_clamp or has_legacy_clamp):
     replace_once(old_update,new_update,'clamp físico final da arena')
 
 
@@ -169,7 +173,6 @@ checks=[
  "function warArenaBounds(radius=0)",
  "function constrainWarEntityToArena(e)",
  "function constrainWarEntitiesToArena()",
- "if(state.mode==='war')constrainWarEntitiesToArena();",
  "const minX=b.left+WAR_SPAWN_INSET,maxX=b.right-WAR_SPAWN_INSET;",
  "id=\"warBarrierTopSprite\"",
  "#warBarrierTopSprite{z-index:1",
@@ -182,6 +185,10 @@ for marker in checks:
     if marker not in text:
         raise SystemExit(f'Validação dos limites/camadas falhou: {marker}')
 
+if not (("warSeparationAccumulator+=dt;" in text and "constrainWarEntitiesToArena();" in text) or
+        "if(state.mode==='war')constrainWarEntitiesToArena();" in text):
+    raise SystemExit('Validação do clamp físico final da Guerra falhou')
+
 for marker in [
  "state.world.w=1850;state.world.h=1542;",
  "https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png",
@@ -191,4 +198,4 @@ for marker in [
         raise SystemExit(f'Visual da arena foi alterado inesperadamente: {marker}')
 
 path.write_text(text,encoding='utf-8')
-print('Topo/laterais reduzidos um pouco mais; base e profundidade preservadas.')
+print('Topo/laterais preservados; patch de limites compatível com o FPS sweep.')
