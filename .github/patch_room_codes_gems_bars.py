@@ -30,6 +30,15 @@ if new_generate not in text:
         raise SystemExit('Função antiga de geração de código não encontrada')
     text = text.replace(old_generate, new_generate, 1)
 
+# Com só três nomes possíveis, testa cada código uma vez em ordem aleatória.
+# Assim uma sala livre nunca falha porque o sorteio repetiu códigos ocupados.
+old_room_pick = """let code=null;for(let i=0;i<32;i++){const c=generateCode(),s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));if(!s.exists()){code=c;break}}"""
+new_room_pick = """let code=null;const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);for(const c of roomCandidates){const s=await F.get(F.ref(F.firebaseDb,`rooms/${c}`));if(!s.exists()){code=c;break}}"""
+if new_room_pick not in text:
+    if old_room_pick not in text:
+        raise SystemExit('Seleção antiga de código da sala não encontrada')
+    text = text.replace(old_room_pick, new_room_pick, 1)
+
 # =========================================================
 # GEMAS: 3000 É SÓ O TETO DA CONFIGURAÇÃO INICIAL
 # =========================================================
@@ -78,6 +87,7 @@ required = [
     marker,
     room_codes,
     'return ROOM_CODES[Math.floor(Math.random()*ROOM_CODES.length)];',
+    'const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);',
     config_gem_cap,
     new_round_gems,
     'position:absolute;left:11px;top:-7px;width:56px;height:12px;',
@@ -92,6 +102,7 @@ if missing:
 forbidden = [
     'const ROOM_COLOR_NAMES=[',
     "return ROOM_COLOR_NAMES[ai]+'-'+ROOM_COLOR_NAMES[bi];",
+    'for(let i=0;i<32;i++){const c=generateCode()',
     'p.gems=clamp(state.gems+(p.bonusGems||0),0,3000);',
 ]
 present = [m for m in forbidden if m in text]
@@ -99,4 +110,4 @@ if present:
     raise SystemExit('Comportamento antigo ainda presente: ' + repr(present))
 
 path.write_text(text, encoding='utf-8')
-print('Códigos REI/PLEBEU/CONDE aplicados; teto de 3000 restrito à configuração; barras reduzidas.')
+print('Códigos REI/PLEBEU/CONDE aplicados; seleção sem colisão aleatória; teto de 3000 restrito à configuração; barras reduzidas.')
