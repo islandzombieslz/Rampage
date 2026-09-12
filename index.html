@@ -2735,63 +2735,113 @@ const ASSETS = {
   dragonFireball:'assets/dragon/bola-de-fogo.gif'
 };
 
-/* ROOM FLOW + BOOT PRELOAD 2026-09-12 */
-const BOOT_ASSET_URLS=Object.freeze(["assets/audio/som-de-batalha.mp3","assets/audio/tema.mp3","assets/brown-warrior/guerreira-marrom-andando.gif","assets/brown-warrior/guerreira-marrom-ataque-especial.gif","assets/brown-warrior/guerreira-marrom-ataque-normal.gif","assets/brown-warrior/guerreira-marrom-parada.gif","assets/brown-warrior/poder-especial-guerreira-marrom.gif","assets/dragon/bola-de-fogo.gif","assets/dragon/dragao-guerreiro-atacando.gif","assets/dragon/dragao-guerreiro-parado.gif","assets/dragon/dragao-guerreiro-pulando.gif","assets/dragon/dragao-guerreiro-voando.gif","assets/golem/golem-andando.gif","assets/golem/golem-ataque.gif","assets/golem/golem-especial.gif","assets/golem/golem-parado.gif","assets/golem/pedras-golem.png","assets/king/card.png","assets/king/idle.gif","assets/king/power.gif","assets/king/special.gif","assets/king/sword.png","assets/king/walk.gif","assets/mage/maga-andando.gif","assets/mage/maga-especial.gif","assets/mage/maga-parada.gif","assets/mage/mago-andando.gif","assets/mage/mago-especial.gif","assets/mage/mago-parado.gif","assets/mage/mao-cajado.gif","assets/mage/mao-magos.png","assets/mage/poder-mago-especial.gif","assets/mage/poder-mago.gif","assets/ui/botao-loja.png","assets/ui/botao-mestre-da-guerra.png","assets/ui/botao-pvp.png","assets/ui/cla-guerreiros.png","assets/ui/criar-partida.png","assets/ui/mestre-da-guerra-menu.png","assets/ui/pvp-menu.png","assets/ui/usar-codigo.png","assets/ui/walpaper-menus.png","assets/ui/war-shop/card-dragao-guerreiro.png","assets/ui/war-shop/card-golem-guerreiro.png","assets/ui/war-shop/card-guerreira-marrom.png","assets/ui/war-shop/card-guerreiros.png","assets/ui/war-shop/card-magos-guerreiros.png","assets/warrior/espada-guerreiro.png","assets/warrior/guerreira-andando.gif","assets/warrior/guerreira-parada.gif","assets/warrior/guerreiro-andando.gif","assets/warrior/guerreiro-parado.gif","https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png","https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png"]);
-const BOOT_FETCH_CONCURRENCY=4;
+/* PERSISTENT ASSET CACHE 2026-09-12 */
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5"});
+const BOOT_CACHE_NAME="rampage-assets-v3";
+const BOOT_MANIFEST_KEY="rampageAssetManifestV3";
+const BOOT_FETCH_CONCURRENCY=8;
 function setBootProgress(value){
  const pct=Math.max(0,Math.min(100,Math.round(value)));
  const text=document.getElementById('bootLoaderPercent'),bar=document.getElementById('bootLoaderBar');
  if(text)text.textContent=pct+'%';if(bar)bar.style.width=pct+'%';
 }
-async function bootFallbackMedia(url){
- return new Promise(resolve=>{
-   const clean=url.split('?')[0].toLowerCase();
-   if(/\.(mp3|ogg|wav)$/.test(clean)){
-     const a=new Audio();let settled=false;
-     const done=ok=>{if(settled)return;settled=true;a.oncanplaythrough=a.onerror=null;resolve(ok)};
-     a.preload='auto';a.oncanplaythrough=()=>done(true);a.onerror=()=>done(false);a.src=url;a.load();setTimeout(()=>done(a.readyState>=3),30000);
-   }else{
-     const img=new Image();let settled=false;
-     const done=ok=>{if(settled)return;settled=true;img.onload=img.onerror=null;resolve(ok)};
-     img.decoding='async';img.onload=()=>done(true);img.onerror=()=>done(false);img.src=url;setTimeout(()=>done(img.complete&&img.naturalWidth>0),30000);
-   }
- });
+function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');if(el)el.textContent=text}
+function bootReadSavedManifest(){
+ try{return JSON.parse(localStorage.getItem(BOOT_MANIFEST_KEY)||'{}')||{}}catch(_){return {}}
 }
-async function bootFetchAsset(url){
+function bootWriteSavedManifest(value){try{localStorage.setItem(BOOT_MANIFEST_KEY,JSON.stringify(value))}catch(_){}}
+async function bootOpenCache(){
+ if(!('caches' in window))return null;
+ try{return await caches.open(BOOT_CACHE_NAME)}catch(_){return null}
+}
+function bootRevisionUrl(url,revision){
+ const sep=url.includes('?')?'&':'?';
+ return url+sep+'rampageRev='+encodeURIComponent(revision);
+}
+async function registerAssetServiceWorker(){
+ if(!('serviceWorker' in navigator))return;
+ try{await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'})}catch(_){}
+}
+async function bootFetchAndStore(url,revision,cache){
+ const requestUrl=bootRevisionUrl(url,revision);
+ const absolute=new URL(url,location.href);
+ const sameOrigin=absolute.origin===location.origin;
  for(let attempt=0;attempt<2;attempt++){
-   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),90000);
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
    try{
-     const r=await fetch(url,{cache:'force-cache',signal:controller.signal,credentials:url.startsWith('assets/')?'same-origin':'omit'});
-     if(!r.ok)throw Error('HTTP '+r.status);
-     if(r.body){
-       const reader=r.body.getReader();
+     const options=sameOrigin
+       ? {cache:'reload',credentials:'same-origin',signal:controller.signal}
+       : {cache:'reload',mode:'no-cors',credentials:'omit',signal:controller.signal};
+     const response=await fetch(requestUrl,options);
+     if(!response||(response.type!=='opaque'&&!response.ok))throw Error('asset fetch failed');
+     if(cache){
+       await cache.put(url,response.clone());
+     }else if(response.body){
+       const reader=response.body.getReader();
        while(true){const part=await reader.read();if(part.done)break}
-     }else await r.arrayBuffer();
+     }else{
+       await response.arrayBuffer();
+     }
      clearTimeout(timer);return true;
-   }catch(_){clearTimeout(timer);if(attempt===0)continue}
+   }catch(_){
+     clearTimeout(timer);
+     if(attempt===0)continue;
+   }
  }
- return bootFallbackMedia(url);
+ return false;
 }
 async function runBootLoader(){
- const urls=[...new Set(BOOT_ASSET_URLS)];
- const total=urls.length+1;let completed=0,failed=0,next=0;
- setBootProgress(0);
- const finishTask=ok=>{if(!ok)failed++;completed++;setBootProgress(completed/total*100)};
- const worker=async()=>{
-   while(true){const i=next++;if(i>=urls.length)return;finishTask(await bootFetchAsset(urls[i]))}
- };
- await Promise.all(Array.from({length:Math.min(BOOT_FETCH_CONCURRENCY,Math.max(1,urls.length))},worker));
- // Firebase/auth também aquece antes do menu; assim o primeiro Criar sala não paga esse custo.
- let authReady=true;
- try{
-   await Promise.race([NetworkAdapter.ensureAuth(),new Promise((_,reject)=>setTimeout(()=>reject(Error('firebase warmup timeout')),10000))]);
- }catch(_){authReady=false}
- finishTask(authReady);
- setBootProgress(100);
- if(failed&&typeof assetWarning!=='undefined'&&assetWarning){assetWarning.textContent=`${failed} recurso(s) não puderam ser pré-carregados.`;assetWarning.classList.add('show')}
+ registerAssetServiceWorker();
+ try{navigator.storage?.persist?.().catch(()=>{})}catch(_){}
+ // Firebase aquece em paralelo, mas não bloqueia mais a tela de 0-100%.
+ NetworkAdapter.ensureAuth().catch(()=>{});
+ const entries=Object.entries(BOOT_ASSET_MANIFEST);
+ const previous=bootReadSavedManifest();
+ const cache=await bootOpenCache();
+ const ready={};
+ let completed=0,failed=0;
+ setBootProgress(0);setBootTitle('VERIFICANDO ARQUIVOS');
+
+ const cached=await Promise.all(entries.map(async([url,revision])=>{
+   if(previous[url]!==revision||!cache)return false;
+   try{return !!(await cache.match(url))}catch(_){return false}
+ }));
+ const pending=[];
+ entries.forEach(([url,revision],i)=>{
+   if(cached[i]){ready[url]=revision;completed++}
+   else pending.push([url,revision]);
+ });
+ const total=Math.max(1,entries.length);
+ setBootProgress(completed/total*100);
+
+ if(pending.length){
+   setBootTitle(pending.length===entries.length?'BAIXANDO ARQUIVOS':`ATUALIZANDO ${pending.length} ARQUIVO${pending.length===1?'':'S'}`);
+   let next=0;
+   const worker=async()=>{
+     while(true){
+       const i=next++;if(i>=pending.length)return;
+       const [url,revision]=pending[i];
+       const ok=await bootFetchAndStore(url,revision,cache);
+       if(ok)ready[url]=revision;else failed++;
+       completed++;setBootProgress(completed/total*100);
+     }
+   };
+   await Promise.all(Array.from({length:Math.min(BOOT_FETCH_CONCURRENCY,pending.length)},worker));
+ }
+
+ if(cache){
+   const obsolete=Object.keys(previous).filter(url=>!(url in BOOT_ASSET_MANIFEST));
+   if(obsolete.length)await Promise.all(obsolete.map(url=>cache.delete(url).catch(()=>false)));
+ }
+ bootWriteSavedManifest(ready);
+ setBootProgress(100);setBootTitle(failed?'CARREGAMENTO CONCLUÍDO':'PRONTO');
+ if(failed&&typeof assetWarning!=='undefined'&&assetWarning){
+   assetWarning.textContent=`${failed} recurso(s) não puderam ser atualizados.`;
+   assetWarning.classList.add('show');
+ }
  document.body.classList.remove('booting');
  const loader=document.getElementById('bootLoader');
- if(loader){loader.classList.add('done');setTimeout(()=>loader.remove(),260)}
+ if(loader){loader.classList.add('done');setTimeout(()=>loader.remove(),120)}
 }
 
 const state = {
