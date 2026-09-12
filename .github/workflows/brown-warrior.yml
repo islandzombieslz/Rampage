@@ -1,0 +1,91 @@
+name: Brown Warrior unit
+
+on:
+  push:
+    paths:
+      - '.github/patch_brown_warrior.py'
+      - '.github/workflows/brown-warrior.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import Brown Warrior assets
+        run: |
+          set -euo pipefail
+          mkdir -p assets/brown-warrior assets/ui/war-shop
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/xCk9hMvy/guerreira-marrom-parada.gif' -o assets/brown-warrior/guerreira-marrom-parada.gif
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/nzsngB4h/guerreira-marrom-andando.gif' -o assets/brown-warrior/guerreira-marrom-andando.gif
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/vH5ZGrpL/guerreira-marrom-ataque-normal.gif' -o assets/brown-warrior/guerreira-marrom-ataque-normal.gif
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/j5WRmPHt/guerreira-marrom-ataque-especial.gif' -o assets/brown-warrior/guerreira-marrom-ataque-especial.gif
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/zGjDgJD1/poder-especial-guerreira-marrom.gif' -o assets/brown-warrior/poder-especial-guerreira-marrom.gif
+          curl -L --fail --retry 3 --retry-delay 2 -A 'Mozilla/5.0' 'https://i.postimg.cc/W3DsCgGb/Chat-GPT-Image-11-de-set-de-2026-22-45-30.png' -o assets/ui/war-shop/card-guerreira-marrom.png
+          python - <<'PY'
+          from pathlib import Path
+          gifs=[Path('assets/brown-warrior/guerreira-marrom-parada.gif'),Path('assets/brown-warrior/guerreira-marrom-andando.gif'),Path('assets/brown-warrior/guerreira-marrom-ataque-normal.gif'),Path('assets/brown-warrior/guerreira-marrom-ataque-especial.gif'),Path('assets/brown-warrior/poder-especial-guerreira-marrom.gif')]
+          for p in gifs:
+            b=p.read_bytes(); assert len(b)>10000, f'{p}: unexpectedly small ({len(b)} bytes)'; assert b[:3]==b'GIF', f'{p}: not a GIF'
+          png=Path('assets/ui/war-shop/card-guerreira-marrom.png'); b=png.read_bytes(); assert len(b)>10000, f'{png}: unexpectedly small ({len(b)} bytes)'; assert b[:8]==b'\x89PNG\r\n\x1a\n', f'{png}: not a PNG'
+          print('Brown Warrior assets validated.')
+          PY
+
+      - name: Apply Brown Warrior patch
+        run: python .github/patch_brown_warrior.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts, 'No inline script found'
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Brown Warrior and preserved systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'BROWN WARRIOR SYSTEM 2026-09-12',"brownWarrior:450",'aria-label="Comprar Guerreira Marrom por 450 gemas"','assets/ui/war-shop/card-guerreira-marrom.png',
+            "function spawnBrownWarrior(x,y,team,color){","const e=entityBase('brownWarrior',x,y,team,color);",'e.hp=e.maxHp=250;','e.shield=e.maxShield=150;',
+            'const BROWN_NORMAL_DAMAGE_1=40;','const BROWN_NORMAL_DAMAGE_2=25;','const BROWN_SPECIAL_DAMAGE=15;','const BROWN_SPECIAL_TICK_MS=500;',
+            "if((Number(e.brownNormalCount)||0)>=6){","startBrownWarriorAttack(e,'special',target)","startBrownWarriorAttack(e,'normal',target)",
+            "brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_1,'hit1Done')","brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_2,'hit2Done')",
+            'function brownPowerPosition(','function applyBrownSpecialTick(','function syncBrownWarriorPowerEffects(',
+            "pendingBrownAttack:null,brownAttackKind:null,brownAttackSerial:0,brownNormalCount:0","if(cmd.type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);",
+            "$('#buyBrownWarrior').onclick=()=>requestWarPurchase('buy-brown-warrior');","const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','dragon','enemy']);",
+            'ROOM LIFECYCLE 2026-09-09','WAR CAMERA COMPOSITOR 2026-09-09','GIF SWITCH STABILITY 2026-09-08','WAR FPS SWEEP 2026-09-09',
+            "const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};",'FIREBASE RTDB, HOST AUTORITATIVO','e.hp=e.maxHp=280;','e.shield=e.maxShield=280;','e.damage=35;'
+          ]
+          missing=[x for x in required if x not in t]
+          assert not missing, 'Missing Brown Warrior/preserved markers: '+repr(missing)
+          assert t.count('https://i.postimg.cc/')==2, 'New external runtime Postimg dependency leaked into index.html'
+          assert t.count('id="buyBrownWarrior"')==1, 'Brown Warrior shop button duplicated/missing'
+          assert t.count("function spawnBrownWarrior(")==1, 'Brown Warrior spawn duplicated/missing'
+          print('Brown Warrior validation passed.')
+          PY
+
+      - name: Publish Brown Warrior
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html assets/brown-warrior assets/ui/war-shop/card-guerreira-marrom.png
+          if git diff --cached --quiet; then
+            echo 'No generated Brown Warrior changes needed.'
+            exit 0
+          fi
+          git commit -m 'Add Brown Warrior unit'
+          git push
