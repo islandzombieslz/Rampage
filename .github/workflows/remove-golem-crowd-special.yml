@@ -1,0 +1,79 @@
+name: Remove Golem crowd special
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/remove_golem_crowd_special.py'
+      - '.github/workflows/remove-golem-crowd-special.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-remove-golem-crowd-special
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Remove crowd-triggered Golem special
+        run: python .github/remove_golem_crowd_special.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,re.S)
+          assert scripts, 'No inline script found'
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Golem cycle and preserved systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            "if((Number(e.golemNormalCount)||0)>=4)",
+            "startGolemAttack(e,'special',target,'cycle')",
+            "startGolemAttack(e,'normal',target,'cycle')",
+            "const radius=230,r2=radius*radius;",
+            "applyCombatHit(t,e,70,{",
+            'ROOM LIFECYCLE 2026-09-09',
+            'WAR CAMERA COMPOSITOR 2026-09-09',
+            'BROWN WARRIOR SYSTEM 2026-09-12',
+            'PERSISTENT ASSET CACHE 2026-09-12'
+          ]
+          missing=[x for x in required if x not in t]
+          assert not missing, 'Missing preserved markers: '+repr(missing)
+          forbidden=['golemCrowdSpecialUsed','crowdActive',"startGolemAttack(e,'special',nearbySpecialTarget,'crowd')",'nearbySpecialCount']
+          remains=[x for x in forbidden if x in t]
+          assert not remains, 'Old crowd special logic remains: '+repr(remains)
+          print('Golem crowd special removal validation passed.')
+          PY
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'Golem crowd special already removed.'
+            exit 0
+          fi
+          git commit -m 'Remove Golem crowd-triggered special'
+          git push
