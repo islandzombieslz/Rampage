@@ -1,0 +1,93 @@
+name: Room boot and Brown v2
+
+on:
+  push:
+    paths:
+      - '.github/patch_room_boot_brown_v2.py'
+      - '.github/workflows/room-boot-brown-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply room boot Brown patch
+        run: python .github/patch_room_boot_brown_v2.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts, 'No inline script found'
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate requested changes and preserved systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'ROOM FLOW + BOOT PRELOAD 2026-09-12',
+            'id="bootLoader"','id="bootLoaderPercent">0%</div>','const BOOT_FETCH_CONCURRENCY=4;',
+            'https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png',
+            'https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png',
+            'await Promise.race([NetworkAdapter.ensureAuth()',
+            'createPromise:null,joinPromise:null',
+            'if(this.createPromise)return this.createPromise;',
+            'F.runTransaction(rr,current=>{',
+            "const playerRef=F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`);",
+            "const all=await F.get(F.ref(F.firebaseDb,'rooms'));",
+            "const networkPushInterval=state.mode==='war'?150:120;",
+            'let roomCreateInFlight=false,roomJoinInFlight=false;',
+            "btn.disabled=true;btn.textContent='Criando...'",
+            'e.brownKnockCycle=0;','e.brownSlowUntil=0;',
+            "const brownStableHit=target.type==='brownWarrior'",
+            'target.brownKnockCycle=(cycle+1)%3;',
+            'target.brownSlowUntil=Math.max(Number(target.brownSlowUntil)||0,performance.now()+600);',
+            'const moveSpeed=e.speed*((Number(e.brownSlowUntil)||0)>now?0.68:1);',
+            "if((Number(e.brownNormalCount)||0)>=4){",
+            'e.brownNormalCount=Math.min(4,(Number(e.brownNormalCount)||0)+1);',
+            '.entity-visual.brown-warrior-visual .entity-body{left:0;',
+            'BROWN WARRIOR TUNING 2026-09-12',
+            'BROWN WARRIOR SYSTEM 2026-09-12',
+            'ROOM LIFECYCLE 2026-09-09','WAR CAMERA COMPOSITOR 2026-09-09','GIF SWITCH STABILITY 2026-09-08','WAR FPS SWEEP 2026-09-09',
+            "const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};",
+            'const BROWN_SPECIAL_DAMAGE=25;',
+            'e.hp=e.maxHp=250;','e.shield=e.maxShield=150;',
+            'e.hp=e.maxHp=280;','e.shield=e.maxShield=280;','e.damage=35;'
+          ]
+          missing=[x for x in required if x not in t]
+          assert not missing, 'Missing required/preserved markers: '+repr(missing)
+          assert 'await this.cleanupRooms();' not in t, 'Global cleanup still blocks room create/join'
+          assert t.count("F.get(F.ref(F.firebaseDb,'rooms'))")>=1, 'Single rooms read missing'
+          assert t.count('id="bootLoader"')==1, 'Boot loader duplicated'
+          assert t.count("if((Number(e.brownNormalCount)||0)>=4){")==1, 'Brown special cadence duplicated/missing'
+          assert t.count("if((Number(e.brownNormalCount)||0)>=6){")==0, 'Old Brown 6-normal cadence remains'
+          assert t.count("function aiFightBrownWarrior(")==1, 'Brown AI duplicated/missing'
+          print('Room/boot/Brown validation passed.')
+          PY
+
+      - name: Publish update
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No generated changes needed.'
+            exit 0
+          fi
+          git commit -m 'Improve room flow preload and Brown Warrior stability'
+          git push
