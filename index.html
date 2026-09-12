@@ -1305,7 +1305,7 @@ html,body{
 /* ===== GUERREIRA MARROM ===== */
 .entity-visual.brown-warrior-visual{width:96px;height:116px}
 .entity-visual.brown-warrior-visual .entity-facing{width:96px;height:108px}
-.entity-visual.brown-warrior-visual .entity-body{left:0;top:-9px;width:110px;height:110px;object-fit:contain}
+.entity-visual.brown-warrior-visual .entity-body{left:0;top:0;width:110px;height:110px;object-fit:contain}
 .entity-visual.brown-warrior-visual .entity-bars{left:15px;top:-5px;width:66px}
 .entity-visual.brown-warrior-visual .hp-bg,
 .entity-visual.brown-warrior-visual .shield-bg{width:66px}
@@ -2944,6 +2944,20 @@ function validGifDuration(ms,fallback){
  return Number.isFinite(ms)&&ms>=250&&ms<=20000?ms:fallback;
 }
 
+// Alguns GIFs exportados usam um frame final com delay enorme apenas para
+// segurar a última pose antes do loop. Esse tempo não deve manter o estado
+// de ataque ativo. Para animações de golpe, soma só os frames realmente ativos.
+function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
+ const b=new Uint8Array(buffer);let total=0;
+ for(let i=0;i+7<b.length;i++){
+   if(b[i]===0x21&&b[i+1]===0xF9&&b[i+2]===0x04){
+     const delayMs=(b[i+4]|(b[i+5]<<8))*10;
+     if(delayMs<=maxFrameDelayMs)total+=delayMs;
+   }
+ }
+ return total;
+}
+
 // Pré-carrega TODOS os GIFs do jogo. Quando CORS permite o fetch, guardamos
 // o arquivo em Blob. Cada vez que uma animação precisa começar, uma Object URL
 // NOVA é criada: o navegador é obrigado a iniciar no quadro 0, em vez de
@@ -2959,7 +2973,7 @@ function validGifDuration(ms,fallback){
      const r=await fetch(src,{cache:'force-cache'});
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
-     const duration=gifCycleDurationMs(buf);
+     const duration=key==='golemSpecial'?gifActionDurationMs(buf):gifCycleDurationMs(buf);
      gifRuntime.set(key,{blob:new Blob([buf],{type:'image/gif'}),duration});
      if(key==='magePower')MAGE_NORMAL_DURATION=validGifDuration(duration,MAGE_NORMAL_DURATION);
      if(key==='mageSpecial')MAGE_SPECIAL_MALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_MALE_DURATION);
