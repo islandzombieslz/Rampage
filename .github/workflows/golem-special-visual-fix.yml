@@ -1,0 +1,70 @@
+name: Fix Golem special visual
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/patch_golem_special_visual.py'
+      - '.github/workflows/golem-special-visual-fix.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-golem-special-visual-fix
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refresh branch
+        run: git pull --rebase origin main
+      - name: Apply fix
+        run: python .github/patch_golem_special_visual.py
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,re.S)
+          assert scripts
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+      - name: Validate fix and preserved systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'function gifActionDurationMs(buffer,maxFrameDelayMs=2000)',
+            "const duration=key==='golemSpecial'?gifActionDurationMs(buf):gifCycleDurationMs(buf);",
+            '.entity-visual.brown-warrior-visual .entity-body{left:0;top:0;width:110px;height:110px;object-fit:contain}',
+            'ROOM LIFECYCLE 2026-09-09',
+            'WAR CAMERA COMPOSITOR 2026-09-09',
+            'PERSISTENT ASSET CACHE 2026-09-12',
+            'BROWN WARRIOR SYSTEM 2026-09-12'
+          ]
+          missing=[x for x in required if x not in t]
+          assert not missing, repr(missing)
+          assert 'crowdActive && !e.golemCrowdSpecialUsed' not in t
+          print('Golem special visual fix validation passed.')
+          PY
+      - name: Publish
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'Already current.'
+            exit 0
+          fi
+          git commit -m 'Fix Golem special visual duration and Brown Warrior position'
+          git push
