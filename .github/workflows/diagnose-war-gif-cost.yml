@@ -1,0 +1,48 @@
+name: Diagnose war GIF cost
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-war-gif-cost.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect combat GIFs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import struct
+          roots=['assets/warrior','assets/brown-warrior','assets/king','assets/golem','assets/mage','assets/dragon']
+          rows=[]
+          for root in roots:
+              for p in Path(root).glob('*.gif'):
+                  b=p.read_bytes()
+                  if len(b)<10 or b[:3]!=b'GIF': continue
+                  w,h=struct.unpack('<HH',b[6:10])
+                  frames=b.count(b'\x2c')
+                  gce=[]
+                  i=0
+                  while i+7<len(b):
+                      if b[i:i+3]==b'!\xf9\x04':
+                          gce.append((b[i+4]|(b[i+5]<<8))*10); i+=8
+                      else:i+=1
+                  active=sum(x for x in gce if x<=2000)
+                  total=sum(gce)
+                  decode_mb=w*h*4*max(frames,1)/1024/1024
+                  rows.append((len(b),decode_mb,w,h,frames,total,active,str(p)))
+          rows.sort(reverse=True)
+          print('FILE_MB  EST_FULL_FRAME_MB  WxH  FRAMES  TOTAL_MS  ACTIVE_MS  PATH')
+          for size,dec,w,h,f,total,active,p in rows:
+              print(f'{size/1024/1024:7.2f} {dec:17.1f} {w}x{h} {f:6d} {total:9d} {active:9d} {p}')
+          print('\nTOTAL GIF FILE MB:',round(sum(r[0] for r in rows)/1024/1024,2))
+          print('TOTAL theoretical full-frame RGBA MB:',round(sum(r[1] for r in rows),1))
+          PY
+      - name: Check media tools
+        run: |
+          command -v ffmpeg || true
+          command -v convert || true
+          command -v magick || true
