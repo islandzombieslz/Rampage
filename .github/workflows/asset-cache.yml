@@ -53,8 +53,8 @@ jobs:
           required=[
             'PERSISTENT ASSET CACHE 2026-09-12',
             'const BOOT_ASSET_MANIFEST=Object.freeze(',
-            "const BOOT_CACHE_NAME='rampage-assets-v3';",
-            "const BOOT_MANIFEST_KEY='rampageAssetManifestV3';",
+            'const BOOT_CACHE_NAME="rampage-assets-v3";',
+            'const BOOT_MANIFEST_KEY="rampageAssetManifestV3";',
             'const BOOT_FETCH_CONCURRENCY=8;',
             'await cache.match(url)',
             'bootFetchAndStore(url,revision,cache)',
@@ -68,7 +68,7 @@ jobs:
           assert not missing, 'Missing cache/preserved markers: '+repr(missing)
           assert 'BOOT_ASSET_URLS' not in t, 'Old always-download loader remains'
           assert 'await Promise.race([NetworkAdapter.ensureAuth()' not in t, 'Firebase still blocks boot loader'
-          assert "const CACHE_NAME='rampage-assets-v3';" in sw
+          assert 'const CACHE_NAME="rampage-assets-v3";' in sw
           assert "url.searchParams.has('rampageRev')" in sw
           assert "await self.clients.claim();" in sw
           print('Persistent asset cache validation passed.')
