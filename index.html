@@ -3964,7 +3964,7 @@ function entityBase(type,x,y,team,color){
 
  // Máquina de estados do Golem: localizar -> aproximar -> atacar -> finalizar.
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
- golemPhase:'seek',golemCrowdSpecialUsed:false,golemLastAttackCompletedAt:0,
+ golemPhase:'seek',golemLastAttackCompletedAt:0,
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
  pendingBrownAttack:null,brownAttackKind:null,brownAttackSerial:0,brownNormalCount:0,
  pendingKingSpecial:null,kingSpecialSerial:0,kingNormalCount:0,
@@ -4018,15 +4018,12 @@ function spawnGolem(x,y,team,color){
  // Mantém a velocidade-base própria; no modo Guerra recebe -50% e um redutor extra leve.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;
  e.attackCooldown=0;
- // O especial do Golem agora é controlado pela máquina de estados:
- // 4 ataques normais -> 1 especial, com uma exceção única para aglomeração.
+ // O especial do Golem é controlado pela máquina de estados:
+ // 4 ataques normais completos -> 1 especial.
  e.specialCooldown=0;
  // Resistência a empurrão de Guerreiro/Mago: 1 impacto empurra, os 3 seguintes não.
  e.golemKnockCycle=0;
  e.golemNormalCount=0;
- // O bônus por aglomeração só pode furar o ciclo uma vez na vida deste Golem.
- // Depois dele, a regra é sempre quatro normais e um especial.
- e.golemCrowdSpecialUsed=false;
  e.golemPhase='seek';
  e.golemLastAttackCompletedAt=0;
  // Golpes de Guerreiro/Mago não travam o Golem: apenas o deixam mais lento por alguns instantes.
@@ -4596,7 +4593,6 @@ function updateGolemAttackState(e,now){
      e.golemNormalCount=Math.min(4,(Number(e.golemNormalCount)||0)+1);
    }else{
      e.golemNormalCount=0;
-     if(p.reason==='crowd')e.golemCrowdSpecialUsed=true;
    }
 
    e.golemLastAttackCompletedAt=now;
@@ -5481,35 +5477,7 @@ function aiFightGolem(e,dt,forcedTeam,preparedCandidates=null){
  e.heading=Math.atan2(dy,dx);
  if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
 
- let nearbySpecialTarget=null,nearbySpecialBestSq=Infinity,nearbySpecialCount=0;
- const golemSpecialRadiusSq=145*145;
- // WAR FPS CANDIDATE SAFETY 2026-09-09
- for(const candidate of candidates){
-   // O cache de alvo dura poucos ms; um candidato pode morrer entre dois refreshes.
-   // Ignora stale/aliado sem recriar arrays com filter().
-   if(!candidate||!candidate.alive||candidate===e||candidate.team===e.team||
-      (forcedTeam&&candidate.team!==forcedTeam)||!canEngageTarget(e,candidate))continue;
-   const ndx=candidate.x-e.x,ndy=candidate.y-e.y,ds=ndx*ndx+ndy*ndy;
-   if(ds<=golemSpecialRadiusSq){
-     nearbySpecialCount++;
-     if(ds<nearbySpecialBestSq){nearbySpecialBestSq=ds;nearbySpecialTarget=candidate}
-   }
- }
-
- const crowdActive=nearbySpecialCount>=2;
-
- // ESTADO 3A — exceção de aglomeração:
- // 2+ inimigos próximos => um único especial assim que o ataque anterior já terminou.
- // Essa exceção só existe uma vez por Golem. As próprias pedras afastavam os
- // alvos, rearmavam a condição e causavam especiais seguidos quando voltavam.
- if(crowdActive && !e.golemCrowdSpecialUsed){
-   if(startGolemAttack(e,'special',nearbySpecialTarget,'crowd')){
-     e.golemCrowdSpecialUsed=true; // trava antes do próximo snapshot/frame
-     return;
-   }
- }
-
- // ESTADO 3B — ciclo padrão:
+ // ESTADO 3 — ciclo padrão:
  // depois de QUATRO ataques normais COMPLETOS, o próximo golpe é especial.
  if((Number(e.golemNormalCount)||0)>=4){
    if(d<=145 && startGolemAttack(e,'special',target,'cycle')){
