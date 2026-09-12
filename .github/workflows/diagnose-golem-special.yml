@@ -1,0 +1,39 @@
+name: Diagnose Golem special GIF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-golem-special.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect GIF timing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('assets/golem/golem-especial.gif')
+          b=p.read_bytes()
+          delays=[]
+          i=0
+          while i+7 < len(b):
+              if b[i:i+3] == b'!\xf9\x04':
+                  delay=b[i+4] | (b[i+5]<<8)
+                  delays.append(delay*10)
+                  i += 8
+              else:
+                  i += 1
+          print('bytes=', len(b))
+          print('frames_with_gce=', len(delays))
+          print('total_ms=', sum(delays))
+          print('min_delay_ms=', min(delays) if delays else None)
+          print('max_delay_ms=', max(delays) if delays else None)
+          print('avg_delay_ms=', round(sum(delays)/len(delays),2) if delays else None)
+          print('netscape_loop_extension=', b'NETSCAPE2.0' in b)
+          PY
