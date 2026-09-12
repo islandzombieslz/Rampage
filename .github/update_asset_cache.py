@@ -23,8 +23,8 @@ if end < 0:
 # Exclude the previous generated manifest itself before discovering referenced assets,
 # otherwise removed assets would keep reappearing forever.
 scan_text = text[:start] + text[end:]
-local_urls = set(re.findall(r"['\"](assets/[^'\"<>?\\s]+)['\"]", scan_text))
-external_urls = set(re.findall(r"['\"](https://i\\.postimg\\.cc/[^'\"<>\\s]+)['\"]", scan_text))
+local_urls = set(re.findall(r'''['"](assets/[^'"<>?\s]+)['"]''', scan_text))
+external_urls = set(re.findall(r'''['"](https://i\.postimg\.cc/[^'"<>\s]+)['"]''', scan_text))
 
 manifest = {}
 for url in sorted(local_urls):
