@@ -23,6 +23,7 @@
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-magos-guerreiros.png">
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-golem-guerreiro.png">
 <link rel="prefetch" as="image" href="assets/ui/war-shop/card-dragao-guerreiro.png">
+<link rel="prefetch" as="image" href="assets/ui/war-shop/card-guerreira-marrom.png">
 <link rel="preload" as="audio" href="assets/audio/tema.mp3" type="audio/mpeg">
 <link rel="prefetch" as="audio" href="assets/audio/som-de-batalha.mp3" type="audio/mpeg">
 
@@ -1301,6 +1302,17 @@ html,body{
   top:-3px;
 }
 
+/* ===== GUERREIRA MARROM ===== */
+.entity-visual.brown-warrior-visual{width:96px;height:116px}
+.entity-visual.brown-warrior-visual .entity-facing{width:96px;height:108px}
+.entity-visual.brown-warrior-visual .entity-body{left:-7px;top:-9px;width:110px;height:110px;object-fit:contain}
+.entity-visual.brown-warrior-visual .entity-bars{left:15px;top:-5px;width:66px}
+.entity-visual.brown-warrior-visual .hp-bg,
+.entity-visual.brown-warrior-visual .shield-bg{width:66px}
+.entity-visual.brown-warrior-visual .entity-weapon-facing{display:none !important}
+.entity-brown-attack,.entity-brown-special{opacity:0}
+.brown-warrior-power{position:absolute;object-fit:contain;pointer-events:none;transform-origin:center;will-change:auto}
+
 /* ===== MAGO / MAGA GUERREIROS ===== */
 .entity-visual.mage-visual{width:88px;height:112px}
 .entity-visual.mage-visual .entity-facing{width:88px;height:104px}
@@ -1363,7 +1375,7 @@ html,body{
           /* ===== NITIDEZ DOS SPRITES =====
    Mantém suavização de alta qualidade e pede contraste otimizado ao Chromium/WebKit
    quando disponível, sem reduzir resolução ou quadros dos GIFs. */
-.entity-body,.entity-sword,.mage-staff,.mage-hand,.golem-rock-fragment,.mage-power-normal,.mage-power-special,.shop-unit img,.clan-option img{
+.entity-body,.entity-sword,.mage-staff,.mage-hand,.golem-rock-fragment,.mage-power-normal,.mage-power-special,.brown-warrior-power,.shop-unit img,.clan-option img{
   image-rendering:auto;
   image-rendering:-webkit-optimize-contrast;
 }
@@ -2407,8 +2419,8 @@ window.dispatchEvent(new Event('firebase-ready'));
       <img src="assets/ui/cla-guerreiros.png" alt="" loading="lazy" decoding="async">
       <div>
         <h3>Guerreiros</h3>
-        <div class="small">Guerreiro/Guerreira • Rei Guerreiro • Mago/Maga • Golem • Dragão</div>
-        <div class="small">Cinco tropas disponíveis na preparação da guerra.</div>
+        <div class="small">Guerreiro/Guerreira • Guerreira Marrom • Rei Guerreiro • Mago/Maga • Golem • Dragão</div>
+        <div class="small">Seis tropas disponíveis na preparação da guerra.</div>
       </div>
     </div>
     <div class="divider"></div>
@@ -2443,6 +2455,9 @@ window.dispatchEvent(new Event('firebase-ready'));
       <div class="shop-sprite-grid">
         <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 50 gemas" title="Guerreiro — 50 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
+        </button>
+        <button id="buyBrownWarrior" class="shop-sprite-card" aria-label="Comprar Guerreira Marrom por 450 gemas" title="Guerreira Marrom — 450 gemas">
+          <img src="assets/ui/war-shop/card-guerreira-marrom.png" alt="Guerreira Marrom" draggable="false" decoding="async">
         </button>
         <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 400 gemas" title="Rei Guerreiro — 400 gemas">
           <img src="assets/king/card.png" alt="Rei Guerreiro" draggable="false" decoding="async">
@@ -2648,6 +2663,13 @@ const ASSETS = {
   femaleIdle:'assets/warrior/guerreira-parada.gif',
   femaleWalk:'assets/warrior/guerreira-andando.gif',
 
+  // Guerreira Marrom — clã Guerreiros
+  brownIdle:'assets/brown-warrior/guerreira-marrom-parada.gif',
+  brownWalk:'assets/brown-warrior/guerreira-marrom-andando.gif',
+  brownAttack:'assets/brown-warrior/guerreira-marrom-ataque-normal.gif',
+  brownSpecial:'assets/brown-warrior/guerreira-marrom-ataque-especial.gif',
+  brownPower:'assets/brown-warrior/poder-especial-guerreira-marrom.gif',
+
   // Rei Guerreiro — clã Guerreiros
   kingIdle:'assets/king/idle.gif',
   kingWalk:'assets/king/walk.gif',
@@ -2698,7 +2720,8 @@ const speedMap={slow:145,normal:195,fast:255};
 const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:50,king:400,golem:550,mage:550,dragon:450});
+/* BROWN WARRIOR SYSTEM 2026-09-12 */
+const WAR_UNIT_COSTS=Object.freeze({warrior:50,brownWarrior:450,king:400,golem:550,mage:550,dragon:450});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -2713,6 +2736,17 @@ let MAGE_SPECIAL_FEMALE_DURATION=3000;
 let MAGE_POWER_SPECIAL_DURATION=3000;
 let GOLEM_NORMAL_DURATION=3000;
 let GOLEM_SPECIAL_DURATION=3300;
+let BROWN_NORMAL_DURATION=1800;
+let BROWN_SPECIAL_BODY_DURATION=2200;
+let BROWN_POWER_DURATION=2200;
+let BROWN_SPECIAL_DURATION=2200;
+const BROWN_NORMAL_DAMAGE_1=40;
+const BROWN_NORMAL_DAMAGE_2=25;
+const BROWN_SPECIAL_DAMAGE=15;
+const BROWN_SPECIAL_TICK_MS=500;
+const BROWN_SPECIAL_LENGTH=340;
+const BROWN_SPECIAL_BEHIND=58;
+const BROWN_SPECIAL_HALF_WIDTH=56;
 let KING_SPECIAL_DURATION=3000;
 let KING_BODY_SPECIAL_DURATION=3000;
 let KING_POWER_DURATION=3000;
@@ -2740,7 +2774,9 @@ const DRAGON_BURN_DURATION_MS=6000;
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
 let golemAttackAssetsReady=false;
+let brownAttackAssetsReady=false;
 const golemGifReadyKeys=new Set();
+const brownGifReadyKeys=new Set();
 
 // Soma os delays de todos os frames e retorna a duração de UM ciclo do GIF.
 // Esse valor é usado nos ataques para o estado do jogo não esconder o sprite
@@ -2769,7 +2805,7 @@ function validGifDuration(ms,fallback){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
+ const gifKeys=['golemAttack','golemSpecial','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -2784,6 +2820,9 @@ function validGifDuration(ms,fallback){
      if(key==='magePowerSpecial')MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,MAGE_POWER_SPECIAL_DURATION);
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
+     if(key==='brownAttack')BROWN_NORMAL_DURATION=validGifDuration(duration,BROWN_NORMAL_DURATION);
+     if(key==='brownSpecial')BROWN_SPECIAL_BODY_DURATION=validGifDuration(duration,BROWN_SPECIAL_BODY_DURATION);
+     if(key==='brownPower')BROWN_POWER_DURATION=validGifDuration(duration,BROWN_POWER_DURATION);
      if(key==='kingSpecial')KING_BODY_SPECIAL_DURATION=validGifDuration(duration,KING_BODY_SPECIAL_DURATION);
      if(key==='kingPower')KING_POWER_DURATION=validGifDuration(duration,KING_POWER_DURATION);
      if(key==='dragonTakeoff')DRAGON_TAKEOFF_DURATION=validGifDuration(duration,DRAGON_TAKEOFF_DURATION);
@@ -2796,9 +2835,14 @@ function validGifDuration(ms,fallback){
        golemGifReadyKeys.add(key);
        if(golemGifReadyKeys.size===2)golemAttackAssetsReady=true;
      }
+     if(key==='brownAttack'||key==='brownSpecial'||key==='brownPower'){
+       brownGifReadyKeys.add(key);
+       if(brownGifReadyKeys.size===3)brownAttackAssetsReady=true;
+     }
    }
  }));
  MAGE_SPECIAL_DURATION=Math.max(MAGE_SPECIAL_MALE_DURATION,MAGE_SPECIAL_FEMALE_DURATION,MAGE_POWER_SPECIAL_DURATION);
+ BROWN_SPECIAL_DURATION=Math.max(BROWN_SPECIAL_BODY_DURATION,BROWN_POWER_DURATION);
  KING_SPECIAL_DURATION=Math.max(KING_BODY_SPECIAL_DURATION,KING_POWER_DURATION);
 })();
 // Não deixa uma falha de rede impedir o mago de atacar para sempre.
@@ -2807,6 +2851,7 @@ setTimeout(()=>{magePowerAssetReady=true},2000);
 // Normalmente os dois GIFs já foram medidos antes disso; o fallback só é usado
 // em falha real de rede/CORS.
 setTimeout(()=>{golemAttackAssetsReady=true},3500);
+setTimeout(()=>{brownAttackAssetsReady=true},3500);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; }
@@ -2982,6 +3027,25 @@ function serializeWarEntityForNetwork(e,now){
        remainingMs:Math.max(0,Number(p.endAt)-now),
        impactRemainingMs:Math.max(0,Number(p.impactAt)-now),
        impacted:!!p.impacted
+     };
+   }
+ }else if(e.type==='brownWarrior'){
+   out.brownAttackKind=e.brownAttackKind??null;
+   out.brownAttackSerial=Number(e.brownAttackSerial)||0;
+   out.brownNormalCount=Number(e.brownNormalCount)||0;
+   if(e.pendingBrownAttack){
+     const p=e.pendingBrownAttack;
+     out.pendingBrownAttack={
+       kind:p.kind,serial:Number(p.serial)||Number(e.brownAttackSerial)||0,targetId:p.targetId??null,
+       originX:Number.isFinite(Number(p.originX))?Number(p.originX):e.x,
+       originY:Number.isFinite(Number(p.originY))?Number(p.originY):e.y,
+       angle:Number.isFinite(Number(p.angle))?Number(p.angle):0,
+       length:Number.isFinite(Number(p.length))?Number(p.length):BROWN_SPECIAL_LENGTH,
+       duration:Number(p.duration)||(p.kind==='special'?BROWN_SPECIAL_DURATION:BROWN_NORMAL_DURATION),
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       hit1RemainingMs:p.hit1At?Math.max(0,Number(p.hit1At)-now):0,
+       hit2RemainingMs:p.hit2At?Math.max(0,Number(p.hit2At)-now):0,
+       hit1Done:!!p.hit1Done,hit2Done:!!p.hit2Done
      };
    }
  }else if(e.type==='mage'){
@@ -3170,6 +3234,33 @@ function applyRemoteGame(game){
      }
      // Estado visual nunca pode sobreviver sozinho sem um ataque pendente real.
      if(!out.pendingGolemAttack)out.golemAttackKind=null;
+     if(out.pendingBrownAttack?.remainingMs!=null){
+       const p=out.pendingBrownAttack;
+       const serial=Number(p.serial)||Number(out.brownAttackSerial)||0;
+       const duration=p.duration||(p.kind==='special'?BROWN_SPECIAL_DURATION:BROWN_NORMAL_DURATION);
+       const remaining=Math.max(0,Number(p.remainingMs)||0);
+       const oldPending=old?.pendingBrownAttack;
+       const sameSerial=!!oldPending&&Number(oldPending.serial)===serial;
+       if(remaining<=0){
+         out.pendingBrownAttack=null;out.brownAttackKind=null;
+       }else if(sameSerial&&Number.isFinite(Number(oldPending.endAt))){
+         out.pendingBrownAttack={...p,serial,duration,
+           startedAt:Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining),
+           hit1At:p.hit1Done?localNow:Number(oldPending.hit1At)||localNow+Math.max(0,Number(p.hit1RemainingMs)||0),
+           hit2At:p.hit2Done?localNow:Number(oldPending.hit2At)||localNow+Math.max(0,Number(p.hit2RemainingMs)||0),
+           endAt:Math.min(Number(oldPending.endAt),localNow+remaining),
+           nextTickAt:Number(oldPending.nextTickAt)||localNow+BROWN_SPECIAL_TICK_MS
+         };
+       }else{
+         out.pendingBrownAttack={...p,serial,duration,
+           startedAt:localNow-Math.max(0,duration-remaining),
+           hit1At:localNow+Math.max(0,Number(p.hit1RemainingMs)||0),
+           hit2At:localNow+Math.max(0,Number(p.hit2RemainingMs)||0),
+           endAt:localNow+remaining,nextTickAt:localNow+BROWN_SPECIAL_TICK_MS
+         };
+       }
+     }
+     if(!out.pendingBrownAttack)out.brownAttackKind=null;
      if(out.dragonTakeoffRemainingMs!=null){
        const remaining=Math.max(0,Number(out.dragonTakeoffRemainingMs)||0);
        out.dragonTakeoffEndAt=localNow+remaining;
@@ -3215,6 +3306,7 @@ function handleHostCommands(commands){
    const p=state.players.find(x=>x.id===uid);
    if(p&&state.mode==='war'&&state.phase==='prep'){
      if(cmd.type==='buy-warrior')buyForPlayer(p,false);
+     if(cmd.type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);
      if(cmd.type==='buy-king')buyKingForPlayer(p,false);
      if(cmd.type==='buy-golem')buyGolemForPlayer(p,false);
      if(cmd.type==='buy-mage')buyMageForPlayer(p,false);
@@ -3710,6 +3802,7 @@ function entityBase(type,x,y,team,color){
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
  golemPhase:'seek',golemCrowdSpecialUsed:false,golemLastAttackCompletedAt:0,
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
+ pendingBrownAttack:null,brownAttackKind:null,brownAttackSerial:0,brownNormalCount:0,
  pendingKingSpecial:null,kingSpecialSerial:0,kingNormalCount:0,
  pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
  dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,dragonCloseShotAt:0,
@@ -3724,6 +3817,17 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
  e.controlled=controlled;
  e.ownerId=ownerId;
  e.variant=variant==='female'?'female':'male';
+ state.entities.push(e);
+ return e;
+}
+function spawnBrownWarrior(x,y,team,color){
+ const e=entityBase('brownWarrior',x,y,team,color);
+ if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
+ e.hp=e.maxHp=250;
+ e.shield=e.maxShield=150;
+ e.damage=BROWN_NORMAL_DAMAGE_1;
+ e.r=30;
+ e.brownNormalCount=0;
  state.entities.push(e);
  return e;
 }
@@ -3835,7 +3939,7 @@ function applyCombatHit(target,attacker,amount,options={}){
  let knockForce=options.knockForce??430;
  let knockTime=options.knockTime??.28;
  let applyKnockback=true;
- const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='king' || attacker.type==='mage');
+ const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
 
  // Golem: contra Guerreiro/Mago o dano entra normalmente, mas ele é muito mais estável.
  // Mantém o ciclo já definido: 1 impacto empurra, os 3 seguintes não.
@@ -3890,6 +3994,8 @@ function startEntityDeath(e,dx=0,dy=0){
  e.golemPhase='dead';
  e.pendingMageAttack=null;
  e.mageAttackKind=null;
+ e.pendingBrownAttack=null;
+ e.brownAttackKind=null;
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
@@ -4164,7 +4270,7 @@ function updateGolemRockEffects(now){
  }
 }
 
-const REAL_COMBAT_TYPES=new Set(['warrior','king','mage','golem','dragon','enemy']);
+const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','dragon','enemy']);
 // WAR FPS SWEEP 2026-09-09
 function isRealCombatTarget(t){
  // Set persistente: evita criar um array novo em cada teste de alvo.
@@ -4172,7 +4278,7 @@ function isRealCombatTarget(t){
 }
 function canEngageTarget(attacker,target){
  if(!isRealCombatTarget(target)||!attacker)return false;
- if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return false;
+ if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;
  return true;
 }
 
@@ -4319,6 +4425,88 @@ function updateGolemAttackState(e,now){
  }
 }
 
+function brownPowerPosition(p,at=performance.now()){
+ const duration=Math.max(1,Number(p.duration)||BROWN_SPECIAL_DURATION);
+ const progress=clamp((at-Number(p.startedAt||at))/duration,0,1);
+ const travelProgress=1-Math.pow(1-progress,2.35);
+ const travel=-BROWN_SPECIAL_BEHIND+((Number(p.length)||BROWN_SPECIAL_LENGTH)+BROWN_SPECIAL_BEHIND)*travelProgress;
+ const angle=Number(p.angle)||0;
+ return {progress,travel,x:(Number(p.originX)||0)+Math.cos(angle)*travel,y:(Number(p.originY)||0)+Math.sin(angle)*travel};
+}
+
+function startBrownWarriorAttack(e,kind,target){
+ if(!e?.alive||e.type!=='brownWarrior'||e.pendingBrownAttack||e.attackCooldown>0||e.knockTime>0||!brownAttackAssetsReady)return false;
+ if(!isRealCombatTarget(target)||target===e||target.team===e.team||!canEngageTarget(e,target))return false;
+ const d=dist(e,target);
+ if(kind==='special'){if(d>132)return false}else if(d>108)return false;
+ const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
+ e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
+ e.moving=false;e.lastAttackAt=now;e.lastCombatAt=now;
+ e.brownAttackKind=kind;e.brownAttackSerial=(Number(e.brownAttackSerial)||0)+1;
+ const duration=kind==='special'?BROWN_SPECIAL_DURATION:BROWN_NORMAL_DURATION;
+ e.attackCooldown=duration/1000+.12;
+ if(kind==='special'){
+   e.pendingBrownAttack={kind,serial:e.brownAttackSerial,targetId:target.id,originX:e.x,originY:e.y,angle,
+     length:BROWN_SPECIAL_LENGTH,duration,startedAt:now,nextTickAt:now+BROWN_SPECIAL_TICK_MS,endAt:now+duration};
+   addWarGoalProgress(e.team,'specials');
+ }else{
+   const hit1Delay=Math.min(duration-260,Math.max(280,duration*.32));
+   const hit2Delay=Math.min(duration-120,Math.max(hit1Delay+180,duration*.62));
+   e.pendingBrownAttack={kind,serial:e.brownAttackSerial,targetId:target.id,originX:e.x,originY:e.y,angle,duration,startedAt:now,
+     hit1At:now+hit1Delay,hit2At:now+hit2Delay,endAt:now+duration,hit1Done:false,hit2Done:false};
+ }
+ return true;
+}
+
+function brownNormalHit(e,p,amount,which){
+ if(p[which])return;
+ p[which]=true;
+ if(!e.alive)return;
+ const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
+ if(!target?.alive||target===e||target.team===e.team||!canEngageTarget(e,target))return;
+ const dx=target.x-e.x,dy=target.y-e.y;
+ if(dx*dx+dy*dy>128*128)return;
+ applyCombatHit(target,e,amount,{knockForce:which==='hit1Done'?255:180,knockTime:which==='hit1Done'?.14:.10,tilt:which==='hit1Done'?9:7});
+}
+
+function applyBrownSpecialTick(e,p,at){
+ if(!e.alive)return;
+ const pos=brownPowerPosition(p,at),angle=Number(p.angle)||0;
+ const behindX=(Number(p.originX)||e.x)-Math.cos(angle)*BROWN_SPECIAL_BEHIND;
+ const behindY=(Number(p.originY)||e.y)-Math.sin(angle)*BROWN_SPECIAL_BEHIND;
+ const pad=BROWN_SPECIAL_HALF_WIDTH+42;
+ const minX=Math.min(behindX,pos.x)-pad,maxX=Math.max(behindX,pos.x)+pad;
+ const minY=Math.min(behindY,pos.y)-pad,maxY=Math.max(behindY,pos.y)+pad;
+ forEachWarSpatialCandidate(minX,minY,maxX,maxY,target=>{
+   if(!isRealCombatTarget(target)||target===e||target.team===e.team)return;
+   const body=Math.min(22,(target.r||25)*.62);
+   const cdx=target.x-pos.x,cdy=target.y-pos.y;
+   const nearCurrent=cdx*cdx+cdy*cdy<=Math.pow(BROWN_SPECIAL_HALF_WIDTH+body+12,2);
+   const inTrail=distanceToSegment(target.x,target.y,behindX,behindY,pos.x,pos.y)<=BROWN_SPECIAL_HALF_WIDTH+body;
+   if(nearCurrent||inTrail)applyCombatHit(target,e,BROWN_SPECIAL_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:true});
+ });
+}
+
+function updateBrownWarriorAttackState(e,now){
+ const p=e.pendingBrownAttack;if(!p)return;
+ e.moving=false;
+ if(p.kind==='normal'){
+   if(!p.hit1Done&&now>=Number(p.hit1At||Infinity))brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_1,'hit1Done');
+   if(!p.hit2Done&&now>=Number(p.hit2At||Infinity))brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_2,'hit2Done');
+ }else{
+   let guard=0;
+   while(now>=Number(p.nextTickAt||Infinity)&&Number(p.nextTickAt)<=Number(p.endAt)&&guard<5){
+     applyBrownSpecialTick(e,p,Number(p.nextTickAt));
+     p.nextTickAt+=BROWN_SPECIAL_TICK_MS;guard++;
+   }
+ }
+ if(now>=Number(p.endAt||0)){
+   if(p.kind==='normal')e.brownNormalCount=Math.min(6,(Number(e.brownNormalCount)||0)+1);
+   else e.brownNormalCount=0;
+   e.pendingBrownAttack=null;e.brownAttackKind=null;e.target=null;
+ }
+}
+
 function distanceToSegment(px,py,ax,ay,bx,by){
  const vx=bx-ax,vy=by-ay,den=vx*vx+vy*vy;
  const u=den?clamp(((px-ax)*vx+(py-ay)*vy)/den,0,1):0;
@@ -4448,7 +4636,7 @@ function updateKingSpecialState(e,now){
 }
 
 function performAttack(e,preparedCandidates=null){
- if(e.type==='golem'||e.type==='mage')return;
+ if(e.type==='golem'||e.type==='mage'||e.type==='brownWarrior')return;
  if(!e.alive||e.attackCooldown>0||e.knockTime>0||e.pendingKingSpecial)return;
  if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6){startKingSpecial(e);return}
  const now=performance.now();
@@ -4723,9 +4911,10 @@ function addWarDamageProgress(teamId,amount){
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
- else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-king')buyKingForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
+ else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);if(type==='buy-king')buyKingForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
+$('#buyBrownWarrior').onclick=()=>requestWarPurchase('buy-brown-warrior');
 $('#buyKing').onclick=()=>requestWarPurchase('buy-king');
 $('#buyGolem').onclick=()=>requestWarPurchase('buy-golem');
 $('#buyMage').onclick=()=>requestWarPurchase('buy-mage');
@@ -4743,6 +4932,13 @@ function buyForPlayer(p,bot){
 
  // Próxima compra usa a outra aparência.
  p.nextWarriorVariant=variant==='male'?'female':'male';
+ return true;
+}
+function buyBrownWarriorForPlayer(p,bot){
+ const cost=WAR_UNIT_COSTS.brownWarrior;if(p.gems<cost)return false;
+ p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*88;
+ spawnBrownWarrior(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
 }
 function buyKingForPlayer(p,bot){
@@ -4777,7 +4973,7 @@ function buyDragonForPlayer(p,bot){
 
 
 function warCompositionForTeam(teamId){
- const out={warrior:0,king:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0};
  for(const e of state.entities){
    if(!e.alive||e.team!==teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -4785,7 +4981,7 @@ function warCompositionForTeam(teamId){
  return out;
 }
 function enemyWarComposition(teamId){
- const out={warrior:0,king:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0};
  for(const e of state.entities){
    if(!e.alive||e.team===teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -4795,6 +4991,7 @@ function enemyWarComposition(teamId){
 function affordableBotWarTypes(p){
  const types=[];
  if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
+ if(p.gems>=WAR_UNIT_COSTS.brownWarrior)types.push('brownWarrior');
  if(p.gems>=WAR_UNIT_COSTS.king)types.push('king');
  if(p.gems>=WAR_UNIT_COSTS.golem)types.push('golem');
  if(p.gems>=WAR_UNIT_COSTS.dragon)types.push('dragon');
@@ -4805,7 +5002,7 @@ function chooseBotWarPurchase(p){
  const affordable=affordableBotWarTypes(p);
  if(!affordable.length)return null;
  const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
- const enemyTotal=enemy.warrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon;
+ const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon;
  const opening=(Number(p.botWarPurchases)||0)<2;
 
  // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
@@ -4814,17 +5011,18 @@ function chooseBotWarPurchase(p){
    return affordable[Math.floor(Math.random()*affordable.length)];
  }
 
- const score={warrior:1,king:1,mage:1,golem:1,dragon:1};
+ const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1};
  // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
  // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
+ score.brownWarrior+=enemy.warrior*.75+enemy.brownWarrior*.55+enemy.king*.70+enemy.mage*1.20+enemy.golem*.45;
  score.king+=enemy.warrior*.75+enemy.king*.55+enemy.mage*1.25+enemy.golem*.35;
  score.golem+=(enemy.warrior+enemy.king)*1.65+enemy.mage*.35+enemy.dragon*.45;
  score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55;
  score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
- if(enemy.dragon>0){score.warrior*=.10;score.king*=.10}
+ if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10}
 
  // Pequeno redutor por repetição mantém composição variada, sem transformar
  // a escolha adaptativa numa regra rígida e previsível.
@@ -4838,6 +5036,7 @@ function chooseBotWarPurchase(p){
  return bestType;
 }
 function buyBotWarType(p,type){
+ if(type==='brownWarrior')return buyBrownWarriorForPlayer(p,true);
  if(type==='king')return buyKingForPlayer(p,true);
  if(type==='dragon')return buyDragonForPlayer(p,true);
  if(type==='golem')return buyGolemForPlayer(p,true);
@@ -4999,7 +5198,7 @@ function updateWar(dt){
    }
 
    for(const e of living){
-     const avoidDragons=(e.type==='warrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
+     const avoidDragons=(e.type==='warrior'||e.type==='brownWarrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
      aiFight(e,dt,null,warCandidatesFor(e,warCombatGrid,avoidDragons,now));
    }
    state.timeLeft-=dt;
@@ -5324,7 +5523,29 @@ function beginDragonTakeoff(e){
 }
 
 
+function aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates=null){
+ if(!e.alive||e.knockTime>0){e.moving=false;return}
+ if(e.pendingBrownAttack){e.moving=false;return}
+ const candidates=preparedCandidates||state.entities;
+ const target=nearestEngageableCandidate(e,candidates,forcedTeam,false);
+ if(!target){e.moving=false;e.target=null;return}
+ e.target=target;
+ const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
+ e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
+ if((Number(e.brownNormalCount)||0)>=6){
+   if(d<=125&&startBrownWarriorAttack(e,'special',target))return;
+   if(d>125){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}else e.moving=false;
+ }else if(d<=92){
+   if(startBrownWarriorAttack(e,'normal',target))return;
+   e.moving=false;
+ }else{
+   e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true;
+ }
+ e.x=clamp(e.x,35,state.world.w-35);e.y=clamp(e.y,35,state.world.h-35);
+}
+
 function aiFight(e,dt,forcedTeam,preparedCandidates=null){
+ if(e.type==='brownWarrior'){aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='golem'){aiFightGolem(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
@@ -5552,7 +5773,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
-const buyWarriorPerfEl=$('#buyWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
+const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
 function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
@@ -5648,6 +5869,9 @@ function updateEntities(dt){
    // Mantém o relógio de impacto do Golem mesmo se o frame da IA variar.
    if(e.type==='golem' && e.pendingGolemAttack){
      updateGolemAttackState(e,now);
+   }
+   if(e.type==='brownWarrior' && e.pendingBrownAttack){
+     updateBrownWarriorAttackState(e,now);
    }
    if(e.type==='mage' && e.pendingMageAttack){
      updateMageAttackState(e,now);
@@ -5803,6 +6027,7 @@ function draw(){
  syncWarArenaOverlay(left,top,zoom);
  const domCamera=prepareCameraComposite(left,top,zoom);
  syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncMagePowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
@@ -5879,6 +6104,7 @@ function prepareCameraComposite(left,top,zoom){
 }
 const entityNodes=new Map();
 const magePowerNodes=new Map();
+const brownPowerNodes=new Map();
 const kingPowerNodes=new Map();
 const dragonProjectileNodes=new Map();
 const dragonProjectilePool=[];
@@ -5889,6 +6115,7 @@ const renderVisibleIds=new Set();
 const renderPresentIds=new Set();
 const renderPresentMap=new Map();
 const magePowerActiveIds=new Set();
+const brownPowerActiveIds=new Set();
 const kingPowerActiveIds=new Set();
 const golemRockPool=[];
 const MAX_GOLEM_ROCK_POOL=96;
@@ -5927,6 +6154,40 @@ function recycleDragonProjectileNode(img){
    stopGif(img);
    img.remove();
  }
+}
+
+function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+ const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=performance.now();
+ for(const e of state.entities){
+   const p=e.pendingBrownAttack;
+   if(!e.alive||e.type!=='brownWarrior'||!p||p.kind!=='special'||Number(p.endAt||0)<=now)continue;
+   const angle=Number(p.angle)||0,ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
+   const ex=ox+Math.cos(angle)*(Number(p.length)||BROWN_SPECIAL_LENGTH),ey=oy+Math.sin(angle)*(Number(p.length)||BROWN_SPECIAL_LENGTH);
+   const bx=ox-Math.cos(angle)*BROWN_SPECIAL_BEHIND,by=oy-Math.sin(angle)*BROWN_SPECIAL_BEHIND;
+   const pad=130*cullZoom;
+   const sx1=(bx-cullLeft)*cullZoom,sy1=(by-cullTop)*cullZoom,sx2=(ex-cullLeft)*cullZoom,sy2=(ey-cullTop)*cullZoom;
+   const visible=Math.max(sx1,sx2)+pad>=-40&&Math.min(sx1,sx2)-pad<=screenW+40&&Math.max(sy1,sy2)+pad>=-40&&Math.min(sy1,sy2)-pad<=screenH+40;
+   if(!visible){
+     const old=brownPowerNodes.get(e.id);
+     if(old&&(cameraComposite.active||now-Number(old._lastEffectVisibleAt||0)<CAMERA_EFFECT_RETENTION_MS)){active.add(e.id);old.style.visibility='hidden';continue}
+     if(old){releaseGifObjectUrl(old);old.remove();brownPowerNodes.delete(e.id)}
+     continue;
+   }
+   active.add(e.id);
+   let img=brownPowerNodes.get(e.id);
+   if(!img){img=document.createElement('img');img.className='brown-warrior-power';img.draggable=false;img.dataset.serial='-1';layer.appendChild(img);brownPowerNodes.set(e.id,img)}
+   img._lastEffectVisibleAt=now;
+   const serial=String(p.serial||e.brownAttackSerial||0);
+   if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,'brownPower',serial)}
+   const pos=brownPowerPosition(p,now),progress=pos.progress;
+   const alpha=Math.min(clamp(progress/.15,0,1),clamp((1-progress)/.22,0,1));
+   const sx=(pos.x-left)*zoom,sy=(pos.y-top)*zoom;
+   img.style.left=sx+'px';img.style.top=sy+'px';img.style.width=(190*zoom)+'px';img.style.height=(115*zoom)+'px';
+   img.style.opacity=String(alpha);img.style.visibility=alpha>.01?'visible':'hidden';
+   img.style.transform=`translate(-50%,-50%) rotate(${angle}rad)`;
+   img.style.zIndex=String(Math.max(1,70+Math.round(sy)));
+ }
+ for(const [id,img] of brownPowerNodes)if(!active.has(id)){releaseGifObjectUrl(img);img.remove();brownPowerNodes.delete(id)}
 }
 
 function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
@@ -6090,7 +6351,21 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  const el=document.createElement('div');
  el.className='entity-visual';
 
- if(e.type==='golem'){
+ if(e.type==='brownWarrior'){
+   el.classList.add('brown-warrior-visual');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="brownIdle" src="${ASSETS.brownIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="brownWalk" src="${ASSETS.brownWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-brown-attack" data-asset-key="brownAttack" draggable="false" style="opacity:0">
+       <img class="entity-body entity-brown-special" data-asset-key="brownSpecial" draggable="false" style="opacity:0">
+     </div>
+     <div class="entity-weapon-facing"></div>
+     <div class="entity-bars">
+       <div class="hp-bg"><div class="hp-fill"></div></div>
+       <div class="shield-bg"><div class="shield-fill"></div></div>
+     </div>`;
+ }else if(e.type==='golem'){
    el.classList.add('golem-visual');
    el.innerHTML=`
      <div class="entity-facing">
@@ -6176,6 +6451,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._walk=el.querySelector('.entity-walk');
  el._sword=el.querySelector('.entity-sword');
  el._slash=el.querySelector('.entity-slash');
+ el._brownAttack=el.querySelector('.entity-brown-attack');
+ el._brownSpecial=el.querySelector('.entity-brown-special');
  el._golemAttack=el.querySelector('.entity-golem-attack');
  el._golemSpecial=el.querySelector('.entity-golem-special');
  el._mageSpecial=el.querySelector('.entity-mage-special');
@@ -6194,13 +6471,15 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el.dataset.attackSerial='-1';
  el.dataset.golemAttackSerial='-1';
  el.dataset.golemRockSerial='-1';
+ el.dataset.brownAttackSerial='-1';
  el.dataset.mageAttackSerial='-1';
  el.dataset.kingSpecialSerial='-1';
  el.dataset.dragonTakeoffSerial='-1';
  el.dataset.dragonAttackSerial='-1';
  // Chaves dos GIFs visíveis por estado. Quando o estado muda, reiniciamos o
  // GIF que está entrando para ele aparecer desde o quadro 0.
- if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
+ if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
+ else if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
  else if(e.type==='mage')el._gifKeys={idle:e.variant==='female'?'femaleMageIdle':'mageIdle',walk:e.variant==='female'?'femaleMageWalk':'mageWalk',special:e.variant==='female'?'femaleMageSpecial':'mageSpecial'};
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
@@ -6214,7 +6493,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._golemAttack,el._golemSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -6226,8 +6505,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        const currentKey=img.dataset.assetKey||Object.keys(ASSETS).find(k=>ASSETS[k]===currentSrc.split('?')[0]);
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
-       const transientState=img===el._golemAttack?'attack':
-         (img===el._golemSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
+       const transientState=(img===el._golemAttack||img===el._brownAttack)?'attack':
+         (img===el._golemSpecial||img===el._brownSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
@@ -6256,8 +6535,8 @@ function entitySpriteForState(el,stateName){
  if(stateName==='walk')return el._walk;
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
- if(stateName==='attack')return el._golemAttack;
- if(stateName==='special')return el._golemSpecial||el._mageSpecial||el._kingSpecial;
+ if(stateName==='attack')return el._brownAttack||el._golemAttack;
+ if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._mageSpecial||el._kingSpecial;
  if(stateName==='takeoff')return el._dragonTakeoff;
  if(stateName==='dragonAttack')return el._dragonAttack;
  return null;
@@ -6314,8 +6593,8 @@ function suspendEntityLoopGif(el){
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
  const sprites=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._golemAttack,'attack'],
-   [el._golemSpecial,'special'],[el._mageSpecial,'special'],
+   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],
+   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._mageSpecial,'special'],
    [el._kingSpecial,'special'],
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
@@ -6359,8 +6638,9 @@ function setEntitySpriteState(el,desired){
    if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired) scheduleEntityLoopGifSuspend(el,previous);
 
    // Ataques fechados continuam usando a lógica original de restart por serial.
-   if(previous==='attack'&&desired!=='attack')stopGif(el._golemAttack);
+   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack)}
    if(previous==='special'&&desired!=='special'){
+     stopGif(el._brownSpecial);
      stopGif(el._golemSpecial);
      stopGif(el._mageSpecial);
      stopGif(el._kingSpecial);
@@ -6438,7 +6718,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    if(!onScreen){
      setEntityNodeVisible(el,false);
      // Se um ataque terminou fora da câmera, encerra também sua decodificação.
-     if(e.type==='golem'&&!activeGolemPending(e,localNow)&&
+     if(e.type==='brownWarrior'&&!(e.pendingBrownAttack&&e.pendingBrownAttack.endAt>localNow)&&
+        (el.dataset.anim==='attack'||el.dataset.anim==='special')){
+       setEntitySpriteState(el,e.moving?'walk':'idle');
+     }else if(e.type==='golem'&&!activeGolemPending(e,localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='special')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
      }else if(e.type==='mage'&&el.dataset.anim==='special'&&
@@ -6484,7 +6767,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='brownWarrior'?1.04:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
@@ -6545,7 +6828,20 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }
    }
 
-   if(e.type==='golem'){
+   if(e.type==='brownWarrior'){
+     const p=e.pendingBrownAttack;
+     const active=!!p&&Number(p.endAt)>localNow;
+     const kind=active?p.kind:null;
+     const specialBody=kind==='special'&&localNow<(Number(p.startedAt)||localNow)+Math.max(250,BROWN_SPECIAL_BODY_DURATION-45);
+     const desired=specialBody?'special':kind==='normal'?'attack':visualMoving?'walk':'idle';
+     setEntitySpriteState(el,desired);
+     const serial=Number(p?.serial||e.brownAttackSerial)||0;
+     if(active&&serial>0&&el.dataset.brownAttackSerial!==String(serial)){
+       el.dataset.brownAttackSerial=String(serial);
+       if(kind==='special'&&specialBody)restartGif(el._brownSpecial,'brownSpecial',serial);
+       else if(kind==='normal')restartGif(el._brownAttack,'brownAttack',serial);
+     }
+   }else if(e.type==='golem'){
      const pending=activeGolemPending(e,localNow);
      const pendingSerial=pending?Number(pending.serial||0):0;
 
@@ -6683,7 +6979,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      setEntityNodeVisible(el,false);
      scheduleEntityOffscreenSuspend(el);
      const entity=presentMap.get(id);
-     const transient=entity && (entity.deathStarted||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
+     const transient=entity && (entity.deathStarted||entity.pendingBrownAttack||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
      if(entity && !transient && localNow-lastSeen>ENTITY_NODE_RETENTION_MS){
        clearEntityOffscreenSuspend(el);
@@ -6702,6 +6998,7 @@ function clearEntityVisuals(){
    el.querySelectorAll('img').forEach(releaseGifObjectUrl);
  }
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
+ for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of dragonProjectileNodes.values()){
    if(img._poolGifSuspendTimer)clearTimeout(img._poolGifSuspendTimer);
@@ -6717,6 +7014,7 @@ function clearEntityVisuals(){
  resetCameraComposite();
  state.golemRockEffects=[];
  magePowerNodes.clear();
+ brownPowerNodes.clear();
  kingPowerNodes.clear();
  dragonProjectileNodes.clear();
  dragonProjectilePool.length=0;
@@ -6743,6 +7041,7 @@ function updateHUD(){
     perfSetText(timerPerfEl,state.phase==='prep'?fmt(state.prepLeft):fmt(state.timeLeft));
     perfSetText(aliveCountPerfEl,'');
     perfSetDisabled(buyWarriorPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.warrior);
+    perfSetDisabled(buyBrownWarriorPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.brownWarrior);
     perfSetDisabled(buyKingPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.king);
     perfSetDisabled(buyGolemPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.golem);
     perfSetDisabled(buyMagePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.mage);
