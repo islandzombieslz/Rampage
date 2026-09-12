@@ -68,16 +68,17 @@ async function registerAssetServiceWorker(){
  if(!('serviceWorker' in navigator))return;
  try{await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'})}catch(_){}
 }
-async function bootFetchAndStore(url,revision,cache){
- const requestUrl=bootRevisionUrl(url,revision);
+async function bootFetchAndStore(url,revision,cache,preferExisting=false){
+ const requestUrl=preferExisting?url:bootRevisionUrl(url,revision);
  const absolute=new URL(url,location.href);
  const sameOrigin=absolute.origin===location.origin;
+ const cacheMode=preferExisting?'force-cache':'reload';
  for(let attempt=0;attempt<2;attempt++){
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
    try{
      const options=sameOrigin
-       ? {cache:'reload',credentials:'same-origin',signal:controller.signal}
-       : {cache:'reload',mode:'no-cors',credentials:'omit',signal:controller.signal};
+       ? {cache:cacheMode,credentials:'same-origin',signal:controller.signal}
+       : {cache:cacheMode,mode:'no-cors',credentials:'omit',signal:controller.signal};
      const response=await fetch(requestUrl,options);
      if(!response||(response.type!=='opaque'&&!response.ok))throw Error('asset fetch failed');
      if(cache){
@@ -103,6 +104,7 @@ async function runBootLoader(){
  NetworkAdapter.ensureAuth().catch(()=>{});
  const entries=Object.entries(BOOT_ASSET_MANIFEST);
  const previous=bootReadSavedManifest();
+ const migrating=Object.keys(previous).length===0;
  const cache=await bootOpenCache();
  const ready={};
  let completed=0,failed=0;
@@ -121,13 +123,15 @@ async function runBootLoader(){
  setBootProgress(completed/total*100);
 
  if(pending.length){
-   setBootTitle(pending.length===entries.length?'BAIXANDO ARQUIVOS':`ATUALIZANDO ${pending.length} ARQUIVO${pending.length===1?'':'S'}`);
+   setBootTitle(migrating?'PREPARANDO CACHE':`ATUALIZANDO ${pending.length} ARQUIVO${pending.length===1?'':'S'}`);
    let next=0;
    const worker=async()=>{
      while(true){
        const i=next++;if(i>=pending.length)return;
        const [url,revision]=pending[i];
-       const ok=await bootFetchAndStore(url,revision,cache);
+       // Na migração inicial, tenta aproveitar o cache HTTP já existente no navegador.
+       // Em atualizações futuras, usa URL revisionada e força rede apenas para o arquivo alterado.
+       const ok=await bootFetchAndStore(url,revision,cache,migrating);
        if(ok)ready[url]=revision;else failed++;
        completed++;setBootProgress(completed/total*100);
      }
