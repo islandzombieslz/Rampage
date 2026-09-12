@@ -52,7 +52,7 @@ rep(
 )
 
 rep(
-    "const typeScale=e.type==='golem'?1.34:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;",
+    "const typeScale=e.type==='golem'?1.34:e.type==='brownWarrior'?1.04:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;",
     "const typeScale=e.type==='golem'?1.34:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;",
     'brown visual scale'
 )
