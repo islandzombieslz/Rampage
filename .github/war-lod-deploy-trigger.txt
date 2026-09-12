@@ -1,1 +1,1 @@
-Deploy marker for adaptive clan-war visual LOD, 2026-09-12.
+Deploy marker for adaptive clan-war visual LOD with persistent posters, 2026-09-12.
