@@ -1,0 +1,58 @@
+name: Adaptive war visual LOD
+on:
+  push:
+    paths:
+      - '.github/workflows/war-visual-lod.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refresh branch
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+      - name: Apply adaptive visual LOD
+        run: python .github/patch_war_visual_lod.py
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script([^>]*)>(.*?)</script>',s,re.S|re.I)
+          for i,(attrs,code) in enumerate(blocks):
+              ext='.mjs' if 'type="module"' in attrs or "type='module'" in attrs else '.js'
+              Path(f'/tmp/rampage-script-{i}{ext}').write_text(code,encoding='utf-8')
+          print('scripts',len(blocks))
+          PY
+          for f in /tmp/rampage-script-*; do node --check "$f"; done
+      - name: Validate LOD and preserved systems
+        run: |
+          grep -q 'WAR VISUAL LOD ACTIVE 2026-09-12' index.html
+          grep -q 'const WAR_LOD_MEDIUM_COUNT=8;' index.html
+          grep -q 'const WAR_LOD_HEAVY_COUNT=13;' index.html
+          grep -q 'WAR_LOD_POSTER_MAX_SIDE=128' index.html
+          grep -q 'const count=warVisualLodLevel>=2?6:warVisualLodLevel===1?10:16;' index.html
+          grep -q 'war-lod-heavy .entity-bars' index.html
+          grep -q 'WAR CAMERA COMPOSITOR 2026-09-09' index.html
+          grep -q 'PERSISTENT ASSET CACHE 2026-09-12' index.html
+          grep -q 'BROWN WARRIOR SYSTEM 2026-09-12' index.html
+          grep -q 'entity-visual.brown-warrior-visual .entity-body{left:0;top:0;' index.html
+          ! grep -q 'golemCrowdSpecialUsed' index.html
+      - name: Publish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No index changes to publish'
+          else
+            git commit -m 'Add adaptive visual LOD for large clan wars'
+            git push origin HEAD:main
+          fi
