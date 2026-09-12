@@ -1,0 +1,89 @@
+name: Brown Warrior tuning
+
+on:
+  push:
+    paths:
+      - '.github/patch_brown_warrior_tuning.py'
+      - '.github/workflows/brown-warrior-tuning.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Brown Warrior tuning
+        run: python .github/patch_brown_warrior_tuning.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts, 'No inline script found'
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate tuning and preserved systems
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'BROWN WARRIOR SYSTEM 2026-09-12',
+            'BROWN WARRIOR TUNING 2026-09-12',
+            'const BROWN_SPECIAL_DAMAGE=25;',
+            'BROWN_SPECIAL_DURATION=BROWN_POWER_DURATION;',
+            'const moveProgress=clamp(progress/.65,0,1);',
+            'const flipX=Math.cos(angle)<0;',
+            'const visualAngle=flipX?angle+Math.PI:angle;',
+            'scaleX(${flipX?-1:1})',
+            "e.type==='brownWarrior'?1.10",
+            'setTimeout(()=>{brownAttackAssetsReady=true},12000);',
+            'e.hp=e.maxHp=250;',
+            'e.shield=e.maxShield=150;',
+            'const BROWN_NORMAL_DAMAGE_1=40;',
+            'const BROWN_NORMAL_DAMAGE_2=25;',
+            'const BROWN_SPECIAL_TICK_MS=500;',
+            "if((Number(e.brownNormalCount)||0)>=6){",
+            "brownWarrior:450",
+            'ROOM LIFECYCLE 2026-09-09',
+            'WAR CAMERA COMPOSITOR 2026-09-09',
+            'GIF SWITCH STABILITY 2026-09-08',
+            'WAR FPS SWEEP 2026-09-09',
+            "const WAR_ARENA_INSET={left:270,right:270,top:275,bottom:245};",
+          ]
+          missing=[x for x in required if x not in t]
+          assert not missing, 'Missing tuning/preserved markers: '+repr(missing)
+          forbidden=[
+            'const BROWN_SPECIAL_DAMAGE=15;',
+            'BROWN_SPECIAL_DURATION=Math.max(BROWN_SPECIAL_BODY_DURATION,BROWN_POWER_DURATION);',
+            'setTimeout(()=>{brownAttackAssetsReady=true},3500);',
+          ]
+          present=[x for x in forbidden if x in t]
+          assert not present, 'Old Brown Warrior tuning remains: '+repr(present)
+          assert t.count('https://i.postimg.cc/')==2, 'External arena asset count changed'
+          print('Brown Warrior tuning validation passed.')
+          PY
+
+      - name: Publish Brown Warrior tuning
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No generated tuning changes needed.'
+            exit 0
+          fi
+          git commit -m 'Tune Brown Warrior special and scale'
+          git push
