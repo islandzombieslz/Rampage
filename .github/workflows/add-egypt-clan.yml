@@ -1,0 +1,102 @@
+name: Add Egypt clan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/add_egypt_clan.py'
+      - '.github/workflows/add-egypt-clan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-add-egypt-clan
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: |
+          git pull --rebase origin main
+
+      - name: Apply Egypt clan
+        run: python .github/add_egypt_clan.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Egypt clan isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '/* EGYPT CLAN SYSTEM 2026-09-13 */',
+            'data-clan="warriors"','data-clan="egypt"',
+            'data-clan-shop="warriors"','data-clan-shop="egypt"',
+            'buyEgyptWarrior','buyEgyptMage',
+            'https://i.postimg.cc/Bbn4PbZ7/card-selecao-de-escolha.png',
+            'https://i.postimg.cc/N0sJcHdp/guerreiro-egitado-parado.gif',
+            'https://i.postimg.cc/FKrW4LTM/guerreiro-egito-andando.gif',
+            'https://i.postimg.cc/R0SsBHgG/guerreira-egito-parada.gif',
+            'https://i.postimg.cc/tgqSjxBr/guerreira-egito-andando.gif',
+            'https://i.postimg.cc/7LHsk2KN/espada-guerreiro-egpcios.png',
+            'https://i.postimg.cc/fbz2N98d/card-guerreiros-egito.png',
+            'https://i.postimg.cc/SKgZNx5J/card-magos-egito.png',
+            'https://i.postimg.cc/9XnvYJLX/mao-atras-mago-egito.gif',
+            'https://i.postimg.cc/HxKBXPTC/mao-magos-egpcios.png',
+            'https://i.postimg.cc/hj4HpYkN/poder-normal-mago-egito.gif',
+            'https://i.postimg.cc/KcHdDJJq/poder-especial-mago-egito.gif',
+            'https://i.postimg.cc/PJwK4z5c/mago-egito-parado.gif',
+            'https://i.postimg.cc/gJ5N8Bm7/mago-egito-andando.gif',
+            'https://i.postimg.cc/SRMVr7x3/mago-egito-especial.gif',
+            'https://i.postimg.cc/vBj3fSbL/maga-egito-parada.gif',
+            'https://i.postimg.cc/76cm0QwB/maga-egito-andando.gif',
+            'https://i.postimg.cc/Ss5DCtk5/maga-egito-especial.gif',
+            'spawnEgyptMageWarriors','countLivingEgyptSummons',
+            "summonsAlive<=1&&(lowHealth||cycleDue)",
+            "spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true)",
+            "if(clan==='warriors'&&cmd.type==='buy-warrior')",
+            "if(clan==='egypt'&&cmd.type==='buy-egypt-warrior')",
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing: '+repr(missing))
+          forbidden=['WAR ADAPTIVE VISUAL LOD 2026-09-12','entity-lod-poster','WAR_LOD_POSTER_CACHE']
+          bad=[x for x in forbidden if x in t]
+          if bad:
+              raise SystemExit('Reverted LOD code reintroduced: '+repr(bad))
+          print('Egypt clan validation passed')
+          PY
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Add Egypt clan and summoned warrior mage special'
+          git push origin main
