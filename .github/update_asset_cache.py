@@ -45,7 +45,7 @@ loader = r'''/* PERSISTENT ASSET CACHE 2026-09-12 */
 const BOOT_ASSET_MANIFEST=Object.freeze(''' + manifest_json + r''');
 const BOOT_CACHE_NAME=''' + json.dumps(CACHE_NAME) + r''';
 const BOOT_MANIFEST_KEY=''' + json.dumps(MANIFEST_KEY) + r''';
-const BOOT_FETCH_CONCURRENCY=8;
+const BOOT_FETCH_CONCURRENCY=10;
 function setBootProgress(value){
  const pct=Math.max(0,Math.min(100,Math.round(value)));
  const text=document.getElementById('bootLoaderPercent'),bar=document.getElementById('bootLoaderBar');
