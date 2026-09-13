@@ -8,6 +8,7 @@ on:
       - 'assets/**'
       - '.github/update_asset_cache.py'
       - '.github/workflows/asset-cache.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
