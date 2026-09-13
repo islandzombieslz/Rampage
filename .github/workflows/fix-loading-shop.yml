@@ -1,0 +1,170 @@
+name: Fix loading and clan shop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_loading_shop.py'
+      - '.github/workflows/fix-loading-shop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-fix-loading-shop
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Download remaining Postimg assets into repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/egypt/ui assets/egypt/warrior assets/egypt/mage assets/arena
+          get(){
+            local url="$1" dest="$2"
+            echo "Downloading $dest"
+            curl -L --fail --retry 4 --retry-delay 2 --connect-timeout 15 --max-time 180 "$url" -o "$dest"
+            test -s "$dest"
+          }
+
+          get 'https://i.postimg.cc/Bbn4PbZ7/card-selecao-de-escolha.png' 'assets/egypt/ui/clan-card.png'
+          get 'https://i.postimg.cc/N0sJcHdp/guerreiro-egitado-parado.gif' 'assets/egypt/warrior/male-idle.gif'
+          get 'https://i.postimg.cc/FKrW4LTM/guerreiro-egito-andando.gif' 'assets/egypt/warrior/male-walk.gif'
+          get 'https://i.postimg.cc/R0SsBHgG/guerreira-egito-parada.gif' 'assets/egypt/warrior/female-idle.gif'
+          get 'https://i.postimg.cc/tgqSjxBr/guerreira-egito-andando.gif' 'assets/egypt/warrior/female-walk.gif'
+          get 'https://i.postimg.cc/7LHsk2KN/espada-guerreiro-egpcios.png' 'assets/egypt/warrior/sword.png'
+          get 'https://i.postimg.cc/fbz2N98d/card-guerreiros-egito.png' 'assets/egypt/warrior/card.png'
+
+          get 'https://i.postimg.cc/SKgZNx5J/card-magos-egito.png' 'assets/egypt/mage/card.png'
+          get 'https://i.postimg.cc/9XnvYJLX/mao-atras-mago-egito.gif' 'assets/egypt/mage/staff.gif'
+          get 'https://i.postimg.cc/HxKBXPTC/mao-magos-egpcios.png' 'assets/egypt/mage/hand.png'
+          get 'https://i.postimg.cc/hj4HpYkN/poder-normal-mago-egito.gif' 'assets/egypt/mage/power-normal.gif'
+          get 'https://i.postimg.cc/KcHdDJJq/poder-especial-mago-egito.gif' 'assets/egypt/mage/power-special.gif'
+          get 'https://i.postimg.cc/PJwK4z5c/mago-egito-parado.gif' 'assets/egypt/mage/male-idle.gif'
+          get 'https://i.postimg.cc/gJ5N8Bm7/mago-egito-andando.gif' 'assets/egypt/mage/male-walk.gif'
+          get 'https://i.postimg.cc/SRMVr7x3/mago-egito-especial.gif' 'assets/egypt/mage/male-special.gif'
+          get 'https://i.postimg.cc/vBj3fSbL/maga-egito-parada.gif' 'assets/egypt/mage/female-idle.gif'
+          get 'https://i.postimg.cc/76cm0QwB/maga-egito-andando.gif' 'assets/egypt/mage/female-walk.gif'
+          get 'https://i.postimg.cc/Ss5DCtk5/maga-egito-especial.gif' 'assets/egypt/mage/female-special.gif'
+
+          get 'https://i.postimg.cc/6qYQzvPc/bff3bb67-8426-4656-bdee-1313473758e2.png' 'assets/arena/floor.png'
+          get 'https://i.postimg.cc/fywLxK8B/1919c5cb-ace6-4da5-b8f0-6db8bfb24c89.png' 'assets/arena/barrier.png'
+
+          echo 'Downloaded sizes:'
+          find assets/egypt assets/arena -type f -printf '%10s  %p\n' | sort -n
+          echo "Total before optimization: $(du -sb assets/egypt assets/arena | awk '{s+=$1} END{print s}') bytes"
+
+      - name: Losslessly optimize Egypt GIFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gifsicle
+          before=$(du -sb assets/egypt | awk '{print $1}')
+          while IFS= read -r -d '' file; do
+            tmp="${file}.opt.gif"
+            if timeout 120s gifsicle --careful -O3 "$file" -o "$tmp"; then
+              old=$(stat -c%s "$file")
+              new=$(stat -c%s "$tmp")
+              if [ "$new" -lt "$old" ]; then mv "$tmp" "$file"; else rm -f "$tmp"; fi
+            else
+              rm -f "$tmp"
+            fi
+          done < <(find assets/egypt -type f -name '*.gif' -print0)
+          after=$(du -sb assets/egypt | awk '{print $1}')
+          echo "Egypt assets: $before -> $after bytes"
+
+      - name: Replace runtime URLs and hard-isolate clan shops
+        run: python .github/fix_loading_shop.py
+
+      - name: Regenerate persistent asset cache
+        run: python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',text,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+          node --check sw.js
+
+      - name: Validate loading and clan isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          required=[
+            'assets/egypt/ui/clan-card.png',
+            'assets/egypt/warrior/male-idle.gif',
+            'assets/egypt/warrior/female-idle.gif',
+            'assets/egypt/warrior/sword.png',
+            'assets/egypt/warrior/card.png',
+            'assets/egypt/mage/card.png',
+            'assets/egypt/mage/staff.gif',
+            'assets/egypt/mage/hand.png',
+            'assets/egypt/mage/power-normal.gif',
+            'assets/egypt/mage/power-special.gif',
+            'assets/egypt/mage/male-special.gif',
+            'assets/egypt/mage/female-special.gif',
+            'assets/arena/floor.png','assets/arena/barrier.png',
+            "$('#shopButton').onclick=()=>{configureWarShopForClan();$('#shop').classList.toggle('open')};",
+            "group.style.display=visible?'grid':'none';",
+            'data-clan-shop="warriors"','data-clan-shop="egypt"',
+            'const BOOT_FETCH_CONCURRENCY=10;'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing expected fix markers: '+repr(missing))
+          if 'i.postimg.cc' in t: raise SystemExit('Runtime index still depends on Postimg')
+          if 'i.postimg.cc' in sw: raise SystemExit('Service worker still depends on Postimg')
+          if 'WAR ADAPTIVE VISUAL LOD 2026-09-12' in t: raise SystemExit('Cancelled static GIF LOD returned')
+          print('Loading and clan shop validation passed')
+          PY
+          for f in \
+            assets/egypt/ui/clan-card.png \
+            assets/egypt/warrior/male-idle.gif assets/egypt/warrior/male-walk.gif \
+            assets/egypt/warrior/female-idle.gif assets/egypt/warrior/female-walk.gif \
+            assets/egypt/warrior/sword.png assets/egypt/warrior/card.png \
+            assets/egypt/mage/card.png assets/egypt/mage/staff.gif assets/egypt/mage/hand.png \
+            assets/egypt/mage/power-normal.gif assets/egypt/mage/power-special.gif \
+            assets/egypt/mage/male-idle.gif assets/egypt/mage/male-walk.gif assets/egypt/mage/male-special.gif \
+            assets/egypt/mage/female-idle.gif assets/egypt/mage/female-walk.gif assets/egypt/mage/female-special.gif \
+            assets/arena/floor.png assets/arena/barrier.png; do
+              test -s "$f"
+          done
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt assets/arena .github/update_asset_cache.py .github/workflows/asset-cache.yml
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Host Egypt assets locally and isolate clan shops'
+          git push origin main
