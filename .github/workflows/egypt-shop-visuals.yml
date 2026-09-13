@@ -1,0 +1,81 @@
+name: Egypt shop and visual tuning
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/patch_egypt_shop_visuals.py'
+      - '.github/workflows/egypt-shop-visuals.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply shop and visual patch
+        run: python .github/patch_egypt_shop_visuals.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1], encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate clan shops and Egypt visual sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '#shop .clan-shop[hidden]',
+            '#shop .clan-shop[aria-hidden="true"]',
+            "group.style.setProperty('display',visible?'grid':'none','important');",
+            '.entity-visual.egypt-unit:not(.mage-visual) .entity-body',
+            '.entity-visual.egypt-unit:not(.mage-visual) .entity-sword',
+            '.entity-visual.mage-visual.egypt-unit .entity-body',
+            '.entity-visual.mage-visual.egypt-unit .mage-staff',
+            'id="buyEgyptWarrior"', 'id="buyEgyptMage"',
+            'data-clan-shop="warriors"', 'data-clan-shop="egypt"'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing expected markers: '+repr(missing))
+          if 'i.postimg.cc' in t: raise SystemExit('Runtime Postimg dependency returned')
+          if 'WAR ADAPTIVE VISUAL LOD 2026-09-12' in t: raise SystemExit('Cancelled static GIF LOD returned')
+          print('Egypt shop/visual validation passed')
+          PY
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Fix clan shop visibility and resize Egypt units'
+          git push origin main
