@@ -2329,6 +2329,52 @@ body.booting #landscapeRoot{visibility:hidden}
   #clanScreen #clanSelectionStatus{bottom:19.5% !important;font-size:7.5px !important}
 }
 
+
+/* EGYPT SHOP + VISUAL TUNING 2026-09-13 */
+/* A regra original #shop .shop-sprite-grid usa !important; esta regra
+   mais específica garante que o grupo do outro clã desapareça visualmente. */
+#shop .clan-shop[hidden],
+#shop .clan-shop[aria-hidden="true"]{
+  display:none !important;
+}
+
+/* Egito: apenas escala visual. Hitbox, alcance, velocidade e atributos não mudam. */
+.entity-visual.egypt-unit:not(.mage-visual) .entity-body{
+  width:96px;
+  height:113px;
+  left:-9px;
+  top:-10px;
+}
+/* A espada egípcia estava grande em relação ao corpo. Mantém o pivô perto
+   do mesmo ponto visual, mas reduz o sprite. */
+.entity-visual.egypt-unit:not(.mage-visual) .entity-sword{
+  width:22px;
+  height:64px;
+  left:28px;
+  top:8px;
+}
+
+/* Mago/Maga do Egito maiores sem alterar a caixa física da entidade. */
+.entity-visual.mage-visual.egypt-unit .entity-body{
+  width:108px;
+  height:128px;
+  left:-10px;
+  top:-12px;
+}
+.entity-visual.mage-visual.egypt-unit .entity-mage-special{
+  width:128px !important;
+  height:151px !important;
+  left:-20px !important;
+  top:-24px !important;
+}
+/* Cajado egípcio menor; animações/rotação continuam usando a mesma lógica. */
+.entity-visual.mage-visual.egypt-unit .mage-staff{
+  width:68px;
+  height:80px;
+  left:32px;
+  top:4px;
+}
+
 </style>
 
 <script type="module">
@@ -3854,7 +3900,7 @@ function configureWarShopForClan(){
  $$('.clan-shop').forEach(group=>{
    const visible=normalizeClan(group.dataset.clanShop)===clan;
    group.hidden=!visible;
-   group.style.display=visible?'grid':'none';
+   group.style.setProperty('display',visible?'grid':'none','important');
    group.setAttribute('aria-hidden',visible?'false':'true');
  });
 }
