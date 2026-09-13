@@ -3,7 +3,6 @@ import re
 
 INDEX = Path('index.html')
 GENERATOR = Path('.github/update_asset_cache.py')
-CACHE_WORKFLOW = Path('.github/workflows/asset-cache.yml')
 
 text = INDEX.read_text(encoding='utf-8')
 
@@ -87,10 +86,5 @@ INDEX.write_text(text, encoding='utf-8')
 g = GENERATOR.read_text(encoding='utf-8')
 g = g.replace("const BOOT_FETCH_CONCURRENCY=8;", "const BOOT_FETCH_CONCURRENCY=10;")
 GENERATOR.write_text(g, encoding='utf-8')
-
-# Keep the persistent-cache workflow validation aligned with the generator.
-w = CACHE_WORKFLOW.read_text(encoding='utf-8')
-w = w.replace("'const BOOT_FETCH_CONCURRENCY=8;'", "'const BOOT_FETCH_CONCURRENCY=10;'")
-CACHE_WORKFLOW.write_text(w, encoding='utf-8')
 
 print('Loading/Postimg/shop patch applied successfully')
