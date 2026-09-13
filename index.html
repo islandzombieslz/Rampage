@@ -4897,6 +4897,13 @@ function countLivingEgyptSummons(team){
  }
  return count;
 }
+function hasPendingEgyptSummonSpecial(team,excludeId=null){
+ for(const t of state.entities){
+   if(!t.alive||t.id===excludeId||t.team!==team||t.type!=='mage'||t.clan!=='egypt')continue;
+   if(t.pendingMageAttack?.kind==='special')return true;
+ }
+ return false;
+}
 function spawnEgyptMageWarriors(e,p){
  const ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
  const base=(Number(e.mageAttackSerial)||0)*.37;
@@ -5871,7 +5878,7 @@ function beginDragonTakeoff(e){
      // Porém a invocação só acontece quando restar no máximo 1 guerreiro invocado vivo.
      const cycleDue=(Number(e.mageCycle)||0)>=5;
      const summonsAlive=countLivingEgyptSummons(e.team);
-     if(e.specialCooldown<=0&&summonsAlive<=1&&(lowHealth||cycleDue)){
+     if(e.specialCooldown<=0&&summonsAlive<=1&&!hasPendingEgyptSummonSpecial(e.team,e.id)&&(lowHealth||cycleDue)){
        if(startMageAttack(e,'special',target))return;
      }
    }else{
