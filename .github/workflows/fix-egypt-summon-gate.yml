@@ -1,0 +1,78 @@
+name: Guard Egypt summon special
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-egypt-summon-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Refresh
+        run: git pull --rebase origin main
+      - name: Prevent simultaneous Egypt summon specials
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html');t=p.read_text(encoding='utf-8')
+          old="""function countLivingEgyptSummons(team){
+ let count=0;
+ for(const t of state.entities){
+   if(t.alive&&t.team===team&&t.type==='warrior'&&t.clan==='egypt'&&t.egyptSummoned)count++;
+ }
+ return count;
+}
+function spawnEgyptMageWarriors"""
+          new="""function countLivingEgyptSummons(team){
+ let count=0;
+ for(const t of state.entities){
+   if(t.alive&&t.team===team&&t.type==='warrior'&&t.clan==='egypt'&&t.egyptSummoned)count++;
+ }
+ return count;
+}
+function hasPendingEgyptSummonSpecial(team,excludeId=null){
+ for(const t of state.entities){
+   if(!t.alive||t.id===excludeId||t.team!==team||t.type!=='mage'||t.clan!=='egypt')continue;
+   if(t.pendingMageAttack?.kind==='special')return true;
+ }
+ return false;
+}
+function spawnEgyptMageWarriors"""
+          if old not in t: raise SystemExit('summon helper anchor missing')
+          t=t.replace(old,new,1)
+          old2="if(e.specialCooldown<=0&&summonsAlive<=1&&(lowHealth||cycleDue)){"
+          new2="if(e.specialCooldown<=0&&summonsAlive<=1&&!hasPendingEgyptSummonSpecial(e.team,e.id)&&(lowHealth||cycleDue)){"
+          if old2 not in t: raise SystemExit('special gate anchor missing')
+          t=t.replace(old2,new2,1)
+          p.write_text(t,encoding='utf-8')
+          PY
+      - name: Check syntax and rules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          assert 'hasPendingEgyptSummonSpecial' in t
+          assert "summonsAlive<=1&&!hasPendingEgyptSummonSpecial(e.team,e.id)&&(lowHealth||cycleDue)" in t
+          assert 'WAR ADAPTIVE VISUAL LOD 2026-09-12' not in t
+          blocks=re.findall(r'<script>(.*?)</script>',t,re.S)
+          Path('/tmp/main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/main.js
+      - name: Publish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Prevent stacked Egypt mage summons'
+          git push origin main
