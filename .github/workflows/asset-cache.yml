@@ -56,7 +56,7 @@ jobs:
             'const BOOT_ASSET_MANIFEST=Object.freeze(',
             'const BOOT_CACHE_NAME="rampage-assets-v3";',
             'const BOOT_MANIFEST_KEY="rampageAssetManifestV3";',
-            'const BOOT_FETCH_CONCURRENCY=8;',
+            'const BOOT_FETCH_CONCURRENCY=10;',
             'await cache.match(url)',
             'bootFetchAndStore(url,revision,cache,migrating)',
             'const migrating=Object.keys(previous).length===0;',
