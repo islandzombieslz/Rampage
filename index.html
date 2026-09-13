@@ -5763,7 +5763,6 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
 
 
 /* WAR VISUAL LOD ACTIVE 2026-09-12 */
-/* WAR LOD PERSISTENT POSTERS 2026-09-12 */
 /* ==================== CÂMERA MESTRE DA GUERRA ==================== */
 function clampWarCamera(){
  const z=state.camera.zoom;
@@ -6334,7 +6333,6 @@ const WAR_LOD_RECOVER_MS=1800;
 const WAR_LOD_MEDIUM_SYNC_MS=22;
 const WAR_LOD_HEAVY_SYNC_MS=34;
 const WAR_LOD_POSTER_MAX_SIDE=128;
-const WAR_LOD_POSTER_CACHE='rampage-war-lod-posters-v1';
 const WAR_LOD_POSTER_KEYS=Object.freeze([
   'idle','femaleIdle','brownIdle','kingIdle','golemIdle',
   'mageIdle','femaleMageIdle','dragonGround','dragonFly'
@@ -6355,20 +6353,6 @@ function warLodPosterKeyForEntity(e){
 }
 function canvasBlob(canvas,type,quality){
  return new Promise(resolve=>canvas.toBlob(resolve,type,quality));
-}
-function warLodPosterCacheUrl(key){
- const src=ASSETS[key]||key;
- const rev=BOOT_ASSET_MANIFEST?.[src]||'runtime';
- return new URL(`__war_lod__/${encodeURIComponent(key)}-${encodeURIComponent(rev)}.poster`,location.href).href;
-}
-async function loadCachedWarLodPoster(key){
- if(!('caches' in window))return null;
- try{
-   const cache=await caches.open(WAR_LOD_POSTER_CACHE),hit=await cache.match(warLodPosterCacheUrl(key));
-   if(!hit)return null;
-   const blob=await hit.blob();if(!blob.size)return null;
-   const url=URL.createObjectURL(blob);warLodPosterUrls.set(key,url);return url;
- }catch(_){return null}
 }
 async function makeWarLodPoster(key){
  const src=ASSETS[key];if(!src)return null;
@@ -6400,18 +6384,12 @@ async function makeWarLodPoster(key){
  let poster=await canvasBlob(canvas,'image/webp',.58);
  if(!poster)poster=await canvasBlob(canvas,'image/png');
  if(!poster)return null;
- if('caches' in window){
-   try{
-     const cache=await caches.open(WAR_LOD_POSTER_CACHE);
-     await cache.put(warLodPosterCacheUrl(key),new Response(poster,{headers:{'Content-Type':poster.type||'image/webp','Cache-Control':'public,max-age=31536000,immutable'}}));
-   }catch(_){}
- }
  const url=URL.createObjectURL(poster);warLodPosterUrls.set(key,url);return url;
 }
 function ensureWarLodPoster(key){
  if(warLodPosterUrls.has(key))return Promise.resolve(warLodPosterUrls.get(key));
  if(warLodPosterPromises.has(key))return warLodPosterPromises.get(key);
- const promise=(async()=>await loadCachedWarLodPoster(key)||await makeWarLodPoster(key))().catch(()=>null).finally(()=>warLodPosterPromises.delete(key));
+ const promise=makeWarLodPoster(key).catch(()=>null).finally(()=>warLodPosterPromises.delete(key));
  warLodPosterPromises.set(key,promise);return promise;
 }
 async function warmWarLodPosters(){
