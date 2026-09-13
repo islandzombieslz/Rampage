@@ -32,6 +32,19 @@ jobs:
       - name: Apply Egypt clan
         run: python .github/add_egypt_clan.py
 
+      - name: Normalize generated if-chain
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          old="}};\n else if(e.type==='king')el._gifKeys="
+          new="}}\n else if(e.type==='king')el._gifKeys="
+          if old not in t:
+              raise SystemExit('Mage gif-key chain anchor not found')
+          p.write_text(t.replace(old,new,1),encoding='utf-8')
+          PY
+
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
