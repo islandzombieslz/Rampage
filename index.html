@@ -2258,6 +2258,77 @@ body.booting #landscapeRoot{visibility:hidden}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
 
+
+/* EGYPT CLAN SYSTEM 2026-09-13 */
+#clanScreen>.card > .clan-options-grid{
+  position:absolute !important;
+  left:20% !important;
+  right:20% !important;
+  top:40.5% !important;
+  bottom:23.5% !important;
+  display:grid !important;
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  gap:9px !important;
+  align-items:stretch !important;
+  min-width:0 !important;
+}
+#clanScreen .clan-options-grid .clan-option{
+  position:relative !important;
+  inset:auto !important;
+  width:auto !important;
+  min-width:0 !important;
+  height:100% !important;
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:center !important;
+  align-items:center !important;
+  gap:4px !important;
+  padding:5px !important;
+  text-align:center !important;
+  cursor:pointer !important;
+  overflow:hidden !important;
+}
+#clanScreen .clan-options-grid .clan-option img{
+  width:min(92px,80%) !important;
+  height:min(92px,58%) !important;
+  max-width:none !important;
+  max-height:none !important;
+  object-fit:contain !important;
+  flex:0 1 auto !important;
+}
+#clanScreen .clan-options-grid .clan-option h3{
+  margin:1px 0 2px !important;
+  font-size:13px !important;
+}
+#clanScreen .clan-options-grid .clan-option .small{
+  font-size:7.7px !important;
+  line-height:1.12 !important;
+}
+#clanScreen .clan-option[data-clan="egypt"].selected{
+  border-color:rgba(227,179,65,.82) !important;
+  box-shadow:inset 0 0 16px rgba(227,179,65,.14) !important;
+}
+#clanScreen #clanSelectionStatus{
+  position:absolute !important;
+  left:22% !important;
+  right:22% !important;
+  bottom:20.1% !important;
+  text-align:center !important;
+  font-size:8.5px !important;
+  color:#f2f4f7 !important;
+  text-shadow:0 1px 3px #000 !important;
+}
+.clan-shop[hidden]{display:none !important}
+.entity-visual.egypt-summoned-spawn{animation:egyptSummonFade .58s ease-out both}
+@keyframes egyptSummonFade{from{opacity:0}to{opacity:1}}
+@media (max-height:650px) and (pointer:fine){
+  #clanScreen>.card > .clan-options-grid{left:19% !important;right:19% !important;top:40% !important;bottom:23% !important;gap:7px !important}
+  #clanScreen .clan-options-grid .clan-option img{width:min(76px,78%) !important;height:min(76px,55%) !important}
+  #clanScreen .clan-options-grid .clan-option h3{font-size:11px !important}
+  #clanScreen .clan-options-grid .clan-option .small{font-size:6.7px !important}
+  #clanScreen #clanSelectionStatus{bottom:19.5% !important;font-size:7.5px !important}
+}
+
 </style>
 
 <script type="module">
@@ -2433,15 +2504,24 @@ window.dispatchEvent(new Event('firebase-ready'));
 <section id="clanScreen" class="screen">
   <div class="card">
     <h2>Escolha seu clã</h2>
-    <p class="sub">Por enquanto existe apenas o clã Guerreiros. Players podem escolher o mesmo clã; cada exército recebe um contorno próprio.</p>
-    <div class="clan-option selected">
-      <img src="assets/ui/cla-guerreiros.png" alt="" loading="lazy" decoding="async">
-      <div>
-        <h3>Guerreiros</h3>
-        <div class="small">Guerreiro/Guerreira • Guerreira Marrom • Rei Guerreiro • Mago/Maga • Golem • Dragão</div>
-        <div class="small">Seis tropas disponíveis na preparação da guerra.</div>
-      </div>
+    <p class="sub">Cada jogador escolhe seu próprio clã. As lojas e tropas permanecem separadas.</p>
+    <div class="clan-options-grid">
+      <button class="clan-option selected" data-clan="warriors" type="button" aria-label="Escolher clã Guerreiros">
+        <img src="assets/ui/cla-guerreiros.png" alt="Clã Guerreiros" loading="lazy" decoding="async">
+        <div>
+          <h3>Guerreiros</h3>
+          <div class="small">Guerreiros • Guerreira Marrom • Rei • Magos • Golem • Dragão</div>
+        </div>
+      </button>
+      <button class="clan-option" data-clan="egypt" type="button" aria-label="Escolher clã Egito">
+        <img src="https://i.postimg.cc/Bbn4PbZ7/card-selecao-de-escolha.png" alt="Clã Egito" loading="lazy" decoding="async">
+        <div>
+          <h3>Egito</h3>
+          <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito</div>
+        </div>
+      </button>
     </div>
+    <div id="clanSelectionStatus">Seu clã: Guerreiros</div>
     <div class="divider"></div>
     <button id="startWarBtn" class="primary">Iniciar preparação</button>
   </div>
@@ -2471,7 +2551,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <img src="assets/ui/botao-loja.png" alt="" draggable="false" decoding="async">
     </button>
     <div id="shop" aria-label="Loja de tropas">
-      <div class="shop-sprite-grid">
+      <div class="shop-sprite-grid clan-shop" data-clan-shop="warriors">
         <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 50 gemas" title="Guerreiro — 50 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
         </button>
@@ -2489,6 +2569,14 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
         <button id="buyDragon" class="shop-sprite-card" aria-label="Comprar Dragão por 450 gemas" title="Dragão — 450 gemas">
           <img src="assets/ui/war-shop/card-dragao-guerreiro.png" alt="Dragão Guerreiro" draggable="false" decoding="async">
+        </button>
+      </div>
+      <div class="shop-sprite-grid clan-shop" data-clan-shop="egypt" hidden>
+        <button id="buyEgyptWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro do Egito por 50 gemas" title="Guerreiro do Egito — 50 gemas">
+          <img src="https://i.postimg.cc/fbz2N98d/card-guerreiros-egito.png" alt="Guerreiros do Egito" draggable="false" decoding="async">
+        </button>
+        <button id="buyEgyptMage" class="shop-sprite-card" aria-label="Comprar Mago do Egito por 550 gemas" title="Mago do Egito — 550 gemas">
+          <img src="https://i.postimg.cc/SKgZNx5J/card-magos-egito.png" alt="Magos do Egito" draggable="false" decoding="async">
         </button>
       </div>
     </div>
@@ -2535,7 +2623,7 @@ const NetworkAdapter = {
           return {
             code:c,hostUid:user.uid,status:'lobby',npcCount:0,
             createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
-            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
+            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],clan:'warriors',joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
           };
         });
         if(result.committed){code=c;break}
@@ -2563,7 +2651,7 @@ const NetworkAdapter = {
       const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
       const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
-      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
+      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
       await F.update(rr,{lastActivityAt:F.serverTimestamp()});
       this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;
       await this.attachPresence(code,user.uid);
@@ -2679,6 +2767,7 @@ const NetworkAdapter = {
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';this.leaving=false;
   },
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
+  async setClan(clan){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),value=normalizeClan(clan);await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}/players/${this.localPlayerId}`),{clan:value,lastSeen:F.serverTimestamp()})},
   async sendInput(input){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase();await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...input,t:F.serverTimestamp()})},
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
   async pushState(snapshot){if(!this.roomId||!this.isHost)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
@@ -2726,6 +2815,26 @@ const ASSETS = {
   femaleMageIdle:'assets/mage/maga-parada.gif',
   femaleMageWalk:'assets/mage/maga-andando.gif',
   femaleMageSpecial:'assets/mage/maga-especial.gif',
+
+
+  // Clã Egito — Guerreiro/Guerreira
+  egyptWarriorIdle:'https://i.postimg.cc/N0sJcHdp/guerreiro-egitado-parado.gif',
+  egyptWarriorWalk:'https://i.postimg.cc/FKrW4LTM/guerreiro-egito-andando.gif',
+  egyptFemaleWarriorIdle:'https://i.postimg.cc/R0SsBHgG/guerreira-egito-parada.gif',
+  egyptFemaleWarriorWalk:'https://i.postimg.cc/tgqSjxBr/guerreira-egito-andando.gif',
+  egyptSword:'https://i.postimg.cc/7LHsk2KN/espada-guerreiro-egpcios.png',
+
+  // Clã Egito — Mago/Maga
+  egyptMageStaff:'https://i.postimg.cc/9XnvYJLX/mao-atras-mago-egito.gif',
+  egyptMageHand:'https://i.postimg.cc/HxKBXPTC/mao-magos-egpcios.png',
+  egyptMagePower:'https://i.postimg.cc/hj4HpYkN/poder-normal-mago-egito.gif',
+  egyptMagePowerSpecial:'https://i.postimg.cc/KcHdDJJq/poder-especial-mago-egito.gif',
+  egyptMageIdle:'https://i.postimg.cc/PJwK4z5c/mago-egito-parado.gif',
+  egyptMageWalk:'https://i.postimg.cc/gJ5N8Bm7/mago-egito-andando.gif',
+  egyptMageSpecial:'https://i.postimg.cc/SRMVr7x3/mago-egito-especial.gif',
+  egyptFemaleMageIdle:'https://i.postimg.cc/vBj3fSbL/maga-egito-parada.gif',
+  egyptFemaleMageWalk:'https://i.postimg.cc/76cm0QwB/maga-egito-andando.gif',
+  egyptFemaleMageSpecial:'https://i.postimg.cc/Ss5DCtk5/maga-egito-especial.gif',
 
   // Dragão Guerreiro — clã Guerreiros
   dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',
@@ -2850,7 +2959,7 @@ async function runBootLoader(){
 
 const state = {
   mode:'pve', pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
-  roomCode:null, players:[{id:'p1',name:'Player 1',human:true,color:'#58a6ff'}],
+  roomCode:null, players:[{id:'p1',name:'Player 1',human:true,color:'#58a6ff',clan:'warriors'}],
   round:1, running:false, phase:'idle', timeLeft:0, prepLeft:45,
   entities:[], particles:[], lastWaveAt:0, roundScores:{},
   camera:{x:0,y:0,zoom:1,targetX:0,targetY:0,targetZoom:1,intro:false,introStart:0,introDuration:3000,manual:false,velX:0,velY:0},
@@ -2880,6 +2989,10 @@ let MAGE_SPECIAL_DURATION=3000;
 let MAGE_SPECIAL_MALE_DURATION=3000;
 let MAGE_SPECIAL_FEMALE_DURATION=3000;
 let MAGE_POWER_SPECIAL_DURATION=3000;
+let EGYPT_MAGE_NORMAL_DURATION=3000;
+let EGYPT_MAGE_SPECIAL_MALE_DURATION=3000;
+let EGYPT_MAGE_SPECIAL_FEMALE_DURATION=3000;
+let EGYPT_MAGE_POWER_SPECIAL_DURATION=3000;
 let GOLEM_NORMAL_DURATION=3000;
 let GOLEM_SPECIAL_DURATION=3300;
 let BROWN_NORMAL_DURATION=1800;
@@ -2920,6 +3033,7 @@ const DRAGON_BURN_TICK_MS=1000;
 const DRAGON_BURN_DURATION_MS=6000;
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
+let egyptMagePowerAssetReady=false;
 let golemAttackAssetsReady=false;
 let brownAttackAssetsReady=false;
 const golemGifReadyKeys=new Set();
@@ -2966,7 +3080,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
+ const gifKeys=['golemAttack','golemSpecial','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -2979,6 +3093,10 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(key==='mageSpecial')MAGE_SPECIAL_MALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_MALE_DURATION);
      if(key==='femaleMageSpecial')MAGE_SPECIAL_FEMALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_FEMALE_DURATION);
      if(key==='magePowerSpecial')MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,MAGE_POWER_SPECIAL_DURATION);
+     if(key==='egyptMagePower')EGYPT_MAGE_NORMAL_DURATION=validGifDuration(duration,EGYPT_MAGE_NORMAL_DURATION);
+     if(key==='egyptMageSpecial')EGYPT_MAGE_SPECIAL_MALE_DURATION=validGifDuration(duration,EGYPT_MAGE_SPECIAL_MALE_DURATION);
+     if(key==='egyptFemaleMageSpecial')EGYPT_MAGE_SPECIAL_FEMALE_DURATION=validGifDuration(duration,EGYPT_MAGE_SPECIAL_FEMALE_DURATION);
+     if(key==='egyptMagePowerSpecial')EGYPT_MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,EGYPT_MAGE_POWER_SPECIAL_DURATION);
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
      if(key==='brownAttack')BROWN_NORMAL_DURATION=validGifDuration(duration,BROWN_NORMAL_DURATION);
@@ -2992,6 +3110,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      // Fallback abaixo usa URL única com cache-buster. O jogo continua funcional.
    }finally{
      if(key==='magePower')magePowerAssetReady=true;
+     if(key==='egyptMagePower')egyptMagePowerAssetReady=true;
      if(key==='golemAttack'||key==='golemSpecial'){
        golemGifReadyKeys.add(key);
        if(golemGifReadyKeys.size===2)golemAttackAssetsReady=true;
@@ -3008,6 +3127,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
 })();
 // Não deixa uma falha de rede impedir o mago de atacar para sempre.
 setTimeout(()=>{magePowerAssetReady=true},2000);
+setTimeout(()=>{egyptMagePowerAssetReady=true},2500);
 // Também não bloqueia o Golem indefinidamente quando o host das imagens falhar.
 // Normalmente os dois GIFs já foram medidos antes disso; o fallback só é usado
 // em falha real de rede/CORS.
@@ -3166,6 +3286,8 @@ function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padSt
 function rand(a,b){return a+Math.random()*(b-a)}
 function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
 function localPlayer(){return state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||state.players.find(p=>p.local)||state.players[0]}
+function normalizeClan(value){return value==='egypt'?'egypt':'warriors'}
+function clanLabel(value){return normalizeClan(value)==='egypt'?'Egito':'Guerreiros'}
 function serializeWarEntityForNetwork(e,now){
  const out={
    id:e.id,type:e.type,x:e.x,y:e.y,team:e.team,color:e.color||'#ffffff',
@@ -3174,7 +3296,7 @@ function serializeWarEntityForNetwork(e,now){
    attackSerial:Number(e.attackSerial)||0,comboStep:Number(e.comboStep)||0,
    hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
    deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
-   variant:e.variant||'male',ownerId:e.ownerId??null
+   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned
  };
 
  if(e.type==='golem'){
@@ -3212,6 +3334,7 @@ function serializeWarEntityForNetwork(e,now){
  }else if(e.type==='mage'){
    out.mageAttackKind=e.mageAttackKind??null;
    out.mageAttackSerial=Number(e.mageAttackSerial)||0;
+   out.mageCycle=Number(e.mageCycle)||0;
    if(e.pendingMageAttack){
      const p=e.pendingMageAttack;
      out.pendingMageAttack={
@@ -3458,7 +3581,7 @@ function applyRemoteGame(game){
  if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){NetworkAdapter.remoteFinishScheduled=true;flash('PARTIDA ENCERRADA',3);setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false},3600)}
 }
 function configureGameScreenForMode(){
- const pve=state.mode==='pve';$('#gameScreen').classList.toggle('pve-mode',pve);$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';
+ const pve=state.mode==='pve';$('#gameScreen').classList.toggle('pve-mode',pve);$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
 }
 function handleHostCommands(commands){
  if(!NetworkAdapter.isHost||!commands)return;
@@ -3466,12 +3589,15 @@ function handleHostCommands(commands){
    const key=uid+'/'+id;if(NetworkAdapter.processedCommands.has(key))continue;NetworkAdapter.processedCommands.add(key);
    const p=state.players.find(x=>x.id===uid);
    if(p&&state.mode==='war'&&state.phase==='prep'){
-     if(cmd.type==='buy-warrior')buyForPlayer(p,false);
-     if(cmd.type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);
-     if(cmd.type==='buy-king')buyKingForPlayer(p,false);
-     if(cmd.type==='buy-golem')buyGolemForPlayer(p,false);
-     if(cmd.type==='buy-mage')buyMageForPlayer(p,false);
-     if(cmd.type==='buy-dragon')buyDragonForPlayer(p,false);
+     const clan=normalizeClan(p.clan);
+     if(clan==='warriors'&&cmd.type==='buy-warrior')buyForPlayer(p,false);
+     if(clan==='warriors'&&cmd.type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);
+     if(clan==='warriors'&&cmd.type==='buy-king')buyKingForPlayer(p,false);
+     if(clan==='warriors'&&cmd.type==='buy-golem')buyGolemForPlayer(p,false);
+     if(clan==='warriors'&&cmd.type==='buy-mage')buyMageForPlayer(p,false);
+     if(clan==='warriors'&&cmd.type==='buy-dragon')buyDragonForPlayer(p,false);
+     if(clan==='egypt'&&cmd.type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
+     if(clan==='egypt'&&cmd.type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
    }
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
@@ -3485,11 +3611,12 @@ function syncFirebaseRoom(room){
  // territory, bonusGems e troops; substituir esse array apagava os dados do player.
  const lobbyRosterPhase=room.status==='lobby'||room.status==='clan';
  if(lobbyRosterPhase && !warStartInFlight && !state.running){
-   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length]}));
+   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan)}));
    const max=state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
-   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length]}));
+   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors'}));
    state.players=[...humans,...bots];renderPlayers();
    if(room.status==='clan'&&$('#clanScreen').style.display==='none')navigateScreen('clanScreen');
+   if(room.status==='clan')renderClanSelection();
  }
  if((room.status==='playing'||room.status==='finished')&&room.game&&!NetworkAdapter.isHost)applyRemoteGame(room.game);
  handleHostCommands(room.commands);
@@ -3590,7 +3717,8 @@ function applyStepperButton(b){
         id:'p'+(Date.now().toString(36))+idx,
         name:'NPC '+(npcCount+1),
         human:false,
-        color:COLORS[idx%COLORS.length]
+        color:COLORS[idx%COLORS.length],
+        clan:'warriors'
       });
     }
 
@@ -3701,10 +3829,30 @@ function updateLobbyAuthority(){
 $('#lobbyContinue').onclick=async()=>{
   if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
   if(state.mode==='war'){
-    if(state.players.length<2){state.players.push({id:'p2',name:'Player 2',human:false,color:COLORS[1]});}
-    renderPlayers();navigateScreen('clanScreen');if(NetworkAdapter.online)await NetworkAdapter.pushLobbyState({status:'clan',npcCount:state.players.filter(p=>!p.human).length});
+    if(state.players.length<2){state.players.push({id:'p2',name:'Player 2',human:false,color:COLORS[1],clan:'warriors'});}
+    renderPlayers();navigateScreen('clanScreen');renderClanSelection();if(NetworkAdapter.online)await NetworkAdapter.pushLobbyState({status:'clan',npcCount:state.players.filter(p=>!p.human).length});
   } else {startPVE();if(NetworkAdapter.online)await NetworkAdapter.pushState(serializeGame())}
 };
+
+function renderClanSelection(){
+ const clan=normalizeClan(localPlayer()?.clan);
+ $$('.clan-option[data-clan]').forEach(btn=>btn.classList.toggle('selected',normalizeClan(btn.dataset.clan)===clan));
+ const status=$('#clanSelectionStatus');if(status)status.textContent='Seu clã: '+clanLabel(clan);
+}
+$$('.clan-option[data-clan]').forEach(btn=>btn.onclick=async()=>{
+ const p=localPlayer();if(!p)return;
+ const clan=normalizeClan(btn.dataset.clan);
+ p.clan=clan;
+ renderClanSelection();
+ if(NetworkAdapter.online){
+   try{await NetworkAdapter.setClan(clan)}catch(err){console.error(err)}
+ }
+});
+function configureWarShopForClan(){
+ const clan=normalizeClan(localPlayer()?.clan);
+ $$('.clan-shop').forEach(group=>group.hidden=normalizeClan(group.dataset.clanShop)!==clan);
+}
+
 let warStartInFlight=false;
 $('#startWarBtn').onclick=async()=>{
  if(warStartInFlight||(NetworkAdapter.online&&!NetworkAdapter.isHost))return;
@@ -3974,7 +4122,7 @@ function entityBase(type,x,y,team,color){
  speed:speedMap[state.speed],alive:true,attackCooldown:0,attackAnim:0,attackSerial:0,comboStep:0,lastAttackAt:0,
  hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,knockVX:0,knockVY:0,knockTime:0,
  deathStarted:0,removeAt:0,deathDir:1,heading:0,facing:1,moving:false,target:null,controlled:false,
- variant:'male',
+ variant:'male',clan:'warriors',egyptSummoned:false,
 
  // Máquina de estados do Golem: localizar -> aproximar -> atacar -> finalizar.
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
@@ -3987,7 +4135,7 @@ function entityBase(type,x,y,team,color){
  dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
  dragonBurnSourceX:0,dragonBurnSourceY:0,dragonBurnSerial:0,dragonBurnFlameCount:0,ownerId:null};
 }
-function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null){
+function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null,clan='warriors',egyptSummoned=false){
  const e=entityBase('warrior',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
  e.hp=e.maxHp=150;
@@ -3995,6 +4143,8 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
  e.controlled=controlled;
  e.ownerId=ownerId;
  e.variant=variant==='female'?'female':'male';
+ e.clan=normalizeClan(clan);
+ e.egyptSummoned=!!egyptSummoned;
  state.entities.push(e);
  return e;
 }
@@ -4045,9 +4195,9 @@ function spawnGolem(x,y,team,color){
  state.entities.push(e);
  return e;
 }
-function spawnMage(x,y,team,color,variant='male'){
+function spawnMage(x,y,team,color,variant='male',clan='warriors'){
  const e=entityBase('mage',x,y,team,color);
- e.variant=variant==='female'?'female':'male';e.hp=e.maxHp=200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
+ e.variant=variant==='female'?'female':'male';e.clan=normalizeClan(clan);e.hp=e.maxHp=200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
  // Mantém a velocidade-base própria; no modo Guerra recebe exatamente -50%.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER:92;e.attackCooldown=0;e.mageCycle=0;
  state.entities.push(e);return e;
@@ -4705,35 +4855,32 @@ function distanceToSegment(px,py,ax,ay,bx,by){
 }
 function startMageAttack(e,kind,target=null){
  if(!e.alive||e.type!=='mage'||e.pendingMageAttack||e.attackCooldown>0||e.knockTime>0)return false;
- // No ataque normal, espera o asset ficar pronto. Assim o relógio do dano nunca
- // começa antes de termos condições de mostrar o GIF desde o primeiro quadro.
- if(kind==='normal'&&!magePowerAssetReady)return false;
+ const egypt=e.clan==='egypt';
+ if(kind==='normal'&&!(egypt?egyptMagePowerAssetReady:magePowerAssetReady))return false;
  const now=performance.now();e.attackCooldown=4;e.lastAttackAt=now;e.lastCombatAt=now;e.mageAttackKind=kind;e.mageAttackSerial=(e.mageAttackSerial||0)+1;
  if(kind==='special'){
-   const bodyDuration=e.variant==='female'?MAGE_SPECIAL_FEMALE_DURATION:MAGE_SPECIAL_MALE_DURATION;
-   const duration=Math.max(bodyDuration,MAGE_POWER_SPECIAL_DURATION);
+   const bodyDuration=egypt
+     ? (e.variant==='female'?EGYPT_MAGE_SPECIAL_FEMALE_DURATION:EGYPT_MAGE_SPECIAL_MALE_DURATION)
+     : (e.variant==='female'?MAGE_SPECIAL_FEMALE_DURATION:MAGE_SPECIAL_MALE_DURATION);
+   const powerDuration=egypt?EGYPT_MAGE_POWER_SPECIAL_DURATION:MAGE_POWER_SPECIAL_DURATION;
+   const duration=Math.max(bodyDuration,powerDuration);
    e.specialCooldown=MAGE_SPECIAL_COOLDOWN;
    e.moving=false;e.pendingMageAttack={
      kind,targetId:null,originX:e.x,originY:e.y,startedAt:now,duration,
-     // O dano do especial acontece durante a animação, e não no primeiro frame.
      damageAt:now+Math.min(1200,Math.max(650,duration*.40)),
      endAt:now+duration,impacted:false,hitIds:{}
    };
    e.mageCycle=0;
    addWarGoalProgress(e.team,'specials');
  }else{
-   // O disparo normal é travado no instante do lançamento.
-   // Depois de começar, o mago completa o GIF/ataque inteiro antes de voltar a se reposicionar.
    const angle=target?Math.atan2(target.y-e.y,target.x-e.x):(e.heading||0);
    const targetDistance=target?dist(e,target):245;
    e.moving=false;
-   const duration=MAGE_NORMAL_DURATION;
+   const duration=egypt?EGYPT_MAGE_NORMAL_DURATION:MAGE_NORMAL_DURATION;
    e.pendingMageAttack={
      kind,targetId:target?.id??null,originX:e.x,originY:e.y,
      angle,length:clamp(targetDistance-20,140,310),duration,
      startedAt:now,endAt:now+duration,
-     // O GIF começa no frame 0; o primeiro dano só entra 1 segundo depois.
-     // O último pulso termina ligeiramente antes do último quadro desaparecer.
      damageStartAt:now+MAGE_DAMAGE_DELAY,
      damageEndAt:now+duration-100,
      nextTickAt:now+MAGE_DAMAGE_DELAY
@@ -4742,6 +4889,25 @@ function startMageAttack(e,kind,target=null){
    addWarGoalProgress(e.team,'ranged');
  }
  return true;
+}
+function countLivingEgyptSummons(team){
+ let count=0;
+ for(const t of state.entities){
+   if(t.alive&&t.team===team&&t.type==='warrior'&&t.clan==='egypt'&&t.egyptSummoned)count++;
+ }
+ return count;
+}
+function spawnEgyptMageWarriors(e,p){
+ const ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
+ const base=(Number(e.mageAttackSerial)||0)*.37;
+ for(let i=0;i<5;i++){
+   const angle=base+(Math.PI*2/5)*i;
+   const radius=58+(i%3)*34;
+   const x=clamp(ox+Math.cos(angle)*radius,45,state.world.w-45);
+   const y=clamp(oy+Math.sin(angle)*radius,45,state.world.h-45);
+   const variant=i%2===0?'male':'female';
+   spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true);
+ }
 }
 function updateMageAttackState(e,now){
  const p=e.pendingMageAttack;if(!p)return;
@@ -4752,16 +4918,19 @@ function updateMageAttackState(e,now){
      p.hitIds=p.hitIds||{};
      const ox=p.originX,oy=p.originY,r=MAGE_SPECIAL_RADIUS,r2=r*r;
 
-     // Dano: mesmas regras e mesma distância final; só deixamos de testar
-     // entidades que estão em células impossíveis de alcançar.
-     forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,t=>{
-       if(!t.alive||t===e||t.team===e.team)return;
-       const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
-       if(p.hitIds[t.id])return;p.hitIds[t.id]=true;
-       applyCombatHit(t,e,MAGE_SPECIAL_DAMAGE,{knockForce:260,knockTime:.18,tilt:10});
-     });
+     if(e.clan==='egypt'){
+       // Especial do Egito: substitui o dano em área pela invocação de 5 guerreiros egípcios.
+       spawnEgyptMageWarriors(e,p);
+     }else{
+       forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,t=>{
+         if(!t.alive||t===e||t.team===e.team)return;
+         const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
+         if(p.hitIds[t.id])return;p.hitIds[t.id]=true;
+         applyCombatHit(t,e,MAGE_SPECIAL_DAMAGE,{knockForce:260,knockTime:.18,tilt:10});
+       });
+     }
 
-     // Cura mantém exatamente a regra anterior, inclusive o próprio Mago.
+     // A cura de 30 do Mago original é preservada; a diferença egípcia substitui somente o dano pela invocação.
      forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,ally=>{
        if(!ally.alive||ally.team!==e.team)return;
        const dx=ally.x-ox,dy=ally.y-oy;if(dx*dx+dy*dy>r2)return;
@@ -5101,8 +5270,20 @@ function addWarDamageProgress(teamId,amount){
 }
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
+ const clan=normalizeClan(p.clan);
+ const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
+ if(!allowed.has(type))return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
- else {if(type==='buy-warrior')buyForPlayer(p,false);if(type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);if(type==='buy-king')buyKingForPlayer(p,false);if(type==='buy-golem')buyGolemForPlayer(p,false);if(type==='buy-mage')buyMageForPlayer(p,false);if(type==='buy-dragon')buyDragonForPlayer(p,false)}
+ else {
+   if(type==='buy-warrior')buyForPlayer(p,false);
+   if(type==='buy-brown-warrior')buyBrownWarriorForPlayer(p,false);
+   if(type==='buy-king')buyKingForPlayer(p,false);
+   if(type==='buy-golem')buyGolemForPlayer(p,false);
+   if(type==='buy-mage')buyMageForPlayer(p,false);
+   if(type==='buy-dragon')buyDragonForPlayer(p,false);
+   if(type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
+   if(type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
+ }
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
 $('#buyBrownWarrior').onclick=()=>requestWarPurchase('buy-brown-warrior');
@@ -5110,22 +5291,30 @@ $('#buyKing').onclick=()=>requestWarPurchase('buy-king');
 $('#buyGolem').onclick=()=>requestWarPurchase('buy-golem');
 $('#buyMage').onclick=()=>requestWarPurchase('buy-mage');
 $('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');
+$('#buyEgyptWarrior').onclick=()=>requestWarPurchase('buy-egypt-warrior');
+$('#buyEgyptMage').onclick=()=>requestWarPurchase('buy-egypt-mage');
 function buyForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.warrior;if(p.gems<cost)return false;
- p.gems-=cost;
- p.troops++;
-
- const t=p.territory;
- const angle=Math.random()*Math.PI*2,r=Math.random()*95;
-
+ p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*95;
  const variant=p.nextWarriorVariant==='female'?'female':'male';
- spawnWarrior(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,false,variant);
-
- // Próxima compra usa a outra aparência.
+ spawnWarrior(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,false,variant,null,'warriors',false);
+ p.nextWarriorVariant=variant==='male'?'female':'male';
+ return true;
+}
+function buyEgyptWarriorForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='egypt')return false;
+ const cost=WAR_UNIT_COSTS.warrior;if(p.gems<cost)return false;
+ p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*95;
+ const variant=p.nextWarriorVariant==='female'?'female':'male';
+ spawnWarrior(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,false,variant,null,'egypt',false);
  p.nextWarriorVariant=variant==='male'?'female':'male';
  return true;
 }
 function buyBrownWarriorForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.brownWarrior;if(p.gems<cost)return false;
  p.gems-=cost;p.troops++;
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*88;
@@ -5133,29 +5322,37 @@ function buyBrownWarriorForPlayer(p,bot){
  return true;
 }
 function buyKingForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.king;if(p.gems<cost)return false;
- p.gems-=cost;
- p.troops++;
+ p.gems-=cost;p.troops++;
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*84;
  spawnKing(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
 }
 function buyGolemForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.golem;if(p.gems<cost)return false;
- p.gems-=cost;
- p.troops++;
- const t=p.territory;
- const angle=Math.random()*Math.PI*2,r=Math.random()*78;
+ p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*78;
  spawnGolem(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
 }
 function buyMageForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.mage;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*84;
- spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female');
+ spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female','warriors');
+ return true;
+}
+function buyEgyptMageForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='egypt')return false;
+ const cost=WAR_UNIT_COSTS.mage;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*84;
+ spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female','egypt');
  return true;
 }
 function buyDragonForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.dragon;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*82;
  spawnDragon(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
@@ -5181,6 +5378,11 @@ function enemyWarComposition(teamId){
 }
 function affordableBotWarTypes(p){
  const types=[];
+ if(normalizeClan(p.clan)==='egypt'){
+   if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
+   if(p.gems>=WAR_UNIT_COSTS.mage)types.push('mage');
+   return types;
+ }
  if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
  if(p.gems>=WAR_UNIT_COSTS.brownWarrior)types.push('brownWarrior');
  if(p.gems>=WAR_UNIT_COSTS.king)types.push('king');
@@ -5227,6 +5429,10 @@ function chooseBotWarPurchase(p){
  return bestType;
 }
 function buyBotWarType(p,type){
+ if(normalizeClan(p.clan)==='egypt'){
+   if(type==='mage')return buyEgyptMageForPlayer(p,true);
+   return buyEgyptWarriorForPlayer(p,true);
+ }
  if(type==='brownWarrior')return buyBrownWarriorForPlayer(p,true);
  if(type==='king')return buyKingForPlayer(p,true);
  if(type==='dragon')return buyDragonForPlayer(p,true);
@@ -5241,7 +5447,7 @@ function updateWarBotPurchases(now,force=false){
      const type=chooseBotWarPurchase(p);
      if(!type)break;
      let bought=buyBotWarType(p,type);
-     if(!bought&&p.gems>=WAR_UNIT_COSTS.warrior)bought=buyForPlayer(p,true);
+     if(!bought&&p.gems>=WAR_UNIT_COSTS.warrior)bought=normalizeClan(p.clan)==='egypt'?buyEgyptWarriorForPlayer(p,true):buyForPlayer(p,true);
      if(!bought)break;
      p.botWarPurchases=(Number(p.botWarPurchases)||0)+1;
      p.botNextPurchaseAt=now+(state.prepLeft<3?rand(220,420):rand(650,1250));
@@ -5653,32 +5859,37 @@ function beginDragonTakeoff(e){
           function aiFightMage(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive||e.knockTime>0){e.moving=false;return}
  const now=performance.now();
- // Qualquer ataque do mago que já foi lançado precisa terminar por completo.
- // Enquanto pendingMageAttack existir, a IA não muda distância nem inicia outro movimento/ataque.
  if(e.pendingMageAttack){e.moving=false;return}
  const candidates=preparedCandidates||state.entities;
  const target=nearestEngageableCandidate(e,candidates,forcedTeam,false);
  if(!target){e.moving=false;e.target=null;return}
  e.target=target;const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
  if(e.attackCooldown<=0&&!e.pendingMageAttack){
-   // Especial condicional: usa quando está cercado (3+ inimigos dentro da área
-   // real do especial) OU quando a vida chegou à metade. Cooldown evita spam.
-   let nearbyForSpecial=0;
-   const mageSpecialRadiusSq=MAGE_SPECIAL_RADIUS*MAGE_SPECIAL_RADIUS;
-   for(const t of candidates){
-     if(!t||!t.alive||t===e||t.team===e.team||
-        (forcedTeam&&t.team!==forcedTeam)||!canEngageTarget(e,t))continue;
-     const sdx=t.x-e.x,sdy=t.y-e.y;
-     if(sdx*sdx+sdy*sdy<=mageSpecialRadiusSq)nearbyForSpecial++;
-   }
    const lowHealth=e.hp<=e.maxHp*.5;
-   if(e.specialCooldown<=0 && (nearbyForSpecial>=3 || lowHealth)){
-     startMageAttack(e,'special',target);return;
+   if(e.clan==='egypt'){
+     // Egito: vida baixa OU 5 normais completos tornam o especial devido.
+     // Porém a invocação só acontece quando restar no máximo 1 guerreiro invocado vivo.
+     const cycleDue=(Number(e.mageCycle)||0)>=5;
+     const summonsAlive=countLivingEgyptSummons(e.team);
+     if(e.specialCooldown<=0&&summonsAlive<=1&&(lowHealth||cycleDue)){
+       if(startMageAttack(e,'special',target))return;
+     }
+   }else{
+     // Mago Guerreiro mantém sua regra original: aglomeração OU vida baixa.
+     let nearbyForSpecial=0;
+     const mageSpecialRadiusSq=MAGE_SPECIAL_RADIUS*MAGE_SPECIAL_RADIUS;
+     for(const t of candidates){
+       if(!t||!t.alive||t===e||t.team===e.team||
+          (forcedTeam&&t.team!==forcedTeam)||!canEngageTarget(e,t))continue;
+       const sdx=t.x-e.x,sdy=t.y-e.y;
+       if(sdx*sdx+sdy*sdy<=mageSpecialRadiusSq)nearbyForSpecial++;
+     }
+     if(e.specialCooldown<=0&&(nearbyForSpecial>=3||lowHealth)){
+       if(startMageAttack(e,'special',target))return;
+     }
    }
-   // Ataque normal apenas quando o alvo está na faixa real de disparo.
    if(d>=185&&d<=285){startMageAttack(e,'normal',target);return}
  }
- // Fora do ataque, o mago procura novamente a faixa ideal para o próximo disparo.
  if(d<175){e.x-=dx/d*e.speed*dt;e.y-=dy/d*e.speed*dt;e.moving=true}
  else if(d>285){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}
  else e.moving=false;
@@ -5939,7 +6150,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
-const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon');
+const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
 function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
@@ -6392,8 +6603,9 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
    if(img.dataset.serial!==serial){
      img.dataset.serial=serial;
      img.className=p.kind==='special'?'mage-power-special':'mage-power-normal';
-     if(p.kind==='special')restartGif(img,'magePowerSpecial',serial);
-     else restartMagePowerGif(img,serial);
+     const egypt=e.clan==='egypt';
+     if(p.kind==='special')restartGif(img,egypt?'egyptMagePowerSpecial':'magePowerSpecial',serial);
+     else restartGif(img,egypt?'egyptMagePower':'magePower',serial);
    }
    if(p.kind==='normal'){
      // O visual também fica preso ao lançamento para o GIF tocar inteiro, sem ser interrompido
@@ -6551,16 +6763,20 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      </div>`;
  }else if(e.type==='mage'){
    el.classList.add('mage-visual');
-   const bodyIdle=e.variant==='female'?ASSETS.femaleMageIdle:ASSETS.mageIdle;
-   const bodyWalk=e.variant==='female'?ASSETS.femaleMageWalk:ASSETS.mageWalk;
-   const bodySpecialKey=e.variant==='female'?'femaleMageSpecial':'mageSpecial';
+   const egypt=e.clan==='egypt';
+   if(egypt)el.classList.add('egypt-unit');
+   const bodyIdle=e.variant==='female'?(egypt?ASSETS.egyptFemaleMageIdle:ASSETS.femaleMageIdle):(egypt?ASSETS.egyptMageIdle:ASSETS.mageIdle);
+   const bodyWalk=e.variant==='female'?(egypt?ASSETS.egyptFemaleMageWalk:ASSETS.femaleMageWalk):(egypt?ASSETS.egyptMageWalk:ASSETS.mageWalk);
+   const bodySpecialKey=e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial');
+   const staff=egypt?ASSETS.egyptMageStaff:ASSETS.mageStaff;
+   const hand=egypt?ASSETS.egyptMageHand:ASSETS.mageHand;
    el.innerHTML=`
      <div class="entity-facing">
-       <img class="mage-staff" src="${ASSETS.mageStaff}" draggable="false">
+       <img class="mage-staff" src="${staff}" draggable="false">
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
        <img class="entity-body entity-walk" src="${bodyWalk}" draggable="false" style="opacity:0">
        <img class="entity-body entity-mage-special" data-asset-key="${bodySpecialKey}" draggable="false" style="opacity:0">
-       <img class="mage-hand" src="${ASSETS.mageHand}" draggable="false">
+       <img class="mage-hand" src="${hand}" draggable="false">
      </div>
      <div class="entity-weapon-facing"></div>
      <div class="entity-bars">
@@ -6595,18 +6811,22 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-weapon-facing"></div>
      <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
  }else{
-   const bodyIdle=e.variant==='female'?ASSETS.femaleIdle:ASSETS.idle;
-   const bodyWalk=e.variant==='female'?ASSETS.femaleWalk:ASSETS.walk;
+   const egypt=e.type==='warrior'&&e.clan==='egypt';
+   if(egypt)el.classList.add('egypt-unit');
+   if(e.egyptSummoned)el.classList.add('egypt-summoned-spawn');
+   const bodyIdle=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorIdle:ASSETS.femaleIdle):(egypt?ASSETS.egyptWarriorIdle:ASSETS.idle);
+   const bodyWalk=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorWalk:ASSETS.femaleWalk):(egypt?ASSETS.egyptWarriorWalk:ASSETS.walk);
+   const sword=egypt?ASSETS.egyptSword:ASSETS.sword;
 
    el.innerHTML=`
      <div class="entity-facing">
-       <!-- Guerreiro/Guerreira compartilham toda a lógica; só muda o corpo. -->
+       <!-- Guerreiro/Guerreira compartilham toda a lógica; clã troca somente os sprites. -->
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
        <img class="entity-body entity-walk" src="${bodyWalk}" draggable="false" style="opacity:0">
      </div>
      <div class="entity-weapon-facing">
        <div class="entity-slash"></div>
-       <img class="entity-sword" src="${ASSETS.sword}" draggable="false">
+       <img class="entity-sword" src="${sword}" draggable="false">
      </div>
      <div class="entity-bars">
        <div class="hp-bg"><div class="hp-fill"></div></div>
@@ -6650,10 +6870,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  // GIF que está entrando para ele aparecer desde o quadro 0.
  if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
  else if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
- else if(e.type==='mage')el._gifKeys={idle:e.variant==='female'?'femaleMageIdle':'mageIdle',walk:e.variant==='female'?'femaleMageWalk':'mageWalk',special:e.variant==='female'?'femaleMageSpecial':'mageSpecial'};
+ else if(e.type==='mage'){const egypt=e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleMageIdle':'femaleMageIdle'):(egypt?'egyptMageIdle':'mageIdle'),walk:e.variant==='female'?(egypt?'egyptFemaleMageWalk':'femaleMageWalk'):(egypt?'egyptMageWalk':'mageWalk'),special:e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial')}}
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
- else el._gifKeys={idle:e.variant==='female'?'femaleIdle':'idle',walk:e.variant==='female'?'femaleWalk':'walk'};
+ else {const egypt=e.type==='warrior'&&e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleWarriorIdle':'femaleIdle'):(egypt?'egyptWarriorIdle':'idle'),walk:e.variant==='female'?(egypt?'egyptFemaleWarriorWalk':'femaleWalk'):(egypt?'egyptWarriorWalk':'walk')}};
  for(const img of el.querySelectorAll('img'))img.decoding='async';
  // O nó nasce em idle/ground. O segundo loop pesado só recebe src quando virar ativo.
  if(el._walk)stopGif(el._walk);
@@ -7071,7 +7291,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }
      if(el.dataset.mageAttackSerial!==String(e.mageAttackSerial)){
        el.dataset.mageAttackSerial=String(e.mageAttackSerial);
-       if(e.mageAttackSerial>0&&special)restartGif(el._mageSpecial,e.variant==='female'?'femaleMageSpecial':'mageSpecial',e.mageAttackSerial);
+       if(e.mageAttackSerial>0&&special)restartGif(el._mageSpecial,el._gifKeys?.special||(e.variant==='female'?'femaleMageSpecial':'mageSpecial'),e.mageAttackSerial);
      }
    }else if(e.type==='king'){
      const p=e.pendingKingSpecial;
@@ -7216,6 +7436,8 @@ function updateHUD(){
     perfSetDisabled(buyGolemPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.golem);
     perfSetDisabled(buyMagePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.mage);
     perfSetDisabled(buyDragonPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.dragon);
+    perfSetDisabled(buyEgyptWarriorPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.warrior);
+    perfSetDisabled(buyEgyptMagePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.mage);
   }
 }
 function finishGame(msg){
