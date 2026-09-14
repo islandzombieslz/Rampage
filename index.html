@@ -2335,6 +2335,7 @@ body.booting #landscapeRoot{visibility:hidden}
 /* EGYPT MAGE SHIELD + HALF-HP SPECIAL TRIGGERS 2026-09-13 */
 /* EGYPT MAGE DAMAGE-EDGE + SINGLE POWER CYCLE 2026-09-13 */
 /* WAR SPECIALS + GEMS STABILITY 2026-09-13 */
+/* EGYPT SUMMON HALF HP + BROWN KING DAMAGE 2026-09-13 */
 /* A regra original #shop .shop-sprite-grid usa !important; esta regra
    mais específica garante que o grupo do outro clã desapareça visualmente. */
 #shop .clan-shop[hidden],
@@ -3052,10 +3053,10 @@ let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
 let BROWN_POWER_DURATION=2200;
 let BROWN_SPECIAL_DURATION=2200;
-const BROWN_NORMAL_DAMAGE_1=40;
-const BROWN_NORMAL_DAMAGE_2=25;
+const BROWN_NORMAL_DAMAGE_1=52;
+const BROWN_NORMAL_DAMAGE_2=37;
 /* BROWN WARRIOR TUNING 2026-09-12 */
-const BROWN_SPECIAL_DAMAGE=25;
+const BROWN_SPECIAL_DAMAGE=37;
 const BROWN_SPECIAL_TICK_MS=500;
 const BROWN_SPECIAL_LENGTH=340;
 const BROWN_SPECIAL_BEHIND=58;
@@ -3070,7 +3071,7 @@ const MAGE_SPECIAL_RADIUS=215;
 const MAGE_SPECIAL_DAMAGE=100;
 const MAGE_SPECIAL_HEAL=30;
 const KING_SPECIAL_RADIUS=MAGE_SPECIAL_RADIUS;
-const KING_SPECIAL_DAMAGE=50;
+const KING_SPECIAL_DAMAGE=62;
 const KING_POWER_DELAY_MS=1000;
 
 // DRAGON WARRIOR SYSTEM
@@ -4286,7 +4287,7 @@ function spawnKing(x,y,team,color){
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
  e.hp=e.maxHp=280;
  e.shield=e.maxShield=280;
- e.damage=35;
+ e.damage=47;
  e.r=29;
  e.kingNormalCount=0;
  state.entities.push(e);
@@ -5072,13 +5073,16 @@ function countLivingEgyptSummonsForMage(mageId){
 function spawnEgyptMageWarriors(e,p){
  const ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
  const base=(Number(e.mageAttackSerial)||0)*.37;
- for(let i=0;i<3;i++){
-   const angle=base+(Math.PI*2/3)*i;
-   const radius=62+(i%2)*30;
+ for(let i=0;i<2;i++){
+   const angle=base+Math.PI*i;
+   const radius=70+(i%2)*22;
    const x=clamp(ox+Math.cos(angle)*radius,45,state.world.w-45);
    const y=clamp(oy+Math.sin(angle)*radius,45,state.world.h-45);
    const variant=i%2===0?'male':'female';
    const summon=spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true,e.id);
+   const halfHp=Math.max(1,Math.round((Number(summon.maxHp)||Number(summon.hp)||1)*.5));
+   summon.maxHp=halfHp;
+   summon.hp=halfHp;
    summon.shield=0;
    summon.maxShield=0;
  }
