@@ -1,0 +1,50 @@
+name: Analyze Egypt mage special GIF
+on:
+  push:
+    paths:
+      - '.github/workflows/analyze-egypt-power-gif.yml'
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Analyze decoded frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          GIF='assets/egypt/mage/power-special.gif'
+          echo "ffmpeg=$(command -v ffmpeg || true)"
+          echo "ffprobe=$(command -v ffprobe || true)"
+          ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames,duration,r_frame_rate,avg_frame_rate -of default=nw=1 "$GIF" || true
+          ffmpeg -v error -i "$GIF" -f framemd5 /tmp/egypt.framemd5
+          python - <<'PY'
+          from pathlib import Path
+          rows=[]
+          for line in Path('/tmp/egypt.framemd5').read_text().splitlines():
+              if not line or line.startswith('#'): continue
+              parts=[p.strip() for p in line.split(',')]
+              if len(parts)>=6:
+                  rows.append((int(parts[0]),int(parts[1]),int(parts[2]),int(parts[3]),int(parts[4]),parts[5]))
+          hashes=[r[-1] for r in rows]
+          print('decoded_frames=',len(hashes))
+          # Find exact prefix cycle repeated at least twice.
+          repeats=[]
+          for p in range(2,len(hashes)//2+1):
+              if hashes[:p]==hashes[p:2*p]:
+                  count=2
+                  while (count+1)*p<=len(hashes) and hashes[:p]==hashes[count*p:(count+1)*p]:
+                      count+=1
+                  repeats.append((p,count))
+          print('prefix_repeats=',repeats[:20])
+          # Show duplicate decoded-frame positions, useful when the animation visually returns to prior poses.
+          positions={}
+          for i,h in enumerate(hashes): positions.setdefault(h,[]).append(i)
+          dups=[v for v in positions.values() if len(v)>1]
+          print('duplicate_frame_groups=',dups[:40])
+          print('first_25_hashes=')
+          for i,h in enumerate(hashes[:25]): print(i,h)
+          print('last_25_hashes=')
+          for i,h in list(enumerate(hashes))[-25:]: print(i,h)
+          PY
