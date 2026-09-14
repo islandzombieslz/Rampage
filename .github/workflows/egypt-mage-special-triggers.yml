@@ -1,0 +1,93 @@
+name: Egypt mage special triggers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_egypt_mage_special_triggers.py'
+      - '.github/workflows/egypt-mage-special-triggers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-egypt-mage-special-triggers
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply Egypt mage special trigger update
+        run: python .github/fix_egypt_mage_special_triggers.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Egypt mage trigger rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'EGYPT MAGE SHIELD + HALF-HP SPECIAL TRIGGERS 2026-09-13',
+            "const cycleDue=(Number(e.mageCycle)||0)>=4;",
+            "const shieldDown=(Number(e.shield)||0)<=0;",
+            "const halfHealth=Number(e.hp)<=Number(e.maxHp)*0.50;",
+            "const specialDue=cycleDue||shieldDown||halfHealth;",
+            'countLivingEgyptSummonsForMage(e.id)',
+            "if(e.specialCooldown<=0&&summonsAlive<=1&&specialDue){",
+            'egyptSummonerId:e.egyptSummonerId??null',
+            'bodyEndAt:now+bodyDuration,powerEndAt:now+powerDuration'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing expected markers: '+repr(missing))
+          forbidden=[
+            "if(e.specialCooldown<=0&&summonsAlive<=1&&cycleDue){",
+            'countLivingEgyptSummons(e.team)',
+            'hasPendingEgyptSummonSpecial(e.team,e.id)',
+            'WAR ADAPTIVE VISUAL LOD 2026-09-12',
+            'WAR_LOD_POSTER_CACHE',
+            'entity-lod-poster'
+          ]
+          present=[x for x in forbidden if x in t]
+          if present: raise SystemExit('Forbidden/old markers remain: '+repr(present))
+          print('Egypt mage special trigger validation passed')
+          PY
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Add Egypt mage shield and half-HP special triggers'
+          git push origin main
