@@ -2331,6 +2331,7 @@ body.booting #landscapeRoot{visibility:hidden}
 
 
 /* EGYPT SHOP + VISUAL TUNING 2026-09-13 */
+/* EGYPT MAGE INDIVIDUAL SUMMON CYCLE 2026-09-13 */
 /* A regra original #shop .shop-sprite-grid usa !important; esta regra
    mais específica garante que o grupo do outro clã desapareça visualmente. */
 #shop .clan-shop[hidden],
@@ -2340,39 +2341,41 @@ body.booting #landscapeRoot{visibility:hidden}
 
 /* Egito: apenas escala visual. Hitbox, alcance, velocidade e atributos não mudam. */
 .entity-visual.egypt-unit:not(.mage-visual) .entity-body{
-  width:96px;
-  height:113px;
-  left:-9px;
-  top:-10px;
+  width:104px;
+  height:123px;
+  left:-13px;
+  top:-15px;
 }
-/* A espada egípcia estava grande em relação ao corpo. Mantém o pivô perto
-   do mesmo ponto visual, mas reduz o sprite. */
+/* Espada egípcia: desfaz a redução anterior e fica maior que a espada padrão. */
 .entity-visual.egypt-unit:not(.mage-visual) .entity-sword{
-  width:22px;
-  height:64px;
-  left:28px;
-  top:8px;
+  width:34px;
+  height:98px;
+  left:24px;
+  top:-8px;
 }
 
-/* Mago/Maga do Egito maiores sem alterar a caixa física da entidade. */
+/* Mago/Maga do Egito um pouco maiores, mantendo a caixa física original. */
 .entity-visual.mage-visual.egypt-unit .entity-body{
-  width:108px;
-  height:128px;
-  left:-10px;
-  top:-12px;
+  width:118px;
+  height:140px;
+  left:-15px;
+  top:-18px;
 }
 .entity-visual.mage-visual.egypt-unit .entity-mage-special{
-  width:128px !important;
-  height:151px !important;
-  left:-20px !important;
-  top:-24px !important;
+  width:140px !important;
+  height:165px !important;
+  left:-26px !important;
+  top:-30px !important;
 }
-/* Cajado egípcio menor; animações/rotação continuam usando a mesma lógica. */
+/* Cajado e mão frontal descem juntos; tamanho do cajado permanece controlado. */
 .entity-visual.mage-visual.egypt-unit .mage-staff{
   width:68px;
   height:80px;
   left:32px;
-  top:4px;
+  top:14px;
+}
+.entity-visual.mage-visual.egypt-unit .mage-hand{
+  top:61px;
 }
 
 </style>
@@ -3342,7 +3345,7 @@ function serializeWarEntityForNetwork(e,now){
    attackSerial:Number(e.attackSerial)||0,comboStep:Number(e.comboStep)||0,
    hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
    deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
-   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned
+   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null
  };
 
  if(e.type==='golem'){
@@ -3390,7 +3393,11 @@ function serializeWarEntityForNetwork(e,now){
        angle:Number.isFinite(Number(p.angle))?Number(p.angle):0,
        length:Number.isFinite(Number(p.length))?Number(p.length):245,
        duration:Number(p.duration)||(p.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION),
-       remainingMs:Math.max(0,Number(p.endAt)-now)
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       bodyDuration:Number(p.bodyDuration)||0,
+       powerDuration:Number(p.powerDuration)||0,
+       bodyRemainingMs:p.bodyEndAt?Math.max(0,Number(p.bodyEndAt)-now):0,
+       powerRemainingMs:p.powerEndAt?Math.max(0,Number(p.powerEndAt)-now):0
      };
    }
  }else if(e.type==='king'){
@@ -3493,9 +3500,41 @@ function applyRemoteGame(game){
      const old=previous.get(e.id),localNow=performance.now();
      const out={...e,x:old?.x??e.x,y:old?.y??e.y,netTargetX:e.x,netTargetY:e.y,target:null,controlled:e.ownerId===NetworkAdapter.localPlayerId};
      if(out.pendingMageAttack?.remainingMs!=null){
-       const duration=out.pendingMageAttack.duration||(out.pendingMageAttack.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION);
-       out.pendingMageAttack={...out.pendingMageAttack,endAt:localNow+out.pendingMageAttack.remainingMs,duration};
+       const p=out.pendingMageAttack;
+       const duration=p.duration||(p.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION);
+       const remaining=Math.max(0,Number(p.remainingMs)||0);
+       const oldPending=old?.pendingMageAttack;
+       const sameSerial=!!oldPending&&Number(old?.mageAttackSerial)===Number(out.mageAttackSerial)&&oldPending.kind===p.kind;
+       if(remaining<=0){
+         out.pendingMageAttack=null;
+         out.mageAttackKind=null;
+       }else if(sameSerial&&Number.isFinite(Number(oldPending.endAt))){
+         const rebuilt={...p,duration,
+           startedAt:Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining),
+           endAt:Math.min(Number(oldPending.endAt),localNow+remaining)
+         };
+         if(p.kind==='special'){
+           const bodyDuration=Number(p.bodyDuration)||Number(oldPending.bodyDuration)||(out.variant==='female'?EGYPT_MAGE_SPECIAL_FEMALE_DURATION:EGYPT_MAGE_SPECIAL_MALE_DURATION);
+           const powerDuration=Number(p.powerDuration)||Number(oldPending.powerDuration)||EGYPT_MAGE_POWER_SPECIAL_DURATION;
+           const bodyCandidate=localNow+Math.max(0,Number(p.bodyRemainingMs)||0);
+           const powerCandidate=localNow+Math.max(0,Number(p.powerRemainingMs)||0);
+           rebuilt.bodyDuration=bodyDuration;rebuilt.powerDuration=powerDuration;
+           rebuilt.bodyEndAt=Math.min(Number(oldPending.bodyEndAt)||bodyCandidate,bodyCandidate);
+           rebuilt.powerEndAt=Math.min(Number(oldPending.powerEndAt)||powerCandidate,powerCandidate);
+         }
+         out.pendingMageAttack=rebuilt;
+       }else{
+         const rebuilt={...p,duration,startedAt:localNow-Math.max(0,duration-remaining),endAt:localNow+remaining};
+         if(p.kind==='special'){
+           rebuilt.bodyDuration=Number(p.bodyDuration)||(out.clan==='egypt'?(out.variant==='female'?EGYPT_MAGE_SPECIAL_FEMALE_DURATION:EGYPT_MAGE_SPECIAL_MALE_DURATION):(out.variant==='female'?MAGE_SPECIAL_FEMALE_DURATION:MAGE_SPECIAL_MALE_DURATION));
+           rebuilt.powerDuration=Number(p.powerDuration)||(out.clan==='egypt'?EGYPT_MAGE_POWER_SPECIAL_DURATION:MAGE_POWER_SPECIAL_DURATION);
+           rebuilt.bodyEndAt=localNow+Math.max(0,Number(p.bodyRemainingMs)||0);
+           rebuilt.powerEndAt=localNow+Math.max(0,Number(p.powerRemainingMs)||0);
+         }
+         out.pendingMageAttack=rebuilt;
+       }
      }
+     if(!out.pendingMageAttack)out.mageAttackKind=null;
      if(out.pendingKingSpecial?.remainingMs!=null){
        const p=out.pendingKingSpecial;
        const duration=p.duration||KING_SPECIAL_DURATION;
@@ -4174,7 +4213,7 @@ function entityBase(type,x,y,team,color){
  speed:speedMap[state.speed],alive:true,attackCooldown:0,attackAnim:0,attackSerial:0,comboStep:0,lastAttackAt:0,
  hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,knockVX:0,knockVY:0,knockTime:0,
  deathStarted:0,removeAt:0,deathDir:1,heading:0,facing:1,moving:false,target:null,controlled:false,
- variant:'male',clan:'warriors',egyptSummoned:false,
+ variant:'male',clan:'warriors',egyptSummoned:false,egyptSummonerId:null,
 
  // Máquina de estados do Golem: localizar -> aproximar -> atacar -> finalizar.
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
@@ -4187,7 +4226,7 @@ function entityBase(type,x,y,team,color){
  dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
  dragonBurnSourceX:0,dragonBurnSourceY:0,dragonBurnSerial:0,dragonBurnFlameCount:0,ownerId:null};
 }
-function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null,clan='warriors',egyptSummoned=false){
+function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null,clan='warriors',egyptSummoned=false,egyptSummonerId=null){
  const e=entityBase('warrior',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
  e.hp=e.maxHp=150;
@@ -4197,6 +4236,7 @@ function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=nul
  e.variant=variant==='female'?'female':'male';
  e.clan=normalizeClan(clan);
  e.egyptSummoned=!!egyptSummoned;
+ e.egyptSummonerId=egyptSummonerId??null;
  state.entities.push(e);
  return e;
 }
@@ -4918,7 +4958,8 @@ function startMageAttack(e,kind,target=null){
    const duration=Math.max(bodyDuration,powerDuration);
    e.specialCooldown=MAGE_SPECIAL_COOLDOWN;
    e.moving=false;e.pendingMageAttack={
-     kind,targetId:null,originX:e.x,originY:e.y,startedAt:now,duration,
+     kind,targetId:null,originX:e.x,originY:e.y,startedAt:now,duration,bodyDuration,powerDuration,
+     bodyEndAt:now+bodyDuration,powerEndAt:now+powerDuration,
      damageAt:now+Math.min(1200,Math.max(650,duration*.40)),
      endAt:now+duration,impacted:false,hitIds:{}
    };
@@ -4942,19 +4983,12 @@ function startMageAttack(e,kind,target=null){
  }
  return true;
 }
-function countLivingEgyptSummons(team){
+function countLivingEgyptSummonsForMage(mageId){
  let count=0;
  for(const t of state.entities){
-   if(t.alive&&t.team===team&&t.type==='warrior'&&t.clan==='egypt'&&t.egyptSummoned)count++;
+   if(t.alive&&t.type==='warrior'&&t.clan==='egypt'&&t.egyptSummoned&&t.egyptSummonerId===mageId)count++;
  }
  return count;
-}
-function hasPendingEgyptSummonSpecial(team,excludeId=null){
- for(const t of state.entities){
-   if(!t.alive||t.id===excludeId||t.team!==team||t.type!=='mage'||t.clan!=='egypt')continue;
-   if(t.pendingMageAttack?.kind==='special')return true;
- }
- return false;
 }
 function spawnEgyptMageWarriors(e,p){
  const ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
@@ -4965,7 +4999,7 @@ function spawnEgyptMageWarriors(e,p){
    const x=clamp(ox+Math.cos(angle)*radius,45,state.world.w-45);
    const y=clamp(oy+Math.sin(angle)*radius,45,state.world.h-45);
    const variant=i%2===0?'male':'female';
-   spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true);
+   spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true,e.id);
  }
 }
 function updateMageAttackState(e,now){
@@ -5926,11 +5960,13 @@ function beginDragonTakeoff(e){
  if(e.attackCooldown<=0&&!e.pendingMageAttack){
    const lowHealth=e.hp<=e.maxHp*.5;
    if(e.clan==='egypt'){
-     // Egito: vida baixa OU 5 normais completos tornam o especial devido.
-     // Porém a invocação só acontece quando restar no máximo 1 guerreiro invocado vivo.
-     const cycleDue=(Number(e.mageCycle)||0)>=5;
-     const summonsAlive=countLivingEgyptSummons(e.team);
-     if(e.specialCooldown<=0&&summonsAlive<=1&&!hasPendingEgyptSummonSpecial(e.team,e.id)&&(lowHealth||cycleDue)){
+     // Egito: 4 ataques normais -> o 5º ataque elegível é especial.
+     // A trava é INDIVIDUAL: contam apenas guerreiros que ESTE mago invocou.
+     // Se ainda houver 2 ou mais vivos, o especial nem entra em estado visual;
+     // o mago segue atacando normalmente até restar no máximo 1 dos seus próprios invocados.
+     const cycleDue=(Number(e.mageCycle)||0)>=4;
+     const summonsAlive=countLivingEgyptSummonsForMage(e.id);
+     if(e.specialCooldown<=0&&summonsAlive<=1&&cycleDue){
        if(startMageAttack(e,'special',target))return;
      }
    }else{
@@ -6634,6 +6670,14 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
  const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
  for(const e of state.entities){
    const p=e.pendingMageAttack;if(!e.alive||!p)continue;
+   if(p.kind==='special'){
+     const powerVisualEnd=(Number(p.powerEndAt)||Number(p.endAt)||0)-45;
+     if(now>=powerVisualEnd){
+       const old=magePowerNodes.get(e.id);
+       if(old){releaseGifObjectUrl(old);old.remove();magePowerNodes.delete(e.id)}
+       continue;
+     }
+   }
    // Poderes completamente fora da câmera não ganham DOM/GIF. Dano e estado seguem intactos.
    let effectVisible=false;
    if(p.kind==='special'){
@@ -6673,8 +6717,10 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
      const startX=ox+Math.cos(angle)*32,startY=oy-18;
      img.style.left=((startX-left)*zoom)+'px';img.style.top=((startY-top)*zoom)+'px';img.style.width=(length*zoom)+'px';img.style.height=(92*zoom)+'px';img.style.opacity='1';img.style.visibility='visible';img.style.transform=`translateY(-50%) rotate(${angle}rad)`;
    }else{
-     const duration=p.duration||MAGE_SPECIAL_DURATION;
-     const progress=clamp(1-Math.max(0,p.endAt-now)/duration,0,1);
+     const duration=Math.max(1,Number(p.powerDuration)||(e.clan==='egypt'?EGYPT_MAGE_POWER_SPECIAL_DURATION:MAGE_POWER_SPECIAL_DURATION));
+     const powerEnd=Number(p.powerEndAt)||Number(p.endAt);
+     const powerStart=powerEnd-duration;
+     const progress=clamp((now-powerStart)/duration,0,1);
      // Cresce de forma contínua e um pouco mais que antes.
      const grow=.90+progress*.30;
      const size=(MAGE_SPECIAL_RADIUS*2)*zoom*grow,imgX=p.originX??e.x,imgY=p.originY??e.y;
@@ -7329,8 +7375,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        }
      }
    }else if(e.type==='mage'){
-     const special=e.mageAttackKind==='special'&&e.pendingMageAttack?.kind==='special'&&e.pendingMageAttack.endAt>localNow;
-     const normalAttack=e.mageAttackKind==='normal'&&e.pendingMageAttack?.kind==='normal';
+     const magePending=e.pendingMageAttack;
+     const specialPending=e.mageAttackKind==='special'&&magePending?.kind==='special'&&magePending.endAt>localNow;
+     const bodyVisualEnd=specialPending?(Number(magePending.bodyEndAt)||Number(magePending.endAt))-45:0;
+     const special=specialPending&&localNow<bodyVisualEnd;
+     const normalAttack=e.mageAttackKind==='normal'&&magePending?.kind==='normal';
      const desired=special?'special':visualMoving?'walk':'idle';
      setEntitySpriteState(el,desired);
 
