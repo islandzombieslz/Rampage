@@ -1,0 +1,69 @@
+name: Egypt mage pure summon
+on:
+  push:
+    paths:
+      - '.github/workflows/egypt-mage-pure-summon.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Refresh branch
+        run: git pull --rebase origin main
+      - name: Apply Egypt mage special fix
+        run: python .github/fix_egypt_mage_pure_summon_20260913.py
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+      - name: Validate Egypt special is summon-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          start=t.index("if(e.clan==='egypt'){", t.index('function updateMageAttackState'))
+          end=t.index(" }else if(now>=p.nextTickAt", start)
+          block=t[start:end]
+          egypt=block[:block.index('}else{')]
+          warrior=block[block.index('}else{'):]
+          required_egypt=[
+            'spawnEgyptMageWarriors(e,p);',
+            'Não causa dano, não cura o próprio Mago e não cura aliados.'
+          ]
+          for marker in required_egypt:
+            if marker not in egypt: raise SystemExit('Missing Egypt marker: '+marker)
+          forbidden_egypt=['applyCombatHit(', 'MAGE_SPECIAL_DAMAGE', 'MAGE_SPECIAL_HEAL', 'regenSerial']
+          for marker in forbidden_egypt:
+            if marker in egypt: raise SystemExit('Egypt special still has gameplay effect: '+marker)
+          required_warrior=['MAGE_SPECIAL_DAMAGE','MAGE_SPECIAL_HEAL','regenSerial']
+          for marker in required_warrior:
+            if marker not in warrior: raise SystemExit('Warrior Mage behavior lost: '+marker)
+          if 'for(let i=0;i<3;i++){' not in t or 'summon.maxShield=0;' not in t:
+            raise SystemExit('Egypt summon configuration changed unexpectedly')
+          print('Validation passed: Egypt special only spawns 3 shieldless warriors; no damage/heal')
+          PY
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Make Egypt mage special summon-only'
+          git push origin main
