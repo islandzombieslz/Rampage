@@ -1,0 +1,122 @@
+name: War specials and gems stability
+on:
+  push:
+    paths:
+      - '.github/workflows/war-specials-gems-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Refresh branch
+        run: git pull --rebase origin main
+      - name: Apply gameplay and gems fixes
+        run: python .github/fix_war_specials_gems_20260913.py
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+      - name: Validate requested rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re,hashlib
+          t=Path('index.html').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          gif=Path('assets/egypt/mage/power-special.gif').read_bytes()
+
+          required=[
+            'WAR SPECIALS + GEMS STABILITY 2026-09-13',
+            'return Math.round(clamp(safe,300,5000)/100)*100;',
+            'if(this.roomId!==code)return;',
+            'if(this.roomId)await this.leaveRoom();',
+            "const visibleGems=Number($('#gemsVal')?.textContent);",
+            'warriorMageSpecialObservedHp:null,warriorMageHpTriggerPending:false',
+            'function updateWarriorMageDamageSpecialTrigger(e)',
+            'const cycleDue=(Number(e.mageCycle)||0)>=5;',
+            'const hpDue=!!e.warriorMageHpTriggerPending;',
+            'for(let i=0;i<3;i++){',
+            'summon.maxShield=0;',
+            'function entityHasActiveSpecial(e,now=performance.now())',
+            'if(entityHasActiveSpecial(target))knockForce*=.50;',
+            'const powerScale=egyptSpecial?.50:1;',
+            'const grow=egyptSpecial?(.96+progress*.02):(.90+progress*.30);'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing markers: '+repr(missing))
+
+          forbidden=[
+            'nearbyForSpecial>=3||lowHealth',
+            'state.gems=clamp(state.gems+dir*100,300,3000)',
+            'WAR ADAPTIVE VISUAL LOD 2026-09-12',
+            'WAR_LOD_POSTER_CACHE',
+            'entity-lod-poster'
+          ]
+          present=[x for x in forbidden if x in t]
+          if present: raise SystemExit('Forbidden/old markers remain: '+repr(present))
+
+          # Parse GIF frame count and GCE duration without decoding/re-encoding.
+          def sub_end(data,pos):
+            while True:
+              size=data[pos];pos+=1
+              if size==0:return pos
+              pos+=size
+          if gif[:6] not in (b'GIF87a',b'GIF89a'): raise SystemExit('bad GIF')
+          packed=gif[10];pos=13
+          if packed&0x80: pos+=3*(2**((packed&7)+1))
+          frames=0
+          while pos<len(gif):
+            m=gif[pos]
+            if m==0x3B:break
+            if m==0x21:
+              label=gif[pos+1];pos+=2
+              if label==0xF9:
+                size=gif[pos];pos+=1+size+1
+              else:pos=sub_end(gif,pos)
+            elif m==0x2C:
+              packed_img=gif[pos+9];pos+=10
+              if packed_img&0x80:pos+=3*(2**((packed_img&7)+1))
+              pos+=1;pos=sub_end(gif,pos);frames+=1
+            else:raise SystemExit(f'bad marker {m}')
+          duration=0
+          for i in range(len(gif)-7):
+            if gif[i:i+3]==b'\x21\xf9\x04':duration+=(gif[i+4]|gif[i+5]<<8)*10
+          if frames!=25:raise SystemExit(f'Egypt power frame count {frames}, expected 25')
+          if not (650<=duration<=950):raise SystemExit(f'Egypt power duration {duration}ms')
+          if b'NETSCAPE2.0' not in gif:raise SystemExit('Egypt power is not using Warrior-Mage-style loop metadata + JS cutoff')
+          rev=hashlib.sha256(gif).hexdigest()[:20]
+          if rev not in t or rev not in sw:raise SystemExit('cache revision mismatch')
+          m=re.search(r'let EGYPT_MAGE_POWER_SPECIAL_DURATION=(\d+);',t)
+          if not m or int(m.group(1))!=duration:raise SystemExit('duration constant mismatch')
+          print('Validation passed:',frames,'frames',duration,'ms',rev)
+          PY
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt/mage/power-special.gif
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Fix war mage specials and gems stability'
+          git push origin main
