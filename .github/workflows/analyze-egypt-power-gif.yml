@@ -12,46 +12,42 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Pillow
         run: python -m pip install --disable-pip-version-check pillow
-      - name: Analyze decoded frames
+      - name: Compare special power GIFs
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          from PIL import Image
+          from PIL import Image, ImageChops, ImageStat
           from pathlib import Path
           import hashlib
 
-          path=Path('assets/egypt/mage/power-special.gif')
-          im=Image.open(path)
-          frames=[]
-          durations=[]
-          i=0
-          while True:
-              try:
-                  im.seek(i)
-              except EOFError:
-                  break
-              rgba=im.convert('RGBA')
-              frames.append(hashlib.md5(rgba.tobytes()).hexdigest())
-              durations.append(int(im.info.get('duration',0)))
-              i+=1
-
-          print('frames=',len(frames))
-          print('total_ms=',sum(durations))
-          print('loop_info=',im.info.get('loop','missing'))
-          repeats=[]
-          for p in range(2,len(frames)//2+1):
-              if frames[:p]==frames[p:2*p]:
-                  count=2
-                  while (count+1)*p<=len(frames) and frames[:p]==frames[count*p:(count+1)*p]:
-                      count+=1
-                  repeats.append((p,count,sum(durations[:p])))
-          print('prefix_repeats=',repeats[:20])
-          positions={}
-          for idx,h in enumerate(frames): positions.setdefault(h,[]).append(idx)
-          duplicates=[v for v in positions.values() if len(v)>1]
-          print('duplicate_frame_groups=',duplicates[:80])
-          print('durations=',durations)
-          print('hashes=')
-          for idx,h in enumerate(frames): print(idx,durations[idx],h)
+          def inspect(path):
+              im=Image.open(path)
+              loop=im.info.get('loop','missing')
+              size=im.size
+              frames=[]; durations=[]; rgba=[]
+              i=0
+              while True:
+                  try: im.seek(i)
+                  except EOFError: break
+                  fr=im.convert('RGBA').copy()
+                  rgba.append(fr)
+                  frames.append(hashlib.md5(fr.tobytes()).hexdigest())
+                  durations.append(int(im.info.get('duration',0)))
+                  i+=1
+              first=rgba[0]
+              diffs=[]
+              for idx,fr in enumerate(rgba):
+                  diff=ImageChops.difference(first,fr)
+                  stat=ImageStat.Stat(diff)
+                  mean=sum(stat.mean)/len(stat.mean)
+                  diffs.append((mean,idx))
+              nearest=sorted(diffs[1:])[:12]
+              print('\nFILE',path)
+              print('size=',size,'frames=',len(frames),'total_ms=',sum(durations),'loop=',loop)
+              print('nearest_to_first=',nearest)
+              print('durations_head=',durations[:15])
+              print('durations_tail=',durations[-15:])
+          inspect('assets/egypt/mage/power-special.gif')
+          inspect('assets/mage/poder-mago-especial.gif')
           PY
