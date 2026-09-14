@@ -2333,6 +2333,7 @@ body.booting #landscapeRoot{visibility:hidden}
 /* EGYPT SHOP + VISUAL TUNING 2026-09-13 */
 /* EGYPT MAGE INDIVIDUAL SUMMON CYCLE 2026-09-13 */
 /* EGYPT MAGE SHIELD + HALF-HP SPECIAL TRIGGERS 2026-09-13 */
+/* EGYPT MAGE DAMAGE-EDGE + SINGLE POWER CYCLE 2026-09-13 */
 /* A regra original #shop .shop-sprite-grid usa !important; esta regra
    mais específica garante que o grupo do outro clã desapareça visualmente. */
 #shop .clan-shop[hidden],
@@ -2895,7 +2896,7 @@ const ASSETS = {
 };
 
 /* PERSISTENT ASSET CACHE 2026-09-12 */
-const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/som-de-batalha.mp3":"f00bb902c04e5cdde50c","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"60bbad838976f14c156e","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper-menus.png":"fe6c5ee3f25d35e7b434","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5"});
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/som-de-batalha.mp3":"f00bb902c04e5cdde50c","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"d13f90a907a3db118553","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper-menus.png":"fe6c5ee3f25d35e7b434","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5"});
 const BOOT_CACHE_NAME="rampage-assets-v3";
 const BOOT_MANIFEST_KEY="rampageAssetManifestV3";
 const BOOT_FETCH_CONCURRENCY=10;
@@ -3042,7 +3043,7 @@ let MAGE_POWER_SPECIAL_DURATION=3000;
 let EGYPT_MAGE_NORMAL_DURATION=3000;
 let EGYPT_MAGE_SPECIAL_MALE_DURATION=3000;
 let EGYPT_MAGE_SPECIAL_FEMALE_DURATION=3000;
-let EGYPT_MAGE_POWER_SPECIAL_DURATION=3000;
+let EGYPT_MAGE_POWER_SPECIAL_DURATION=2310;
 let GOLEM_NORMAL_DURATION=3000;
 let GOLEM_SPECIAL_DURATION=3300;
 let BROWN_NORMAL_DURATION=1800;
@@ -3385,6 +3386,10 @@ function serializeWarEntityForNetwork(e,now){
    out.mageAttackKind=e.mageAttackKind??null;
    out.mageAttackSerial=Number(e.mageAttackSerial)||0;
    out.mageCycle=Number(e.mageCycle)||0;
+   out.egyptSpecialObservedHp=Number.isFinite(Number(e.egyptSpecialObservedHp))?Number(e.egyptSpecialObservedHp):null;
+   out.egyptSpecialObservedShield=Number.isFinite(Number(e.egyptSpecialObservedShield))?Number(e.egyptSpecialObservedShield):null;
+   out.egyptHpTriggerPending=!!e.egyptHpTriggerPending;
+   out.egyptShieldTriggerPending=!!e.egyptShieldTriggerPending;
    if(e.pendingMageAttack){
      const p=e.pendingMageAttack;
      out.pendingMageAttack={
@@ -4220,6 +4225,7 @@ function entityBase(type,x,y,team,color){
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
  golemPhase:'seek',golemLastAttackCompletedAt:0,
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
+ egyptSpecialObservedHp:null,egyptSpecialObservedShield:null,egyptHpTriggerPending:false,egyptShieldTriggerPending:false,
  pendingBrownAttack:null,brownAttackKind:null,brownAttackSerial:0,brownNormalCount:0,
  pendingKingSpecial:null,kingSpecialSerial:0,kingNormalCount:0,
  pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
@@ -4293,6 +4299,7 @@ function spawnMage(x,y,team,color,variant='male',clan='warriors'){
  e.variant=variant==='female'?'female':'male';e.clan=normalizeClan(clan);e.hp=e.maxHp=200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
  // Mantém a velocidade-base própria; no modo Guerra recebe exatamente -50%.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER:92;e.attackCooldown=0;e.mageCycle=0;
+ if(e.clan==='egypt'){e.egyptSpecialObservedHp=e.hp;e.egyptSpecialObservedShield=e.shield;e.egyptHpTriggerPending=false;e.egyptShieldTriggerPending=false;}
  state.entities.push(e);return e;
 }
 function spawnDragon(x,y,team,color){
@@ -4965,6 +4972,13 @@ function startMageAttack(e,kind,target=null){
      endAt:now+duration,impacted:false,hitIds:{}
    };
    e.mageCycle=0;
+   if(egypt){
+     // Consome os gatilhos emergenciais deste evento. Eles só rearmam com NOVO dano.
+     e.egyptHpTriggerPending=false;
+     e.egyptShieldTriggerPending=false;
+     e.egyptSpecialObservedHp=Math.max(0,Number(e.hp)||0);
+     e.egyptSpecialObservedShield=Math.max(0,Number(e.shield)||0);
+   }
    addWarGoalProgress(e.team,'specials');
  }else{
    const angle=target?Math.atan2(target.y-e.y,target.x-e.x):(e.heading||0);
@@ -4983,6 +4997,24 @@ function startMageAttack(e,kind,target=null){
    addWarGoalProgress(e.team,'ranged');
  }
  return true;
+}
+function updateEgyptMageDamageSpecialTriggers(e){
+ if(!e||e.clan!=='egypt')return;
+ const hp=Math.max(0,Number(e.hp)||0),shield=Math.max(0,Number(e.shield)||0);
+ const maxHp=Math.max(1,Number(e.maxHp)||1);
+ const prevHp=Number(e.egyptSpecialObservedHp);
+ const prevShield=Number(e.egyptSpecialObservedShield);
+ // Primeira observação/host novo só estabelece a linha de base; não inventa dano antigo.
+ if(Number.isFinite(prevHp)){
+   // HP só arma novamente quando houve NOVA perda de vida e o Mago está em <=50%.
+   if(hp<prevHp&&hp<=maxHp*.50)e.egyptHpTriggerPending=true;
+ }
+ if(Number.isFinite(prevShield)){
+   // Escudo só arma no evento de cruzar de >0 para 0. Permanecer zerado não rearma.
+   if(prevShield>0&&shield<=0)e.egyptShieldTriggerPending=true;
+ }
+ e.egyptSpecialObservedHp=hp;
+ e.egyptSpecialObservedShield=shield;
 }
 function countLivingEgyptSummonsForMage(mageId){
  let count=0;
@@ -5953,6 +5985,7 @@ function beginDragonTakeoff(e){
           function aiFightMage(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive||e.knockTime>0){e.moving=false;return}
  const now=performance.now();
+ if(e.clan==='egypt')updateEgyptMageDamageSpecialTriggers(e);
  if(e.pendingMageAttack){e.moving=false;return}
  const candidates=preparedCandidates||state.entities;
  const target=nearestEngageableCandidate(e,candidates,forcedTeam,false);
@@ -5961,17 +5994,14 @@ function beginDragonTakeoff(e){
  if(e.attackCooldown<=0&&!e.pendingMageAttack){
    const lowHealth=e.hp<=e.maxHp*.5;
    if(e.clan==='egypt'){
-     // Egito: o especial fica devido quando QUALQUER uma destas condições ocorre:
-     // 1) 4 ataques normais completos (o 5º ataque elegível vira especial);
-     // 2) o escudo chega a zero;
-     // 3) a vida chega a 50% ou menos.
-     // A trava continua INDIVIDUAL: contam apenas guerreiros que ESTE mago invocou.
-     // Se ainda houver 2 ou mais vivos, o especial nem entra no estado visual e o mago
-     // continua atacando normalmente até restar no máximo 1 dos seus próprios invocados.
+     // Egito: 4 normais continuam tornando o 5º ataque elegível especial.
+     // Escudo zerado e HP <=50% agora são EVENTOS de dano, não estados permanentes:
+     // sem novo dano, a mesma condição não dispara outro especial depois do cooldown.
+     // Se o evento ocorrer enquanto há 2+ invocados próprios vivos, fica pendente sem trocar GIF;
+     // quando restar <=1, um único especial consome os eventos pendentes.
      const cycleDue=(Number(e.mageCycle)||0)>=4;
-     const shieldDown=(Number(e.shield)||0)<=0;
-     const halfHealth=Number(e.hp)<=Number(e.maxHp)*0.50;
-     const specialDue=cycleDue||shieldDown||halfHealth;
+     const damageDue=!!e.egyptShieldTriggerPending||!!e.egyptHpTriggerPending;
+     const specialDue=cycleDue||damageDue;
      const summonsAlive=countLivingEgyptSummonsForMage(e.id);
      if(e.specialCooldown<=0&&summonsAlive<=1&&specialDue){
        if(startMageAttack(e,'special',target))return;
@@ -6728,9 +6758,12 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
      const powerEnd=Number(p.powerEndAt)||Number(p.endAt);
      const powerStart=powerEnd-duration;
      const progress=clamp((now-powerStart)/duration,0,1);
-     // Cresce de forma contínua e um pouco mais que antes.
-     const grow=.90+progress*.30;
-     const size=(MAGE_SPECIAL_RADIUS*2)*zoom*grow,imgX=p.originX??e.x,imgY=p.originY??e.y;
+     // Poder do Egito é menor e quase não aumenta durante o GIF.
+     // O Mago Guerreiro mantém o dimensionamento anterior.
+     const egyptSpecial=e.clan==='egypt';
+     const grow=egyptSpecial?(.94+progress*.08):(.90+progress*.30);
+     const powerScale=egyptSpecial?.78:1;
+     const size=(MAGE_SPECIAL_RADIUS*2)*zoom*grow*powerScale,imgX=p.originX??e.x,imgY=p.originY??e.y;
      // Fade-in no começo e fade-out no fim do GIF que fica atrás do Mago.
      const fadeIn=clamp(progress/.16,0,1);
      const fadeOut=clamp((1-progress)/.22,0,1);
