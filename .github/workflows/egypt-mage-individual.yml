@@ -1,0 +1,97 @@
+name: Egypt mage individual special
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_egypt_mage_individual.py'
+      - '.github/workflows/egypt-mage-individual.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-egypt-mage-individual
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply Egypt mage fix
+        run: python .github/fix_egypt_mage_individual.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Egypt mage rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'EGYPT MAGE INDIVIDUAL SUMMON CYCLE 2026-09-13',
+            "const cycleDue=(Number(e.mageCycle)||0)>=4;",
+            'countLivingEgyptSummonsForMage(e.id)',
+            'egyptSummonerId:e.egyptSummonerId??null',
+            "spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true,e.id);",
+            'bodyEndAt:now+bodyDuration,powerEndAt:now+powerDuration',
+            "const special=specialPending&&localNow<bodyVisualEnd;",
+            'const powerVisualEnd=(Number(p.powerEndAt)||Number(p.endAt)||0)-45;',
+            'sameSerial=!!oldPending&&Number(old?.mageAttackSerial)===Number(out.mageAttackSerial)',
+            'width:104px;', 'height:123px;',
+            'width:118px;', 'height:140px;',
+            'width:34px;', 'height:98px;',
+            'top:61px;'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing expected markers: '+repr(missing))
+          forbidden=[
+            'countLivingEgyptSummons(e.team)',
+            'hasPendingEgyptSummonSpecial(e.team,e.id)',
+            "const cycleDue=(Number(e.mageCycle)||0)>=5;",
+            'WAR ADAPTIVE VISUAL LOD 2026-09-12',
+            'WAR_LOD_POSTER_CACHE',
+            'entity-lod-poster'
+          ]
+          present=[x for x in forbidden if x in t]
+          if present: raise SystemExit('Forbidden/old markers remain: '+repr(present))
+          print('Egypt mage individual special validation passed')
+          PY
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Fix individual Egypt mage special cycle'
+          git push origin main
