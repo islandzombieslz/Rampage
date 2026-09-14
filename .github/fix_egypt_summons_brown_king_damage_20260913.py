@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Balance patch validated on main; this helper is retained for reproducibility.
 path=Path('index.html')
 text=path.read_text(encoding='utf-8')
 MARKER='EGYPT SUMMON HALF HP + BROWN KING DAMAGE 2026-09-13'
