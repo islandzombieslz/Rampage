@@ -1,0 +1,103 @@
+name: Egypt mage trigger and power
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_egypt_mage_trigger_and_power.py'
+      - '.github/workflows/egypt-mage-trigger-and-power.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-egypt-mage-trigger-and-power
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply Egypt mage trigger and power fix
+        run: python .github/fix_egypt_mage_trigger_and_power.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Egypt mage damage-edge and power
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,re
+          t=Path('index.html').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          gif=Path('assets/egypt/mage/power-special.gif').read_bytes()
+          required=[
+            'EGYPT MAGE DAMAGE-EDGE + SINGLE POWER CYCLE 2026-09-13',
+            'egyptHpTriggerPending:false',
+            'egyptShieldTriggerPending:false',
+            'function updateEgyptMageDamageSpecialTriggers(e)',
+            'if(hp<prevHp&&hp<=maxHp*.50)e.egyptHpTriggerPending=true;',
+            'if(prevShield>0&&shield<=0)e.egyptShieldTriggerPending=true;',
+            'const damageDue=!!e.egyptShieldTriggerPending||!!e.egyptHpTriggerPending;',
+            "const powerScale=egyptSpecial?.78:1;",
+            "const grow=egyptSpecial?(.94+progress*.08):(.90+progress*.30);"
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing markers: '+repr(missing))
+          forbidden=[
+            'const shieldDown=(Number(e.shield)||0)<=0;',
+            'const halfHealth=Number(e.hp)<=Number(e.maxHp)*0.50;',
+            'WAR ADAPTIVE VISUAL LOD 2026-09-12',
+            'WAR_LOD_POSTER_CACHE',
+            'entity-lod-poster'
+          ]
+          present=[x for x in forbidden if x in t]
+          if present: raise SystemExit('Forbidden/old markers remain: '+repr(present))
+          if b'NETSCAPE2.0' in gif or b'ANIMEXTS1.0' in gif:
+            raise SystemExit('Egypt special power GIF still contains a loop extension')
+          rev=hashlib.sha256(gif).hexdigest()[:20]
+          if rev not in t or rev not in sw:
+            raise SystemExit('Asset revision was not updated in both manifests')
+          m=re.search(r'let EGYPT_MAGE_POWER_SPECIAL_DURATION=(\d+);',t)
+          if not m or int(m.group(1))<=0 or int(m.group(1))>=3000:
+            raise SystemExit('Egypt special power duration was not accelerated')
+          print('Egypt mage damage-edge + single-cycle power validation passed:',m.group(1),'ms',rev)
+          PY
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt/mage/power-special.gif
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Fix Egypt mage repeat trigger and power GIF'
+          git push origin main
