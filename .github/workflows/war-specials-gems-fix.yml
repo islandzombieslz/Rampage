@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/war-specials-gems-fix.yml'
+      - '.github/fix_war_specials_gems_20260913_v2.py'
 permissions:
   contents: write
 jobs:
@@ -17,7 +18,7 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
       - name: Apply gameplay and gems fixes
-        run: python .github/fix_war_specials_gems_20260913.py
+        run: python .github/fix_war_specials_gems_20260913_v2.py
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -72,7 +73,6 @@ jobs:
           present=[x for x in forbidden if x in t]
           if present: raise SystemExit('Forbidden/old markers remain: '+repr(present))
 
-          # Parse GIF frame count and GCE duration without decoding/re-encoding.
           def sub_end(data,pos):
             while True:
               size=data[pos];pos+=1
