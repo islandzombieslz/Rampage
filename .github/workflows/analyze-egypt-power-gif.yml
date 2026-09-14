@@ -12,42 +12,49 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Pillow
         run: python -m pip install --disable-pip-version-check pillow
-      - name: Compare special power GIFs
+      - name: Measure visual periodicity
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from PIL import Image, ImageChops, ImageStat
-          from pathlib import Path
-          import hashlib
+          import math
 
-          def inspect(path):
+          def normalized_frames(path):
               im=Image.open(path)
-              loop=im.info.get('loop','missing')
-              size=im.size
-              frames=[]; durations=[]; rgba=[]
+              out=[]; durations=[]
               i=0
               while True:
                   try: im.seek(i)
                   except EOFError: break
                   fr=im.convert('RGBA').copy()
-                  rgba.append(fr)
-                  frames.append(hashlib.md5(fr.tobytes()).hexdigest())
+                  a=fr.getchannel('A')
+                  box=a.getbbox()
+                  if box:
+                      fr=fr.crop(box).resize((64,64),Image.Resampling.BILINEAR)
+                  else:
+                      fr=Image.new('RGBA',(64,64),(0,0,0,0))
+                  out.append(fr)
                   durations.append(int(im.info.get('duration',0)))
                   i+=1
-              first=rgba[0]
-              diffs=[]
-              for idx,fr in enumerate(rgba):
-                  diff=ImageChops.difference(first,fr)
-                  stat=ImageStat.Stat(diff)
-                  mean=sum(stat.mean)/len(stat.mean)
-                  diffs.append((mean,idx))
-              nearest=sorted(diffs[1:])[:12]
-              print('\nFILE',path)
-              print('size=',size,'frames=',len(frames),'total_ms=',sum(durations),'loop=',loop)
-              print('nearest_to_first=',nearest)
-              print('durations_head=',durations[:15])
-              print('durations_tail=',durations[-15:])
+              return out,durations
+
+          def mad(a,b):
+              d=ImageChops.difference(a,b)
+              s=ImageStat.Stat(d)
+              return sum(s.mean)/len(s.mean)
+
+          def inspect(path,maxlag=36):
+              frames,durs=normalized_frames(path)
+              scores=[]
+              for lag in range(2,min(maxlag,len(frames)//2)+1):
+                  vals=[mad(frames[i],frames[i+lag]) for i in range(len(frames)-lag)]
+                  scores.append((sum(vals)/len(vals),lag,sum(durs[:lag])))
+              print('\nFILE',path,'frames',len(frames),'total_ms',sum(durs))
+              print('best_lags=',sorted(scores)[:15])
+              for lag in [8,10,12,14,16,18,20,22,24,26,28,30,32,34,36]:
+                  row=next((x for x in scores if x[1]==lag),None)
+                  if row: print('lag',lag,'avgdiff',round(row[0],3),'prefix_ms',row[2])
           inspect('assets/egypt/mage/power-special.gif')
-          inspect('assets/mage/poder-mago-especial.gif')
+          inspect('assets/mage/poder-mago-especial.gif',60)
           PY
