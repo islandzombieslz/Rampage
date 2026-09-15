@@ -2336,6 +2336,7 @@ body.booting #landscapeRoot{visibility:hidden}
 /* EGYPT MAGE DAMAGE-EDGE + SINGLE POWER CYCLE 2026-09-13 */
 /* WAR SPECIALS + GEMS STABILITY 2026-09-13 */
 /* EGYPT SUMMON HALF HP + BROWN KING DAMAGE 2026-09-13 */
+/* EGYPT SUMMON FULL HP + KING REBALANCE 2026-09-15 */
 /* A regra original #shop .shop-sprite-grid usa !important; esta regra
    mais específica garante que o grupo do outro clã desapareça visualmente. */
 #shop .clan-shop[hidden],
@@ -3071,7 +3072,7 @@ const MAGE_SPECIAL_RADIUS=215;
 const MAGE_SPECIAL_DAMAGE=100;
 const MAGE_SPECIAL_HEAL=30;
 const KING_SPECIAL_RADIUS=MAGE_SPECIAL_RADIUS;
-const KING_SPECIAL_DAMAGE=62;
+const KING_SPECIAL_DAMAGE=55;
 const KING_POWER_DELAY_MS=1000;
 
 // DRAGON WARRIOR SYSTEM
@@ -4287,7 +4288,7 @@ function spawnKing(x,y,team,color){
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
  e.hp=e.maxHp=280;
  e.shield=e.maxShield=280;
- e.damage=47;
+ e.damage=38;
  e.r=29;
  e.kingNormalCount=0;
  state.entities.push(e);
@@ -5080,9 +5081,8 @@ function spawnEgyptMageWarriors(e,p){
    const y=clamp(oy+Math.sin(angle)*radius,45,state.world.h-45);
    const variant=i%2===0?'male':'female';
    const summon=spawnWarrior(x,y,e.team,e.color,false,variant,null,'egypt',true,e.id);
-   const halfHp=Math.max(1,Math.round((Number(summon.maxHp)||Number(summon.hp)||1)*.5));
-   summon.maxHp=halfHp;
-   summon.hp=halfHp;
+   summon.hp=150;
+   summon.maxHp=150;
    summon.shield=0;
    summon.maxShield=0;
  }
