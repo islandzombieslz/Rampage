@@ -59,3 +59,5 @@ replace_once(old_king, new_king, 'King normal damage')
 
 path.write_text(text, encoding='utf-8')
 print('Applied Egypt summons 150 HP/no shield and King 38/55 rebalance')
+
+# Direct commit marker used only to trigger GitHub Pages after the workflow commit.
