@@ -1,0 +1,83 @@
+name: Egypt summons and King rebalance
+
+on:
+  push:
+    paths:
+      - '.github/workflows/egypt-summons-king-rebalance.yml'
+      - '.github/fix_egypt_summons_king_rebalance_20260915.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply balance patch
+        run: python .github/fix_egypt_summons_king_rebalance_20260915.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          if not scripts: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate requested values
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'EGYPT SUMMON FULL HP + KING REBALANCE 2026-09-15',
+            'for(let i=0;i<2;i++){',
+            'summon.hp=150;',
+            'summon.maxHp=150;',
+            'summon.shield=0;',
+            'summon.maxShield=0;',
+            'const KING_SPECIAL_DAMAGE=55;'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing: '+repr(missing))
+          if 'const halfHp=' in t: raise SystemExit('Old half-HP summon code remains')
+          start=t.index('function spawnKing(')
+          end=t.index('function spawnGolem(',start)
+          king=t[start:end]
+          if 'e.damage=38;' not in king or 'e.damage=47;' in king:
+            raise SystemExit('King normal damage invalid')
+          # Brown Warrior balance from prior request must remain untouched.
+          for value in ['const BROWN_NORMAL_DAMAGE_1=52;','const BROWN_NORMAL_DAMAGE_2=37;','const BROWN_SPECIAL_DAMAGE=37;']:
+            if value not in t: raise SystemExit('Brown Warrior regression: '+value)
+          print('Validation passed: Egypt=2 summons at 150/150 HP, no shield; King=38 normal / 55 special; Brown unchanged')
+          PY
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Set Egypt summons full HP and rebalance King'
+          git push origin main
