@@ -1,0 +1,91 @@
+name: Fix Clan Menu V4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_clan_menu_v4.py'
+      - '.github/workflows/fix-clan-menu-v4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-fix-clan-menu-v4
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Rebuild clan selection menu
+        run: python .github/fix_clan_menu_v4.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate clan menu structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          exact={
+            'confirm button':t.count('id="confirmClanBtn"'),
+            'start button':t.count('id="startWarBtn"'),
+            'confirm handler':t.count("$('#confirmClanBtn').onclick=async()=>{"),
+            'card handler':t.count("$$('.clan-option[data-clan]').forEach(btn=>btn.onclick=async()=>{"),
+            'render function':t.count('function renderClanSelection(){'),
+            'ready function':t.count('function allWarClanHumansConfirmed(){'),
+            'shop function':t.count('function configureWarShopForClan(){'),
+            'actions wrapper':t.count('class="clan-actions"'),
+            'css marker':t.count('/* CLAN MENU V4 FIX 2026-09-17 */'),
+          }
+          bad={k:v for k,v in exact.items() if v!=1}
+          if bad: raise SystemExit('Duplicate/missing clan menu structures: '+repr(bad))
+          required=[
+            'async confirmClan(){',
+            'clanConfirmed:!!p.clanConfirmed',
+            'patch[`players/${hp.id}/clanConfirmed`]=false;',
+            'bots[0].clan=oppositeClan(humans[0].clan);',
+            'start.disabled=nonHost||!allConfirmed;',
+            "if(!allWarClanHumansConfirmed()){renderClanSelection();flash('Todos precisam confirmar o clã.',1.4);return}",
+            '#clanScreen .clan-actions #startWarBtn'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing clan v4 behavior: '+repr(missing))
+          if 'enforceTwoPlayerClanExclusivity(' in t: raise SystemExit('Old clan forcing remains')
+          print('Clan menu v4 validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Rebuild clan selection menu cleanly'
+          git push origin main
