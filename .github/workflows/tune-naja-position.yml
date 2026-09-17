@@ -1,0 +1,77 @@
+name: Tune Naja Position
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tune_naja_special_behavior.py'
+      - '.github/workflows/tune-naja-position.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-tune-naja-position
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply Naja visual position
+        run: python .github/tune_naja_special_behavior.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Naja position
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '.entity-visual.naja-visual .entity-body{',
+            'left:8px;',
+            'top:10px;',
+            'return phase!==null;',
+            'e.najaShieldSpecialUsed=false;',
+            'const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing Naja position/special tuning: '+repr(missing))
+          print('Naja position validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Move Egypt Naja visual right and down'
+          git push origin main
