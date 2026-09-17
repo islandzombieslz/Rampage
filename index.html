@@ -2394,8 +2394,8 @@ body.booting #landscapeRoot{visibility:hidden}
   height:122px;
 }
 .entity-visual.naja-visual .entity-body{
-  left:-8px;
-  top:-8px;
+  left:-2px;
+  top:-2px;
   width:126px;
   height:132px;
   object-fit:contain;
@@ -3446,6 +3446,8 @@ function serializeWarEntityForNetwork(e,now){
    out.najaAttackKind=e.najaAttackKind??null;
    out.najaAttackSerial=Number(e.najaAttackSerial)||0;
    out.najaNormalCount=Number(e.najaNormalCount)||0;
+   out.najaShieldSpecialUsed=!!e.najaShieldSpecialUsed;
+   out.najaShieldSpecialPending=!!e.najaShieldSpecialPending;
    out.najaPhase=e.najaPhase||'seek';
    if(e.pendingNajaAttack){
      const p=e.pendingNajaAttack;
@@ -4460,6 +4462,8 @@ function spawnNaja(x,y,team,color){
  e.attackCooldown=0;
  e.najaAttackSerial=0;
  e.najaNormalCount=0;
+ e.najaShieldSpecialUsed=false;
+ e.najaShieldSpecialPending=false;
  e.najaPhase='seek';
  e.pendingNajaAttack=null;
  state.entities.push(e);
@@ -4522,14 +4526,15 @@ function najaIsUnderground(e,now=performance.now()){
 }
 function najaIsInvulnerable(e,now=performance.now()){
  const phase=najaSpecialPhase(e,now);
- return phase==='burrowing'||phase==='underground';
+ return phase!==null;
 }
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
  // A Naja é invulnerável enquanto inicia a escavação e enquanto está subterrânea.
  if(target.type==='naja'&&najaIsInvulnerable(target))return;
  if(!options.allowFlying&&target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return;
- const beforeDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
+ const beforeShield=Math.max(0,Number(target.shield)||0);
+ const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);
 
  // Escudo absorve primeiro.
  let remaining=amount;
@@ -4539,6 +4544,12 @@ function applyCombatHit(target,attacker,amount,options={}){
    remaining-=absorbed;
  }
  if(remaining>0)target.hp-=remaining;
+ // O primeiro rompimento do escudo da Naja arma exatamente um especial extra.
+ if(target.type==='naja'&&!target.najaShieldSpecialUsed&&beforeShield>0&&target.shield<=0){
+   target.najaShieldSpecialUsed=true;
+   target.najaShieldSpecialPending=true;
+   target.attackCooldown=0;
+ }
  const afterDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
  const actualDamage=Math.max(0,beforeDurability-afterDurability);
  if(actualDamage>0&&attacker.team&&attacker.team!==target.team)addWarDamageProgress(attacker.team,actualDamage);
@@ -5144,6 +5155,8 @@ function startNajaAttack(e,kind,target=null){
      impactAt:now+Math.min(Math.max(260,duration*.55),Math.max(260,duration-100)),
      endAt:now+duration,impacted:false};
  }else{
+   // Consome o gatilho do escudo ao iniciar qualquer especial; o marcador used impede repeticao.
+   e.najaShieldSpecialPending=false;
    // Cancela qualquer empurrão que já estivesse em andamento no instante em que cava.
    e.knockTime=0;e.knockVX=0;e.knockVY=0;
    const burrowDuration=NAJA_SPECIAL_BURROW_DURATION;
@@ -5235,8 +5248,9 @@ function aiFightNaja(e,dt,forcedTeam,preparedCandidates=null){
  e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
  const moveSpeed=e.speed;
 
- // 4 ataques normais completos; o 5º ataque é o especial de escavação.
- if((Number(e.najaNormalCount)||0)>=4){
+ // Escudo zerado prioriza um especial unico; depois segue o ciclo normal de 4 ataques + especial.
+ const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;
+ if(najaNeedsSpecial){
    if(d<=145&&startNajaAttack(e,'special',target))return;
    if(d>145){e.x+=dx/d*moveSpeed*dt;e.y+=dy/d*moveSpeed*dt;e.moving=true;e.najaPhase='approach'}
    else e.moving=false;
