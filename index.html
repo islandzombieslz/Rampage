@@ -1302,6 +1302,15 @@ html,body{
   top:-3px;
 }
 
+/* ===== ANNUBIS DO EGITO ===== */
+.entity-visual.anubis-visual{width:102px;height:130px}
+.entity-visual.anubis-visual .entity-facing{width:102px;height:122px}
+.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}
+.entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}
+.entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}
+.entity-visual.anubis-visual .entity-weapon-facing{display:none !important}
+.entity-anubis-melee,.entity-anubis-ranged{opacity:0}
+
 /* ===== GUERREIRA MARROM ===== */
 .entity-visual.brown-warrior-visual{width:96px;height:116px}
 .entity-visual.brown-warrior-visual .entity-facing{width:96px;height:108px}
@@ -2788,7 +2797,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <img src="assets/egypt/ui/clan-card.png" alt="Clã Egito" loading="lazy" decoding="async">
         <div>
           <h3>Egito</h3>
-          <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito • Naja do Egito</div>
+          <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito • Naja do Egito • Annubis</div>
         </div>
       </button>
     </div>
@@ -2854,6 +2863,9 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
         <button id="buyEgyptNaja" class="shop-sprite-card" aria-label="Comprar Naja do Egito por 550 gemas" title="Naja do Egito — 550 gemas">
           <img src="assets/egypt/naja/card.png" alt="Naja do Egito" draggable="false" decoding="async">
+        </button>
+        <button id="buyEgyptAnubis" class="shop-sprite-card" aria-label="Comprar Annubis do Egito por 450 gemas" title="Annubis do Egito — 450 gemas">
+          <img src="https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png" alt="Annubis do Egito" draggable="false" decoding="async">
         </button>
       </div>
     </div>
@@ -3162,6 +3174,13 @@ const ASSETS = {
   najaSpecial:'assets/egypt/naja/special-burrow.gif',
   najaSpecialFinal:'assets/egypt/naja/special-emerge.gif',
 
+  // Annubis do Egito — clã Egito
+  anubisIdle:'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif',
+  anubisWalk:'https://i.postimg.cc/3R6FknJw/annubis-andando.gif',
+  anubisMeleeAttack:'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif',
+  anubisRangedAttack:'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif',
+  anubisProjectile:'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif',
+
   // Dragão Guerreiro — clã Guerreiros
   dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',
   dragonTakeoff:'assets/dragon/dragao-guerreiro-pulando.gif',
@@ -3302,7 +3321,7 @@ const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});
+const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550,anubis:450});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -3364,15 +3383,24 @@ const DRAGON_FIREBALL_SPEED=430;
 const DRAGON_BURN_DAMAGE=5;
 const DRAGON_BURN_TICK_MS=1000;
 const DRAGON_BURN_DURATION_MS=6000;
+
+// ANNUBIS DO EGITO: híbrido terrestre. Corpo a corpo = normal da Guerreira Marrom;
+// disparo = projétil teleguiado do Dragão, +10 de dano e sem queimadura.
+let ANUBIS_MELEE_DURATION=1800;
+let ANUBIS_RANGED_DURATION=1800;
+const ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;
+const ANUBIS_PROJECTILE_SPEED=DRAGON_FIREBALL_SPEED;
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
 let golemAttackAssetsReady=false;
 let brownAttackAssetsReady=false;
 let najaAttackAssetsReady=false;
+let anubisAttackAssetsReady=false;
 const golemGifReadyKeys=new Set();
 const brownGifReadyKeys=new Set();
 const najaGifReadyKeys=new Set();
+const anubisGifReadyKeys=new Set();
 
 // Soma os delays de todos os frames e retorna a duração de UM ciclo do GIF.
 // Esse valor é usado nos ataques para o estado do jogo não esconder o sprite
@@ -3415,7 +3443,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
+ const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -3444,6 +3472,8 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(key==='kingPower')KING_POWER_DURATION=validGifDuration(duration,KING_POWER_DURATION);
      if(key==='dragonTakeoff')DRAGON_TAKEOFF_DURATION=validGifDuration(duration,DRAGON_TAKEOFF_DURATION);
      if(key==='dragonAttack')DRAGON_ATTACK_VISUAL_MS=validGifDuration(duration,DRAGON_ATTACK_VISUAL_MS);
+     if(key==='anubisMeleeAttack')ANUBIS_MELEE_DURATION=validGifDuration(duration,ANUBIS_MELEE_DURATION);
+     if(key==='anubisRangedAttack')ANUBIS_RANGED_DURATION=validGifDuration(duration,ANUBIS_RANGED_DURATION);
    }catch(_){
      // Fallback abaixo usa URL única com cache-buster. O jogo continua funcional.
    }finally{
@@ -3456,6 +3486,10 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(key==='najaAttack'||key==='najaSpecial'||key==='najaSpecialFinal'){
        najaGifReadyKeys.add(key);
        if(najaGifReadyKeys.size===3)najaAttackAssetsReady=true;
+     }
+     if(key==='anubisMeleeAttack'||key==='anubisRangedAttack'){
+       anubisGifReadyKeys.add(key);
+       if(anubisGifReadyKeys.size===2)anubisAttackAssetsReady=true;
      }
      if(key==='brownAttack'||key==='brownSpecial'||key==='brownPower'){
        brownGifReadyKeys.add(key);
@@ -3475,6 +3509,7 @@ setTimeout(()=>{egyptMagePowerAssetReady=true},2500);
 // em falha real de rede/CORS.
 setTimeout(()=>{golemAttackAssetsReady=true},3500);
 setTimeout(()=>{najaAttackAssetsReady=true},4000);
+setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -3701,6 +3736,23 @@ function serializeWarEntityForNetwork(e,now){
        hit1Done:!!p.hit1Done,hit2Done:!!p.hit2Done
      };
    }
+ }else if(e.type==='anubis'){
+   out.anubisAttackKind=e.anubisAttackKind??null;
+   out.anubisAttackSerial=Number(e.anubisAttackSerial)||0;
+   if(e.pendingAnubisAttack){
+     const p=e.pendingAnubisAttack;
+     out.pendingAnubisAttack={
+       kind:p.kind,serial:Number(p.serial)||Number(e.anubisAttackSerial)||0,targetId:p.targetId??null,
+       originX:Number.isFinite(Number(p.originX))?Number(p.originX):e.x,
+       originY:Number.isFinite(Number(p.originY))?Number(p.originY):e.y,
+       angle:Number.isFinite(Number(p.angle))?Number(p.angle):0,
+       duration:Number(p.duration)||(p.kind==='melee'?ANUBIS_MELEE_DURATION:ANUBIS_RANGED_DURATION),
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       hit1RemainingMs:p.hit1At?Math.max(0,Number(p.hit1At)-now):0,
+       hit2RemainingMs:p.hit2At?Math.max(0,Number(p.hit2At)-now):0,
+       hit1Done:!!p.hit1Done,hit2Done:!!p.hit2Done
+     };
+   }
  }else if(e.type==='mage'){
    out.mageAttackKind=e.mageAttackKind??null;
    out.mageAttackSerial=Number(e.mageAttackSerial)||0;
@@ -3808,7 +3860,8 @@ function serializeGame(){
      });
  const dragonProjectiles=(state.dragonProjectiles||[]).map(p=>({
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
-   targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0
+   targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0,
+   kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED
  }));
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
 }
@@ -4050,6 +4103,36 @@ function applyRemoteGame(game){
          };
        }
      }
+     if(out.pendingAnubisAttack?.remainingMs!=null){
+       const p=out.pendingAnubisAttack;
+       const serial=Number(p.serial)||Number(out.anubisAttackSerial)||0;
+       const duration=Number(p.duration)||(p.kind==='melee'?ANUBIS_MELEE_DURATION:ANUBIS_RANGED_DURATION);
+       const remaining=Math.max(0,Number(p.remainingMs)||0);
+       const oldPending=old?.pendingAnubisAttack;
+       const sameSerial=!!oldPending&&Number(oldPending.serial)===serial&&oldPending.kind===p.kind;
+       if(remaining<=0){
+         out.pendingAnubisAttack=null;out.anubisAttackKind=null;
+       }else if(sameSerial&&Number.isFinite(Number(oldPending.endAt))){
+         const rebuilt={...p,serial,duration,
+           startedAt:Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining),
+           endAt:Math.min(Number(oldPending.endAt),localNow+remaining)
+         };
+         if(p.kind==='melee'){
+           rebuilt.hit1At=p.hit1Done?localNow:(Number(oldPending.hit1At)||localNow+Math.max(0,Number(p.hit1RemainingMs)||0));
+           rebuilt.hit2At=p.hit2Done?localNow:(Number(oldPending.hit2At)||localNow+Math.max(0,Number(p.hit2RemainingMs)||0));
+           rebuilt.hit1Done=!!(oldPending.hit1Done||p.hit1Done);rebuilt.hit2Done=!!(oldPending.hit2Done||p.hit2Done);
+         }
+         out.pendingAnubisAttack=rebuilt;
+       }else{
+         const rebuilt={...p,serial,duration,startedAt:localNow-Math.max(0,duration-remaining),endAt:localNow+remaining};
+         if(p.kind==='melee'){
+           rebuilt.hit1At=localNow+Math.max(0,Number(p.hit1RemainingMs)||0);
+           rebuilt.hit2At=localNow+Math.max(0,Number(p.hit2RemainingMs)||0);
+         }
+         out.pendingAnubisAttack=rebuilt;
+       }
+     }
+     if(!out.pendingAnubisAttack)out.anubisAttackKind=null;
      if(!out.pendingBrownAttack)out.brownAttackKind=null;
      if(out.dragonTakeoffRemainingMs!=null){
        const remaining=Math.max(0,Number(out.dragonTakeoffRemainingMs)||0);
@@ -4135,6 +4218,7 @@ function handleHostCommands(commands){
      if(clan==='egypt'&&cmd.type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
+     if(clan==='egypt'&&cmd.type==='buy-egypt-anubis')buyEgyptAnubisForPlayer(p,false);
    }
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
@@ -4868,6 +4952,7 @@ function entityBase(type,x,y,team,color){
  warriorMageSpecialObservedHp:null,warriorMageHpTriggerPending:false,
  egyptSpecialObservedHp:null,egyptSpecialObservedShield:null,egyptHpTriggerPending:false,egyptShieldTriggerPending:false,
  pendingBrownAttack:null,brownAttackKind:null,brownAttackSerial:0,brownNormalCount:0,
+ pendingAnubisAttack:null,anubisAttackKind:null,anubisAttackSerial:0,anubisNextShotAt:0,
  pendingKingSpecial:null,kingSpecialSerial:0,kingNormalCount:0,
  pendingDragonAttack:null,dragonAttackSerial:0,dragonFlightState:'ground',dragonTakeoffSerial:0,
  dragonTakeoffStartedAt:0,dragonTakeoffEndAt:0,dragonNextShotAt:0,dragonCloseShotAt:0,
@@ -4964,6 +5049,16 @@ function spawnMage(x,y,team,color,variant='male',clan='warriors'){
  else{e.warriorMageSpecialObservedHp=e.hp;e.warriorMageHpTriggerPending=false;}
  state.entities.push(e);return e;
 }
+function spawnAnubis(x,y,team,color){
+ const e=entityBase('anubis',x,y,team,color);
+ e.clan='egypt';
+ // Exatamente a mesma vida, escudo e velocidade-base do Dragão Guerreiro.
+ e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;
+ e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;
+ e.attackCooldown=0;e.anubisAttackSerial=0;e.anubisNextShotAt=0;e.pendingAnubisAttack=null;
+ state.entities.push(e);return e;
+}
+
 function spawnDragon(x,y,team,color){
  const e=entityBase('dragon',x,y,team,color);
  e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=DRAGON_FIREBALL_DAMAGE;e.r=34;
@@ -5148,6 +5243,8 @@ function startEntityDeath(e,dx=0,dy=0){
  e.mageAttackKind=null;
  e.pendingBrownAttack=null;
  e.brownAttackKind=null;
+ e.pendingAnubisAttack=null;
+ e.anubisAttackKind=null;
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
@@ -5422,7 +5519,7 @@ function updateGolemRockEffects(now){
  }
 }
 
-const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','naja','dragon','enemy']);
+const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','naja','anubis','dragon','enemy']);
 // WAR FPS SWEEP 2026-09-09
 function isRealCombatTarget(t){
  // Set persistente: evita criar um array novo em cada teste de alvo.
@@ -5833,6 +5930,93 @@ function updateBrownWarriorAttackState(e,now){
  }
 }
 
+function launchAnubisProjectile(e,target){
+ if(!e?.alive||e.type!=='anubis'||!target?.alive)return false;
+ const now=performance.now();
+ const angle=Math.atan2(target.y-e.y,target.x-e.x);
+ e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
+ const startX=e.x+Math.cos(angle)*40,startY=e.y-14+Math.sin(angle)*16;
+ state.dragonProjectiles.push({
+   id:'ap_'+(++state.dragonProjectileSeq),kind:'anubis',serial:e.anubisAttackSerial,
+   x:startX,y:startY,vx:Math.cos(angle)*ANUBIS_PROJECTILE_SPEED,vy:Math.sin(angle)*ANUBIS_PROJECTILE_SPEED,
+   speed:ANUBIS_PROJECTILE_SPEED,damage:ANUBIS_PROJECTILE_DAMAGE,burn:false,
+   targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500
+ });
+ addWarGoalProgress(e.team,'ranged');
+ return true;
+}
+
+function startAnubisAttack(e,kind,target){
+ if(!e?.alive||e.type!=='anubis'||e.pendingAnubisAttack||e.attackCooldown>0||e.knockTime>0||!anubisAttackAssetsReady)return false;
+ if(!isRealCombatTarget(target)||target===e||target.team===e.team||!canEngageTarget(e,target))return false;
+ const d=dist(e,target);
+ const flyingDragon=target.type==='dragon'&&target.dragonFlightState==='flying';
+ if(kind==='melee'&&(d>108||flyingDragon))return false;
+ if(kind==='ranged'&&d>310)return false;
+ const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
+ e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
+ e.moving=false;e.lastAttackAt=now;e.lastCombatAt=now;
+ e.anubisAttackKind=kind;e.anubisAttackSerial=(Number(e.anubisAttackSerial)||0)+1;
+ if(kind==='melee'){
+   const duration=ANUBIS_MELEE_DURATION;
+   const hit1Delay=Math.min(duration-260,Math.max(280,duration*.32));
+   const hit2Delay=Math.min(duration-120,Math.max(hit1Delay+180,duration*.62));
+   e.attackCooldown=duration/1000+.12;
+   e.pendingAnubisAttack={kind,serial:e.anubisAttackSerial,targetId:target.id,originX:e.x,originY:e.y,angle,duration,startedAt:now,
+     hit1At:now+hit1Delay,hit2At:now+hit2Delay,endAt:now+duration,hit1Done:false,hit2Done:false};
+ }else{
+   const duration=ANUBIS_RANGED_DURATION;
+   e.attackCooldown=Math.max(duration/1000+.12,DRAGON_SHOT_COOLDOWN_MS/1000);
+   e.anubisNextShotAt=now+DRAGON_SHOT_COOLDOWN_MS;
+   e.pendingAnubisAttack={kind,serial:e.anubisAttackSerial,targetId:target.id,originX:e.x,originY:e.y,angle,duration,startedAt:now,endAt:now+duration};
+   launchAnubisProjectile(e,target);
+ }
+ return true;
+}
+
+function updateAnubisAttackState(e,now){
+ const p=e.pendingAnubisAttack;if(!p)return;
+ e.moving=false;
+ if(p.kind==='melee'){
+   if(!p.hit1Done&&now>=Number(p.hit1At||Infinity))brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_1,'hit1Done');
+   if(!p.hit2Done&&now>=Number(p.hit2At||Infinity))brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_2,'hit2Done');
+ }
+ if(now>=Number(p.endAt||0)){
+   e.pendingAnubisAttack=null;e.anubisAttackKind=null;e.target=null;
+ }
+}
+
+function aiFightAnubis(e,dt,forcedTeam,preparedCandidates=null){
+ if(!e.alive||e.knockTime>0){e.moving=false;return}
+ if(e.pendingAnubisAttack){e.moving=false;return}
+ const candidates=preparedCandidates||state.entities;
+ const target=nearestEngageableCandidate(e,candidates,forcedTeam,false);
+ if(!target){e.moving=false;e.target=null;return}
+ e.target=target;
+ const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
+ e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
+ const now=performance.now();
+ const flyingDragon=target.type==='dragon'&&target.dragonFlightState==='flying';
+
+ // Contra Dragão voando, só usa o projétil; contra tropas terrestres prefere
+ // o golpe normal da Guerreira Marrom quando consegue encostar.
+ if(flyingDragon){
+   if(d<=285&&now>=Number(e.anubisNextShotAt||0)&&startAnubisAttack(e,'ranged',target))return;
+   if(d>285){e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}else e.moving=false;
+ }else if(d<=92){
+   if(startAnubisAttack(e,'melee',target))return;
+   e.moving=false;
+ }else if(d<175){
+   e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true;
+ }else if(d<=285){
+   if(now>=Number(e.anubisNextShotAt||0)&&startAnubisAttack(e,'ranged',target))return;
+   e.moving=false;
+ }else{
+   e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true;
+ }
+ e.x=clamp(e.x,40,state.world.w-40);e.y=clamp(e.y,40,state.world.h-40);
+}
+
 function distanceToSegment(px,py,ax,ay,bx,by){
  const vx=bx-ax,vy=by-ay,den=vx*vx+vy*vy;
  const u=den?clamp(((px-ax)*vx+(py-ay)*vy)/den,0,1):0;
@@ -6026,7 +6210,7 @@ function updateKingSpecialState(e,now){
 }
 
 function performAttack(e,preparedCandidates=null){
- if(e.type==='golem'||e.type==='naja'||e.type==='mage'||e.type==='brownWarrior')return;
+ if(e.type==='golem'||e.type==='naja'||e.type==='mage'||e.type==='brownWarrior'||e.type==='anubis')return;
  if(!e.alive||e.attackCooldown>0||e.knockTime>0||e.pendingKingSpecial)return;
  if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6){startKingSpecial(e);return}
  const now=performance.now();
@@ -6302,7 +6486,7 @@ function addWarDamageProgress(teamId,amount){
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  const clan=normalizeClan(p.clan);
- const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage','buy-egypt-naja']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
+ const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage','buy-egypt-naja','buy-egypt-anubis']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
  if(!allowed.has(type))return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
  else {
@@ -6315,6 +6499,7 @@ function requestWarPurchase(type){
    if(type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
    if(type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
    if(type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
+   if(type==='buy-egypt-anubis')buyEgyptAnubisForPlayer(p,false);
  }
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
@@ -6326,6 +6511,7 @@ $('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');
 $('#buyEgyptWarrior').onclick=()=>requestWarPurchase('buy-egypt-warrior');
 $('#buyEgyptMage').onclick=()=>requestWarPurchase('buy-egypt-mage');
 $('#buyEgyptNaja').onclick=()=>requestWarPurchase('buy-egypt-naja');
+$('#buyEgyptAnubis').onclick=()=>requestWarPurchase('buy-egypt-anubis');
 function buyForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.warrior;if(p.gems<cost)return false;
@@ -6392,6 +6578,13 @@ function buyEgyptNajaForPlayer(p,bot){
  spawnNaja(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
  return true;
 }
+function buyEgyptAnubisForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='egypt')return false;
+ const cost=WAR_UNIT_COSTS.anubis;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*82;
+ spawnAnubis(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
+ return true;
+}
 function buyDragonForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.dragon;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
@@ -6402,7 +6595,7 @@ function buyDragonForPlayer(p,bot){
 
 
 function warCompositionForTeam(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0};
  for(const e of state.entities){
    if(!e.alive||e.team!==teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -6410,7 +6603,7 @@ function warCompositionForTeam(teamId){
  return out;
 }
 function enemyWarComposition(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0};
  for(const e of state.entities){
    if(!e.alive||e.team===teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -6423,6 +6616,7 @@ function affordableBotWarTypes(p){
    if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
    if(p.gems>=WAR_UNIT_COSTS.mage)types.push('mage');
    if(p.gems>=WAR_UNIT_COSTS.naja)types.push('naja');
+   if(p.gems>=WAR_UNIT_COSTS.anubis)types.push('anubis');
    return types;
  }
  if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
@@ -6437,7 +6631,7 @@ function chooseBotWarPurchase(p){
  const affordable=affordableBotWarTypes(p);
  if(!affordable.length)return null;
  const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
- const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon+enemy.naja;
+ const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon+enemy.naja+enemy.anubis;
  const opening=(Number(p.botWarPurchases)||0)<2;
 
  // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
@@ -6446,7 +6640,7 @@ function chooseBotWarPurchase(p){
    return affordable[Math.floor(Math.random()*affordable.length)];
  }
 
- const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1,naja:1};
+ const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1,naja:1,anubis:1};
  // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
  // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
@@ -6456,6 +6650,7 @@ function chooseBotWarPurchase(p){
  score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55;
  score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70+enemy.naja*.55;
  score.naja+=(enemy.warrior+enemy.brownWarrior+enemy.king)*1.30+enemy.mage*.55+enemy.golem*.35+enemy.naja*.45;
+ score.anubis+=enemy.dragon*1.75+enemy.golem*1.15+enemy.mage*.70+(enemy.warrior+enemy.brownWarrior+enemy.king)*.65+enemy.anubis*.45;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
  if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10;score.naja*=.25}
@@ -6475,6 +6670,7 @@ function buyBotWarType(p,type){
  if(normalizeClan(p.clan)==='egypt'){
    if(type==='mage')return buyEgyptMageForPlayer(p,true);
    if(type==='naja')return buyEgyptNajaForPlayer(p,true);
+   if(type==='anubis')return buyEgyptAnubisForPlayer(p,true);
    return buyEgyptWarriorForPlayer(p,true);
  }
  if(type==='brownWarrior')return buyBrownWarriorForPlayer(p,true);
@@ -6843,7 +7039,7 @@ function beginDragonTakeoff(e){
              e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,now+DRAGON_CLOSE_SHOT_COOLDOWN_MS);
            }
            const startX=e.x+Math.cos(angle)*42,startY=e.y-16+Math.sin(angle)*18;
-           state.dragonProjectiles.push({id:'df_'+(++state.dragonProjectileSeq),serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
+           state.dragonProjectiles.push({id:'df_'+(++state.dragonProjectileSeq),kind:'dragon',serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,speed:DRAGON_FIREBALL_SPEED,damage:DRAGON_FIREBALL_DAMAGE,burn:true,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
            addWarGoalProgress(e.team,'ranged');
            return true;
           }
@@ -6855,14 +7051,17 @@ function beginDragonTakeoff(e){
              if(target){p.targetX=target.x;p.targetY=target.y}
              const tx=Number(p.targetX),ty=Number(p.targetY);
              if(!Number.isFinite(tx)||!Number.isFinite(ty)||now>Number(p.expireAt||0)){list.splice(i,1);continue}
-             const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy)||1,step=DRAGON_FIREBALL_SPEED*dt;
-             p.vx=dx/d*DRAGON_FIREBALL_SPEED;p.vy=dy/d*DRAGON_FIREBALL_SPEED;
+             const projectileSpeed=Number(p.speed)||DRAGON_FIREBALL_SPEED;
+             const dx=tx-p.x,dy=ty-p.y,d=Math.hypot(dx,dy)||1,step=projectileSpeed*dt;
+             p.vx=dx/d*projectileSpeed;p.vy=dy/d*projectileSpeed;
              if(d<=Math.max(18,step+8)){
                p.x=tx;p.y=ty;
                if(target){
-                 const source=entityById.get(p.sourceId)||{id:p.sourceId,type:'dragon',x:p.x,y:p.y,heading:0,lastCombatAt:0};
-                 applyCombatHit(target,source,DRAGON_FIREBALL_DAMAGE,{knockForce:105,knockTime:.06,tilt:6});
-                 if(target.alive)igniteDragonBurn(target,source);
+                 const projectileType=p.kind==='anubis'?'anubis':'dragon';
+                 const source=entityById.get(p.sourceId)||{id:p.sourceId,type:projectileType,team:p.team,x:p.x,y:p.y,heading:0,lastCombatAt:0};
+                 const impactDamage=Number.isFinite(Number(p.damage))?Number(p.damage):DRAGON_FIREBALL_DAMAGE;
+                 applyCombatHit(target,source,impactDamage,{knockForce:105,knockTime:.06,tilt:6,allowFlying:true});
+                 if(p.burn!==false&&target.alive)igniteDragonBurn(target,source);
                }
                list.splice(i,1);continue;
              }
@@ -6966,6 +7165,7 @@ function aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates=null){
 function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='brownWarrior'){aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='naja'){aiFightNaja(e,dt,forcedTeam,preparedCandidates);return;}
+ if(e.type==='anubis'){aiFightAnubis(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='golem'){aiFightGolem(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
@@ -7193,7 +7393,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
-const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage'),buyEgyptNajaPerfEl=$('#buyEgyptNaja');
+const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage'),buyEgyptNajaPerfEl=$('#buyEgyptNaja'),buyEgyptAnubisPerfEl=$('#buyEgyptAnubis');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
 function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
@@ -7317,6 +7517,9 @@ function updateEntities(dt){
    }
    if(e.type==='brownWarrior' && e.pendingBrownAttack){
      updateBrownWarriorAttackState(e,now);
+   }
+   if(e.type==='anubis' && e.pendingAnubisAttack){
+     updateAnubisAttackState(e,now);
    }
    if(e.type==='mage' && e.pendingMageAttack){
      updateMageAttackState(e,now);
@@ -7567,17 +7770,18 @@ const MAX_GOLEM_ROCK_POOL=96;
 const dragonProjectileActiveIds=new Set();
 
 const DRAGON_PROJECTILE_GIF_GRACE_MS=850;
-function acquireDragonProjectileNode(layer){
+function acquireDragonProjectileNode(layer,assetKey='dragonFireball'){
  let img=dragonProjectilePool.pop();
  if(!img){
    img=document.createElement('img');
    img.className='dragon-fireball-projectile';
    img.draggable=false;
    img.decoding='async';
-   img.dataset.assetKey='dragonFireball';
+   img.dataset.assetKey=assetKey;
  }
  if(img._poolGifSuspendTimer){clearTimeout(img._poolGifSuspendTimer);img._poolGifSuspendTimer=null}
- if(!img.hasAttribute('src'))img.src=ASSETS.dragonFireball;
+ if(img.dataset.assetKey!==assetKey){stopGif(img);img.dataset.assetKey=assetKey}
+ if(!img.hasAttribute('src'))img.src=ASSETS[assetKey];
  if(img.parentElement!==layer)layer.appendChild(img);
  img.style.display='block';
  img.style.visibility='visible';
@@ -7778,7 +7982,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
              }
              const sx=(p.x-left)*zoom,sy=(p.y-top)*zoom;
              active.add(p.id);let img=dragonProjectileNodes.get(p.id);
-             if(!img){img=acquireDragonProjectileNode(layer);dragonProjectileNodes.set(p.id,img)}
+             const projectileAssetKey=p.kind==='anubis'?'anubisProjectile':'dragonFireball';
+             if(!img){img=acquireDragonProjectileNode(layer,projectileAssetKey);dragonProjectileNodes.set(p.id,img)}
+             else if(img.dataset.assetKey!==projectileAssetKey){stopGif(img);img.dataset.assetKey=projectileAssetKey;img.src=ASSETS[projectileAssetKey]}
              img._lastEffectVisibleAt=now;
              const angle=Math.atan2(Number(p.vy)||0,Number(p.vx)||1);
              if(img._projectileZoom!==zoom){
@@ -7850,6 +8056,20 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        <img class="entity-body entity-naja-attack" data-asset-key="najaAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-naja-special" data-asset-key="najaSpecial" draggable="false" style="opacity:0">
        <img class="entity-body entity-naja-special-final" data-asset-key="najaSpecialFinal" draggable="false" style="opacity:0">
+     </div>
+     <div class="entity-weapon-facing"></div>
+     <div class="entity-bars">
+       <div class="hp-bg"><div class="hp-fill"></div></div>
+       <div class="shield-bg"><div class="shield-fill"></div></div>
+     </div>`;
+ }else if(e.type==='anubis'){
+   el.classList.add('anubis-visual','egypt-unit');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="anubisIdle" src="${ASSETS.anubisIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="anubisWalk" src="${ASSETS.anubisWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-anubis-melee" data-asset-key="anubisMeleeAttack" draggable="false" style="opacity:0">
+       <img class="entity-body entity-anubis-ranged" data-asset-key="anubisRangedAttack" draggable="false" style="opacity:0">
      </div>
      <div class="entity-weapon-facing"></div>
      <div class="entity-bars">
@@ -7943,6 +8163,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._najaAttack=el.querySelector('.entity-naja-attack');
  el._najaSpecial=el.querySelector('.entity-naja-special');
  el._najaSpecialFinal=el.querySelector('.entity-naja-special-final');
+ el._anubisMelee=el.querySelector('.entity-anubis-melee');
+ el._anubisRanged=el.querySelector('.entity-anubis-ranged');
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
  el._mageHand=el.querySelector('.mage-hand');
@@ -7961,6 +8183,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el.dataset.golemRockSerial='-1';
  el.dataset.najaAttackSerial='-1';
  el.dataset.najaEmergeSerial='-1';
+ el.dataset.anubisAttackSerial='-1';
  el.dataset.brownAttackSerial='-1';
  el.dataset.mageAttackSerial='-1';
  el.dataset.kingSpecialSerial='-1';
@@ -7971,6 +8194,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
  else if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
  else if(e.type==='naja')el._gifKeys={idle:'najaIdle',walk:'najaWalk',attack:'najaAttack',special:'najaSpecial',emerge:'najaSpecialFinal'};
+ else if(e.type==='anubis')el._gifKeys={idle:'anubisIdle',walk:'anubisWalk',attack:'anubisMeleeAttack',anubisRanged:'anubisRangedAttack'};
  else if(e.type==='mage'){const egypt=e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleMageIdle':'femaleMageIdle'):(egypt?'egyptMageIdle':'mageIdle'),walk:e.variant==='female'?(egypt?'egyptFemaleMageWalk':'femaleMageWalk'):(egypt?'egyptMageWalk':'mageWalk'),special:e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial')}}
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
@@ -7984,7 +8208,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -7996,8 +8220,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        const currentKey=img.dataset.assetKey||Object.keys(ASSETS).find(k=>ASSETS[k]===currentSrc.split('?')[0]);
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
-       const transientState=(img===el._golemAttack||img===el._brownAttack||img===el._najaAttack)?'attack':
-         (img===el._najaSpecialFinal?'emerge':(img===el._golemSpecial||img===el._najaSpecial||img===el._brownSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null)));
+       const transientState=(img===el._golemAttack||img===el._brownAttack||img===el._najaAttack||img===el._anubisMelee)?'attack':
+         (img===el._anubisRanged?'anubisRanged':
+         (img===el._najaSpecialFinal?'emerge':(img===el._golemSpecial||img===el._najaSpecial||img===el._brownSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null))));
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
@@ -8085,7 +8310,7 @@ function suspendEntityLoopGif(el){
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
  const sprites=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],
+   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._anubisRanged,'anubisRanged'],
    [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
    [el._kingSpecial,'special'],
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
@@ -8130,7 +8355,8 @@ function setEntitySpriteState(el,desired){
    if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired) scheduleEntityLoopGifSuspend(el,previous);
 
    // Ataques fechados continuam usando a lógica original de restart por serial.
-   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack)}
+   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack);stopGif(el._anubisMelee)}
+   if(previous==='anubisRanged'&&desired!=='anubisRanged')stopGif(el._anubisRanged);
    if(previous==='special'&&desired!=='special'){
      stopGif(el._brownSpecial);
      stopGif(el._golemSpecial);
@@ -8215,6 +8441,9 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      if(e.type==='brownWarrior'&&!(e.pendingBrownAttack&&e.pendingBrownAttack.endAt>localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='special')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
+     }else if(e.type==='anubis'&&!(e.pendingAnubisAttack&&e.pendingAnubisAttack.endAt>localNow)&&
+        (el.dataset.anim==='attack'||el.dataset.anim==='anubisRanged')){
+       setEntitySpriteState(el,e.moving?'walk':'idle');
      }else if(e.type==='golem'&&!activeGolemPending(e,localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='special')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
@@ -8269,7 +8498,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const visualTop=renderY-dragonLift*zoom;
    if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='naja'?1.75:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='naja'?1.75:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
@@ -8366,6 +8595,17 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      if(active&&p.kind==='special'&&!underground&&localNow>=Number(p.emergeAt)&&serial>0&&el.dataset.najaEmergeSerial!==String(serial)){
        el.dataset.najaEmergeSerial=String(serial);
        restartGif(el._najaSpecialFinal,'najaSpecialFinal',serial);
+     }
+   }else if(e.type==='anubis'){
+     const p=e.pendingAnubisAttack;
+     const active=!!p&&Number(p.endAt)>localNow;
+     const desired=active?(p.kind==='ranged'?'anubisRanged':'attack'):(visualMoving?'walk':'idle');
+     setEntitySpriteState(el,desired);
+     const serial=Number(p?.serial||e.anubisAttackSerial)||0;
+     if(active&&serial>0&&el.dataset.anubisAttackSerial!==String(serial)){
+       el.dataset.anubisAttackSerial=String(serial);
+       if(p.kind==='ranged')restartGif(el._anubisRanged,'anubisRangedAttack',serial);
+       else restartGif(el._anubisMelee,'anubisMeleeAttack',serial);
      }
    }else if(e.type==='golem'){
      const pending=activeGolemPending(e,localNow);
@@ -8508,7 +8748,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      setEntityNodeVisible(el,false);
      scheduleEntityOffscreenSuspend(el);
      const entity=presentMap.get(id);
-     const transient=entity && (entity.deathStarted||entity.pendingBrownAttack||entity.pendingGolemAttack||entity.pendingNajaAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
+     const transient=entity && (entity.deathStarted||entity.pendingBrownAttack||entity.pendingGolemAttack||entity.pendingNajaAttack||entity.pendingAnubisAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
      if(entity && !transient && localNow-lastSeen>ENTITY_NODE_RETENTION_MS){
        clearEntityOffscreenSuspend(el);
@@ -8578,6 +8818,7 @@ function updateHUD(){
     perfSetDisabled(buyEgyptWarriorPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.warrior);
     perfSetDisabled(buyEgyptMagePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.mage);
     perfSetDisabled(buyEgyptNajaPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.naja);
+    perfSetDisabled(buyEgyptAnubisPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.anubis);
   }
 }
 function finishGame(msg){
