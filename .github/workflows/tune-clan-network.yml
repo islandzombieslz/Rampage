@@ -1,0 +1,83 @@
+name: Tune Clan Exclusivity and Network
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tune_clan_network.py'
+      - '.github/workflows/tune-clan-network.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-tune-clan-network
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply clan and network tuning
+        run: python .github/tune_clan_network.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate clan and network tuning
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'function enforceTwoPlayerClanExclusivity(',
+            'function prepareWarClanAssignments(',
+            'function clanUnavailableForLocal(',
+            '1x1: clãs exclusivos',
+            'total===2&&humans.length===2',
+            'clanChosen:false,clanSelectedAt:0',
+            'speed:Number(e.speed)||0,knockTime:Number(e.knockTime)||0',
+            'lastSnapshotReceivedAt:0',
+            'remoteExtrapolateMs=clamp(remoteGapSec*700,45,110)',
+            'netExtrapolateUntil:remoteNow+remoteExtrapolateMs',
+            'const rate=d>80?28:20,smooth=1-Math.exp(-rate*dt);',
+            "const networkPushInterval=state.mode==='war'?100:120;"
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing clan/network tuning: '+repr(missing))
+          print('Clan exclusivity and client network smoothing validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Add 1v1 clan exclusivity and smoother online clients'
+          git push origin main
