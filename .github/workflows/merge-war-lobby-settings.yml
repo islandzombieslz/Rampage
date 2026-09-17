@@ -1,0 +1,79 @@
+name: Merge War Lobby Settings
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/merge_war_lobby_settings.py'
+      - '.github/workflows/merge-war-lobby-settings.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Merge War settings into lobby
+        run: python .github/merge_war_lobby_settings.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?![^>]*type="module")[^>]*>(.*?)</script>',t,re.S)
+          Path('/tmp/rampage-last.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-last.js
+
+      - name: Validate unified War lobby
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '/* WAR LOBBY COMBINED SETTINGS 2026-09-17 */',
+            'id="warLobbySettings"',
+            'Tempo de cada guerra',
+            'Gemas iniciais',
+            "await createCurrentRoom($('#configureBtn'));",
+            "'settings/warTime':state.warTime",
+            "'settings/rounds':state.rounds",
+            "'settings/gems':normalizeWarStartingGems(state.gems)",
+            "$$('#warLobbySettings button').forEach",
+            '<button data-back="modeScreen">Voltar</button>'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing markers: '+repr(missing))
+          if 'id="warConfig"' in t: raise SystemExit('Old separate War config screen remains')
+          for ident in ['warLobbySettings','roundsVal2','gemsVal']:
+            if t.count(f'id="{ident}"')!=1: raise SystemExit(f'{ident}: expected exactly one ID')
+          if t.count("$('#configureBtn').onclick=async()=>{")!=1: raise SystemExit('configure handler duplicate/missing')
+          if t.count('function createCurrentRoom(btn){')!=1: raise SystemExit('room creation helper duplicate/missing')
+          print('Unified War lobby validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index.html changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Merge War settings into room lobby'
+          git push origin main
