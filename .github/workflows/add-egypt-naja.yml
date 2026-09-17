@@ -57,21 +57,69 @@ jobs:
           p=Path('index.html')
           t=p.read_text(encoding='utf-8')
 
-          def replace_once(old,new,label):
+          def replace_one_of(olds,new,label):
               global t
               if new in t:
                   return
-              count=t.count(old)
-              if count!=1:
-                  raise SystemExit(f'{label}: expected 1 old anchor, found {count}')
-              t=t.replace(old,new,1)
+              for old in olds:
+                  count=t.count(old)
+                  if count==1:
+                      t=t.replace(old,new,1)
+                      return
+              raise SystemExit(f'{label}: no unique migration anchor found')
 
-          replace_once('e.damage=40;\n e.r=36;','e.damage=45;\n e.r=36;','Naja base damage')
-          replace_once('applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});','applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});','Naja normal hit damage')
-          replace_once('const NAJA_SPECIAL_DAMAGE=75;','const NAJA_SPECIAL_DAMAGE=85;','Naja special damage')
-          replace_once("e.type==='golem'?1.34:e.type==='naja'?1.45:","e.type==='golem'?1.34:e.type==='naja'?1.75:",'Naja visual scale')
-          replace_once('''     knockForce:1260,\n     knockTime:.56,\n     tilt:36,\n     shake:24,\n     shakeDuration:.62,''','''     knockForce:620,\n     knockTime:.42,\n     tilt:24,\n     shake:18,\n     shakeDuration:.46,''','Naja special knockback')
-          replace_once("if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='naja'))return false;","if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;",'Naja can engage flying dragon')
+          replace_one_of(
+              ['e.damage=40;\n e.r=36;','e.damage=45;\n e.r=36;'],
+              'e.damage=60;\n e.r=36;',
+              'Naja base damage'
+          )
+          replace_one_of(
+              ['applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});','applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});'],
+              'applyCombatHit(target,e,60,{knockForce:220,knockTime:.12,tilt:9});',
+              'Naja normal hit damage'
+          )
+          replace_one_of(
+              ['const NAJA_SPECIAL_DAMAGE=75;','const NAJA_SPECIAL_DAMAGE=85;'],
+              'const NAJA_SPECIAL_DAMAGE=80;',
+              'Naja special damage'
+          )
+          replace_one_of(
+              ["e.type==='golem'?1.34:e.type==='naja'?1.18:","e.type==='golem'?1.34:e.type==='naja'?1.45:"],
+              "e.type==='golem'?1.34:e.type==='naja'?1.75:",
+              'Naja visual scale'
+          )
+          replace_one_of(
+              ['''     knockForce:1260,\n     knockTime:.56,\n     tilt:36,\n     shake:24,\n     shakeDuration:.62,'''],
+              '''     knockForce:620,\n     knockTime:.42,\n     tilt:24,\n     shake:18,\n     shakeDuration:.46,''',
+              'Naja special knockback'
+          )
+          replace_one_of(
+              ["if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='naja'))return false;"],
+              "if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;",
+              'Naja can engage flying dragon'
+          )
+
+          old_speed=""" // Exatamente a mesma velocidade do Golem Guerreiro.\n e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;"""
+          new_speed=""" // Um pouco mais rápida que o Golem Guerreiro, sem perder o peso da unidade.\n e.speed=state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100;"""
+          replace_one_of([old_speed],new_speed,'Naja movement speed')
+
+          naja_decl="const najaStableHit=target.type==='naja' && !najaSpecialPhase(target) && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');"
+          if naja_decl not in t:
+              anchor="const brownStableHit=target.type==='brownWarrior' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');"
+              if t.count(anchor)!=1:
+                  raise SystemExit('Naja knockback resistance declaration anchor missing')
+              t=t.replace(anchor,anchor+'\n '+naja_decl,1)
+
+          naja_block=""" // Naja: resistência leve a golpes comuns. Um impacto empurra, o seguinte é ignorado.\n // Quando o empurrão entra, ele também é mais fraco e curto que o normal.\n if(najaStableHit){\n   const cycle=Number(target.najaKnockCycle)||0;\n   applyKnockback=(cycle===0);\n   target.najaKnockCycle=(cycle+1)%2;\n   knockForce*=0.45;\n   knockTime=Math.min(knockTime,0.15);\n }\n"""
+          if naja_block not in t:
+              anchor=' // Durante qualquer especial ativo, o alvo recebe só 50% da força de empurrão.'
+              if t.count(anchor)!=1:
+                  raise SystemExit('Naja knockback resistance block anchor missing')
+              t=t.replace(anchor,naja_block+anchor,1)
+
+          old_move="if(!golemVsWarriorMage&&!brownStableHit)target.moving=false;"
+          new_move="if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;"
+          replace_one_of([old_move],new_move,'Naja knockback movement stability')
 
           p.write_text(t,encoding='utf-8')
           print('Naja tuning applied.')
@@ -101,12 +149,16 @@ jobs:
           required=[
             '/* EGYPT NAJA SYSTEM 2026-09-17 */','id="buyEgyptNaja"','naja:550',
             'function spawnNaja(','function aiFightNaja(','function chooseNajaEmergenceTarget(',
-            'function resolveNajaEmergence(','NAJA_UNDERGROUND_MS=5000','NAJA_SPECIAL_DAMAGE=85',
-            'e.hp=e.maxHp=600','e.shield=e.maxShield=200','e.damage=45','NAJA_ATTACK_INTERVAL_SEC=2',
-            'applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});',
+            'function resolveNajaEmergence(','NAJA_UNDERGROUND_MS=5000','NAJA_SPECIAL_DAMAGE=80',
+            'e.hp=e.maxHp=600','e.shield=e.maxShield=200','e.damage=60','NAJA_ATTACK_INTERVAL_SEC=2',
+            'applyCombatHit(target,e,60,{knockForce:220,knockTime:.12,tilt:9});',
             "e.type==='golem'?1.34:e.type==='naja'?1.75:",
+            "e.speed=state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100;",
             "if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;",
             'knockForce:620','knockTime:.42','tilt:24','shake:18','shakeDuration:.46',
+            "const najaStableHit=target.type==='naja' && !najaSpecialPhase(target)",
+            'target.najaKnockCycle=(cycle+1)%2','knockForce*=0.45','knockTime=Math.min(knockTime,0.15)',
+            "if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;",
             "if(target.type==='naja'&&najaIsInvulnerable(target))return",
             "if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false",
             'buy-egypt-naja','pendingNajaAttack','becameTeleported',
@@ -136,5 +188,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html sw.js assets/egypt/naja
-          git commit -m 'Increase Egypt Naja size and allow dragon attacks'
+          git commit -m 'Tune Egypt Naja damage speed and knockback resistance'
           git push origin main
