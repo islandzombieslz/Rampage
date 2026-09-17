@@ -2936,42 +2936,44 @@ const NetworkAdapter = {
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
   async setClan(clan){
     if(!this.roomId||!this.localPlayerId)return false;
-    const F=await this.waitFirebase(),value=normalizeClan(clan),roomRef=F.ref(F.firebaseDb,`rooms/${this.roomId}`);
-    let rejected=false;
-    const result=await F.runTransaction(roomRef,current=>{
-      if(!current?.players?.[this.localPlayerId]){rejected=true;return}
-      const players=current.players||{},humans=Object.values(players),mine=players[this.localPlayerId];
-      if(mine.clanConfirmed){rejected=true;return}
-      const total=humans.length+Math.max(0,Number(current.npcCount)||0);
-      if(total===2&&humans.length===2){
-        const other=humans.find(p=>p.uid!==this.localPlayerId);
-        if(other?.clanConfirmed&&normalizeClan(other.clan)===value){rejected=true;return}
-      }
-      mine.clan=value;mine.clanChosen=true;mine.clanConfirmed=false;mine.clanSelectedAt=Date.now();
-      return current;
-    });
-    return !!result.committed&&!rejected;
+    const F=await this.waitFirebase(),value=normalizeClan(clan);
+    const playerRef=F.ref(F.firebaseDb,`rooms/${this.roomId}/players/${this.localPlayerId}`);
+    const [mineSnap,playersSnap,npcSnap]=await Promise.all([
+      F.get(playerRef),
+      F.get(F.ref(F.firebaseDb,`rooms/${this.roomId}/players`)),
+      F.get(F.ref(F.firebaseDb,`rooms/${this.roomId}/npcCount`))
+    ]);
+    const mine=mineSnap.val();
+    if(!mine||mine.clanConfirmed)return false;
+    const players=playersSnap.val()||{},humans=Object.values(players),total=humans.length+Math.max(0,Number(npcSnap.val())||0);
+    if(total===2&&humans.length===2){
+      const other=humans.find(p=>p.uid!==this.localPlayerId);
+      if(other?.clanConfirmed&&normalizeClan(other.clan)===value)return false;
+    }
+    await F.update(playerRef,{clan:value,clanChosen:true,clanConfirmed:false,clanSelectedAt:Date.now()});
+    return true;
   },
   async confirmClan(clan){
     if(!this.roomId||!this.localPlayerId)return false;
-    const F=await this.waitFirebase(),selected=normalizeClan(clan),roomRef=F.ref(F.firebaseDb,`rooms/${this.roomId}`);
-    let rejected=false;
-    const result=await F.runTransaction(roomRef,current=>{
-      if(!current?.players?.[this.localPlayerId]){rejected=true;return}
-      const players=current.players||{},humans=Object.values(players),mine=players[this.localPlayerId];
-      if(mine.clanConfirmed)return current;
-      const total=humans.length+Math.max(0,Number(current.npcCount)||0);
-      if(total===2&&humans.length===2){
-        const other=humans.find(p=>p.uid!==this.localPlayerId);
-        if(other?.clanConfirmed&&normalizeClan(other.clan)===selected){rejected=true;return}
-        if(other&&!other.clanConfirmed&&normalizeClan(other.clan)===selected){
-          other.clan=oppositeClan(selected);other.clanChosen=true;other.clanConfirmed=false;other.clanSelectedAt=Date.now();
-        }
-      }
-      mine.clan=selected;mine.clanChosen=true;mine.clanConfirmed=true;mine.clanSelectedAt=Date.now();mine.clanConfirmedAt=Date.now();
-      return current;
-    });
-    return !!result.committed&&!rejected;
+    const F=await this.waitFirebase(),selected=normalizeClan(clan);
+    const playerRef=F.ref(F.firebaseDb,`rooms/${this.roomId}/players/${this.localPlayerId}`);
+    const [mineSnap,playersSnap,npcSnap]=await Promise.all([
+      F.get(playerRef),
+      F.get(F.ref(F.firebaseDb,`rooms/${this.roomId}/players`)),
+      F.get(F.ref(F.firebaseDb,`rooms/${this.roomId}/npcCount`))
+    ]);
+    const mine=mineSnap.val();
+    if(!mine)return false;
+    if(mine.clanConfirmed&&normalizeClan(mine.clan)===selected)return true;
+    if(mine.clanConfirmed)return false;
+    const players=playersSnap.val()||{},humans=Object.values(players),total=humans.length+Math.max(0,Number(npcSnap.val())||0);
+    if(total===2&&humans.length===2){
+      const other=humans.find(p=>p.uid!==this.localPlayerId);
+      if(other?.clanConfirmed&&normalizeClan(other.clan)===selected)return false;
+    }
+    const now=Date.now();
+    await F.update(playerRef,{clan:selected,clanChosen:true,clanConfirmed:true,clanSelectedAt:now,clanConfirmedAt:now});
+    return true;
   },
   async sendInput(input){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase();await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...input,t:F.serverTimestamp()})},
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
@@ -3959,8 +3961,40 @@ function handleHostCommands(commands){
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
 }
+let clanReservationRepairInFlight=false;
+async function reconcileClanReservations(room){
+ if(clanReservationRepairInFlight||!NetworkAdapter.isHost||state.mode!=='war'||room?.status!=='clan')return;
+ const entries=Object.entries(room.players||{});
+ const total=entries.length+Math.max(0,Number(room.npcCount)||0);
+ if(total!==2||entries.length!==2)return;
+ const [a,b]=entries;
+ const ca=normalizeClan(a[1]?.clan),cb=normalizeClan(b[1]?.clan);
+ if(ca!==cb)return;
+ const aConfirmed=!!a[1]?.clanConfirmed,bConfirmed=!!b[1]?.clanConfirmed;
+ if(!aConfirmed&&!bConfirmed)return;
+ let winner,loser;
+ if(aConfirmed&&!bConfirmed){winner=a;loser=b}
+ else if(!aConfirmed&&bConfirmed){winner=b;loser=a}
+ else{
+   const at=Number(a[1]?.clanConfirmedAt)||Number.MAX_SAFE_INTEGER;
+   const bt=Number(b[1]?.clanConfirmedAt)||Number.MAX_SAFE_INTEGER;
+   if(at<bt){winner=a;loser=b}
+   else if(bt<at){winner=b;loser=a}
+   else if((Number(a[1]?.slot)||0)<=(Number(b[1]?.slot)||0)){winner=a;loser=b}
+   else{winner=b;loser=a}
+ }
+ const desired=oppositeClan(winner[1]?.clan);
+ clanReservationRepairInFlight=true;
+ try{
+   const F=await NetworkAdapter.waitFirebase();
+   await F.update(F.ref(F.firebaseDb,`rooms/${NetworkAdapter.roomId}/players/${loser[0]}`),{
+     clan:desired,clanChosen:true,clanConfirmed:false,clanConfirmedAt:null,clanSelectedAt:Date.now()
+   });
+ }finally{clanReservationRepairInFlight=false}
+}
 function syncFirebaseRoom(room){
  if(!room)return;
+ reconcileClanReservations(room).catch(console.error);
  NetworkAdapter.hostUid=room.hostUid||NetworkAdapter.hostUid;NetworkAdapter.roomStatus=room.status||'lobby';NetworkAdapter.remoteInputs=room.inputs||{};
  if(room.settings){
    state.mode=room.settings.mode??state.mode;state.pveTime=room.settings.pveTime??state.pveTime;state.warTime=room.settings.warTime??state.warTime;state.rounds=room.settings.rounds??state.rounds;state.difficulty=room.settings.difficulty??state.difficulty;state.speed=room.settings.speed??state.speed;
@@ -4307,25 +4341,27 @@ $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{
 $('#confirmClanBtn').onclick=async()=>{
  const me=localPlayer();if(!me||me.clanConfirmed||clanConfirmInFlight)return;
  const selected=normalizeClan(clanDraft??me.clan);
- if(clanUnavailableForLocal(selected)){renderClanSelection();return}
+ if(clanUnavailableForLocal(selected)){flash('Esse clã já foi reservado.',1.3);renderClanSelection();return}
  clanConfirmInFlight=true;
  renderClanSelection();
  try{
    if(NetworkAdapter.online){
      const ok=await NetworkAdapter.confirmClan(selected);
-     if(!ok){flash('Não foi possível confirmar esse clã.',1.4);return}
+     if(!ok){flash('Esse clã não pôde ser confirmado.',1.5);return}
    }
-   const current=localPlayer();if(!current)return;
+   const current=localPlayer();
+   if(!current){flash('Jogador local não encontrado.',1.5);return}
    current.clan=selected;
    current.clanChosen=true;
    current.clanConfirmed=true;
+   current.clanConfirmedAt=Date.now();
    clanDraft=selected;
    prepareWarClanAssignments();
    renderPlayers();
    configureWarShopForClan();
  }catch(err){
-   console.error(err);
-   flash('Falha ao confirmar o clã.',1.4);
+   console.error('confirmClan failed',err);
+   flash('Falha de rede ao confirmar o clã.',1.6);
  }finally{
    clanConfirmInFlight=false;
    renderClanSelection();
