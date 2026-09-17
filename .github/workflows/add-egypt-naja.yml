@@ -50,6 +50,32 @@ jobs:
           python -m py_compile /tmp/add_egypt_naja.py
           python /tmp/add_egypt_naja.py
 
+      - name: Tune Naja balance and size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+
+          def replace_once(old,new,label):
+              global t
+              if new in t:
+                  return
+              count=t.count(old)
+              if count!=1:
+                  raise SystemExit(f'{label}: expected 1 old anchor, found {count}')
+              t=t.replace(old,new,1)
+
+          replace_once('e.damage=40;\n e.r=36;','e.damage=45;\n e.r=36;','Naja base damage')
+          replace_once('applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});','applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});','Naja normal hit damage')
+          replace_once('const NAJA_SPECIAL_DAMAGE=75;','const NAJA_SPECIAL_DAMAGE=85;','Naja special damage')
+          replace_once("e.type==='golem'?1.34:e.type==='naja'?1.18:","e.type==='golem'?1.34:e.type==='naja'?1.45:",'Naja visual scale')
+          replace_once('''     knockForce:1260,\n     knockTime:.56,\n     tilt:36,\n     shake:24,\n     shakeDuration:.62,''','''     knockForce:620,\n     knockTime:.42,\n     tilt:24,\n     shake:18,\n     shakeDuration:.46,''','Naja special knockback')
+
+          p.write_text(t,encoding='utf-8')
+          print('Naja tuning applied.')
+          PY
+
       - name: Refresh persistent asset cache
         run: python .github/update_asset_cache.py
 
@@ -74,8 +100,11 @@ jobs:
           required=[
             '/* EGYPT NAJA SYSTEM 2026-09-17 */','id="buyEgyptNaja"','naja:550',
             'function spawnNaja(','function aiFightNaja(','function chooseNajaEmergenceTarget(',
-            'function resolveNajaEmergence(','NAJA_UNDERGROUND_MS=5000','NAJA_SPECIAL_DAMAGE=75',
-            'e.hp=e.maxHp=600','e.shield=e.maxShield=200','NAJA_ATTACK_INTERVAL_SEC=2',
+            'function resolveNajaEmergence(','NAJA_UNDERGROUND_MS=5000','NAJA_SPECIAL_DAMAGE=85',
+            'e.hp=e.maxHp=600','e.shield=e.maxShield=200','e.damage=45','NAJA_ATTACK_INTERVAL_SEC=2',
+            'applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});',
+            "e.type==='golem'?1.34:e.type==='naja'?1.45:",
+            'knockForce:620','knockTime:.42','tilt:24','shake:18','shakeDuration:.46',
             "if(target.type==='naja'&&najaIsInvulnerable(target))return",
             "if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false",
             'buy-egypt-naja','pendingNajaAttack','becameTeleported',
@@ -84,7 +113,7 @@ jobs:
           ]
           missing=[x for x in required if x not in t]
           if missing:
-              raise SystemExit('Missing Naja integration: '+repr(missing))
+              raise SystemExit('Missing Naja integration/tuning: '+repr(missing))
           for f in ['card.png','idle.gif','walk.gif','attack-normal.gif','special-burrow.gif','special-emerge.gif']:
               path=Path('assets/egypt/naja')/f
               if not path.is_file() or path.stat().st_size<100:
@@ -92,7 +121,7 @@ jobs:
           sw=Path('sw.js').read_text(encoding='utf-8')
           if 'assets/egypt/naja/special-emerge.gif' not in sw:
               raise SystemExit('Naja assets missing from service-worker manifest')
-          print('Naja integration validation passed')
+          print('Naja integration and tuning validation passed')
           PY
           git diff --check
 
@@ -105,5 +134,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html sw.js assets/egypt/naja
-          git commit -m 'Add Egypt Naja with burrow special'
+          git commit -m 'Tune Egypt Naja damage knockback and size'
           git push origin main
