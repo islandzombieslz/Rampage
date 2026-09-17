@@ -1,0 +1,255 @@
+name: Add Egypt Naja
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-egypt-naja.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-add-egypt-naja
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Download Naja assets
+        run: |
+          set -euo pipefail
+          mkdir -p assets/egypt/naja
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/Z5KHcMvY/card-cobra-egito.png' -o assets/egypt/naja/card.png
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/rwnJYN5F/parada-cobra-egito.gif' -o assets/egypt/naja/idle.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/28xTnD6L/andando-cobra-egito.gif' -o assets/egypt/naja/walk.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/8zP4H0fJ/especial-cobra-egito.gif' -o assets/egypt/naja/special-burrow.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/RZVdRDJ3/final-do-especial-cobra-egito.gif' -o assets/egypt/naja/special-emerge.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/6p5c0m4p/ataque-normal-cobra-egito.gif' -o assets/egypt/naja/attack-normal.gif
+          test -s assets/egypt/naja/card.png
+          test -s assets/egypt/naja/idle.gif
+          test -s assets/egypt/naja/walk.gif
+          test -s assets/egypt/naja/special-burrow.gif
+          test -s assets/egypt/naja/special-emerge.gif
+          test -s assets/egypt/naja/attack-normal.gif
+
+      - name: Restore and apply Naja patch
+        run: |
+          python - <<'PY'
+          import base64, gzip
+          payload = r'''
+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
+'''
+          data = gzip.decompress(base64.b64decode(payload))
+          open('/tmp/add_egypt_naja.py','wb').write(data)
+          PY
+          python -m py_compile /tmp/add_egypt_naja.py
+          python /tmp/add_egypt_naja.py
+
+      - name: Refresh persistent asset cache
+        run: python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Naja integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '/* EGYPT NAJA SYSTEM 2026-09-17 */',
+            'id="buyEgyptNaja"',
+            "naja:550",
+            "function spawnNaja(",
+            "function aiFightNaja(",
+            "function chooseNajaEmergenceTarget(",
+            "function resolveNajaEmergence(",
+            "NAJA_UNDERGROUND_MS=5000",
+            "NAJA_SPECIAL_DAMAGE=75",
+            "e.hp=e.maxHp=600",
+            "e.shield=e.maxShield=200",
+            "NAJA_ATTACK_INTERVAL_SEC=2",
+            "if(target.type==='naja'&&najaIsInvulnerable(target))return",
+            "if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false",
+            "buy-egypt-naja",
+            "pendingNajaAttack",
+            "becameTeleported",
+            "assets/egypt/naja/card.png",
+            "assets/egypt/naja/idle.gif",
+            "assets/egypt/naja/walk.gif",
+            "assets/egypt/naja/attack-normal.gif",
+            "assets/egypt/naja/special-burrow.gif",
+            "assets/egypt/naja/special-emerge.gif",
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing Naja integration: '+repr(missing))
+          for f in [
+            'assets/egypt/naja/card.png','assets/egypt/naja/idle.gif','assets/egypt/naja/walk.gif',
+            'assets/egypt/naja/attack-normal.gif','assets/egypt/naja/special-burrow.gif','assets/egypt/naja/special-emerge.gif'
+          ]:
+              if not Path(f).is_file() or Path(f).stat().st_size<100:
+                  raise SystemExit('Invalid Naja asset: '+f)
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          if 'assets/egypt/naja/special-emerge.gif' not in sw:
+              raise SystemExit('Naja assets missing from service-worker manifest')
+          print('Naja integration validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html sw.js assets/egypt/naja; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt/naja
+          git commit -m 'Add Egypt Naja with burrow special'
+          git push origin main
