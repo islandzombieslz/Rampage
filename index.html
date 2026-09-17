@@ -2617,8 +2617,9 @@ window.dispatchEvent(new Event('firebase-ready'));
         </div>
       </button>
     </div>
-    <div id="clanSelectionStatus">Seu clã: Guerreiros</div>
+    <div id="clanSelectionStatus">Selecionado: Guerreiros</div>
     <div class="divider"></div>
+    <button id="confirmClanBtn" type="button">Confirmar clã</button>
     <button id="startWarBtn" class="primary">Iniciar preparação</button>
   </div>
 </section>
@@ -2722,7 +2723,7 @@ const NetworkAdapter = {
           return {
             code:c,hostUid:user.uid,status:'lobby',npcCount:0,
             createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
-            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanSelectedAt:0,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
+            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
           };
         });
         if(result.committed){code=c;break}
@@ -2750,7 +2751,7 @@ const NetworkAdapter = {
       const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
       const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
-      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanSelectedAt:0,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
+      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
       await F.update(rr,{lastActivityAt:F.serverTimestamp()});
       this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;
       await this.attachPresence(code,user.uid);
@@ -2873,14 +2874,40 @@ const NetworkAdapter = {
     let rejected=false;
     const result=await F.runTransaction(roomRef,current=>{
       if(!current?.players?.[this.localPlayerId]){rejected=true;return}
-      const players=current.players||{},humans=Object.values(players),total=humans.length+Math.max(0,Number(current.npcCount)||0);
-      const mine=players[this.localPlayerId];
+      const players=current.players||{},humans=Object.values(players),mine=players[this.localPlayerId];
+      if(mine.clanConfirmed){rejected=true;return}
+      const total=humans.length+Math.max(0,Number(current.npcCount)||0);
       if(total===2&&humans.length===2){
         const other=humans.find(p=>p.uid!==this.localPlayerId);
-        if(other?.clanChosen&&normalizeClan(other.clan)===value){rejected=true;return}
-        if(other&&!other.clanChosen)other.clan=value==='egypt'?'warriors':'egypt';
+        // A selecao continua livre ate alguem CONFIRMAR. Depois disso o cla
+        // confirmado fica reservado e nao pode ser selecionado pelo adversario.
+        if(other?.clanConfirmed&&normalizeClan(other.clan)===value){rejected=true;return}
       }
-      mine.clan=value;mine.clanChosen=true;mine.clanSelectedAt=Date.now();
+      mine.clan=value;mine.clanChosen=true;mine.clanConfirmed=false;mine.clanSelectedAt=Date.now();
+      return current;
+    });
+    return !!result.committed&&!rejected;
+  },
+  async confirmClan(){
+    if(!this.roomId||!this.localPlayerId)return false;
+    const F=await this.waitFirebase(),roomRef=F.ref(F.firebaseDb,`rooms/${this.roomId}`);
+    let rejected=false;
+    const result=await F.runTransaction(roomRef,current=>{
+      if(!current?.players?.[this.localPlayerId]){rejected=true;return}
+      const players=current.players||{},humans=Object.values(players),mine=players[this.localPlayerId];
+      if(mine.clanConfirmed)return current;
+      const selected=normalizeClan(mine.clan),total=humans.length+Math.max(0,Number(current.npcCount)||0);
+      if(total===2&&humans.length===2){
+        const other=humans.find(p=>p.uid!==this.localPlayerId);
+        if(other?.clanConfirmed&&normalizeClan(other.clan)===selected){rejected=true;return}
+        // Se o outro apenas estava apontando para o mesmo cla, a confirmacao deste
+        // jogador ganha a reserva e move a selecao provisoria do outro para o livre.
+        if(other&&!other.clanConfirmed&&normalizeClan(other.clan)===selected){
+          other.clan=selected==='egypt'?'warriors':'egypt';
+          other.clanChosen=true;other.clanSelectedAt=Date.now();
+        }
+      }
+      mine.clan=selected;mine.clanChosen=true;mine.clanConfirmed=true;mine.clanConfirmedAt=Date.now();
       return current;
     });
     return !!result.committed&&!rejected;
@@ -3884,12 +3911,15 @@ function syncFirebaseRoom(room){
  // territory, bonusGems e troops; substituir esse array apagava os dados do player.
  const lobbyRosterPhase=room.status==='lobby'||room.status==='clan';
  if(lobbyRosterPhase && !warStartInFlight && !state.running){
-   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanSelectedAt:Number(p.clanSelectedAt)||0}));
+   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0}));
    const max=state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
-   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:false,clanSelectedAt:0}));
+   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0}));
    state.players=[...humans,...bots];
-   const chosen1v1=state.players.filter(p=>p.clanChosen).sort((a,b)=>(a.clanSelectedAt||0)-(b.clanSelectedAt||0))[0];
-   if(state.mode==='war'&&state.players.length===2&&(chosen1v1||bots.length))enforceTwoPlayerClanExclusivity(chosen1v1?.id||humans[0]?.id);
+   // Nao forca dois humanos para clans diferentes enquanto estao apenas selecionando.
+   // Contra um unico NPC, o bot acompanha visualmente o cla oposto sem bloquear o humano.
+   if(state.mode==='war'&&state.players.length===2&&humans.length===1&&bots.length===1){
+     bots[0].clan=oppositeClan(humans[0].clan);
+   }
    renderPlayers();
    if(room.status==='clan'&&$('#clanScreen').style.display==='none')navigateScreen('clanScreen');
    if(room.status==='clan'){renderClanSelection();configureWarShopForClan();}
@@ -4106,7 +4136,12 @@ function updateLobbyAuthority(){
  $('#lobbyContinue').disabled=NetworkAdapter.online&&!host;
  $('#lobbyContinue').textContent=NetworkAdapter.online&&!host?'Aguardando o host...':'Continuar';
  $$('[data-target="npcs"]').forEach(b=>b.disabled=NetworkAdapter.online&&!host);
- $('#startWarBtn').disabled=NetworkAdapter.online&&!host;
+ const allConfirmed=allWarClanHumansConfirmed();
+ const start=$('#startWarBtn');
+ if(start){
+   start.disabled=(NetworkAdapter.online&&!host)||!allConfirmed;
+   start.textContent=!allConfirmed?'Aguardando confirmações...':(NetworkAdapter.online&&!host?'Aguardando o host...':'Iniciar preparação');
+ }
 }
 $('#lobbyContinue').onclick=async()=>{
   if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
@@ -4118,64 +4153,72 @@ $('#lobbyContinue').onclick=async()=>{
 
 
 function oppositeClan(clan){return normalizeClan(clan)==='egypt'?'warriors':'egypt'}
-function enforceTwoPlayerClanExclusivity(preferredId=null){
- if(state.mode!=='war'||state.players.length!==2)return;
- const preferred=state.players.find(p=>p.id===preferredId)||state.players.find(p=>p.clanChosen)||state.players.find(p=>p.human)||state.players[0];
- const other=state.players.find(p=>p!==preferred);
- if(!preferred||!other)return;
- preferred.clan=normalizeClan(preferred.clan);
- other.clan=oppositeClan(preferred.clan);
-}
-function prepareWarClanAssignments(){
- if(state.mode!=='war')return;
- if(state.players.length===2){
-   const claimed=state.players.filter(p=>p.clanChosen).sort((a,b)=>(a.clanSelectedAt||0)-(b.clanSelectedAt||0))[0];
-   enforceTwoPlayerClanExclusivity(claimed?.id||state.players.find(p=>p.human)?.id||state.players[0]?.id);
- }else if(state.players.length>=3){
-   for(const p of state.players)if(!p.human)p.clan=Math.random()<.5?'warriors':'egypt';
- }
+function allWarClanHumansConfirmed(){
+ if(state.mode!=='war')return true;
+ const humans=state.players.filter(p=>p.human);
+ if(!humans.length||humans.some(p=>!p.clanConfirmed))return false;
+ // Em 1x1 humano x humano a reserva e exclusiva.
+ if(state.players.length===2&&humans.length===2&&normalizeClan(humans[0].clan)===normalizeClan(humans[1].clan))return false;
+ return true;
 }
 function clanUnavailableForLocal(clan){
  if(state.mode!=='war'||state.players.length!==2)return false;
- const me=localPlayer(),other=state.players.find(p=>p!==me);
- return !!(other?.human&&other.clanChosen&&normalizeClan(other.clan)===normalizeClan(clan));
+ const me=localPlayer();if(!me)return false;
+ const humans=state.players.filter(p=>p.human),other=humans.find(p=>p.id!==me.id);
+ return !!(other?.clanConfirmed&&normalizeClan(other.clan)===normalizeClan(clan));
+}
+function prepareWarClanAssignments(){
+ if(state.mode!=='war')return;
+ const humans=state.players.filter(p=>p.human),bots=state.players.filter(p=>!p.human);
+ if(state.players.length===2&&humans.length===1&&bots.length===1){
+   bots[0].clan=oppositeClan(humans[0].clan);bots[0].clanChosen=true;bots[0].clanConfirmed=true;
+ }else if(state.players.length>=3){
+   for(const p of bots){p.clan=Math.random()<.5?'warriors':'egypt';p.clanChosen=true;p.clanConfirmed=true}
+ }
 }
 
 function renderClanSelection(){
- const clan=normalizeClan(localPlayer()?.clan);
+ const me=localPlayer(),clan=normalizeClan(me?.clan),confirmed=!!me?.clanConfirmed;
  $$('.clan-option[data-clan]').forEach(btn=>{
    const optionClan=normalizeClan(btn.dataset.clan);
    btn.classList.toggle('selected',optionClan===clan);
-   const locked=clanUnavailableForLocal(optionClan);
+   const locked=confirmed||clanUnavailableForLocal(optionClan);
    btn.disabled=locked;
    btn.setAttribute('aria-disabled',locked?'true':'false');
  });
  const status=$('#clanSelectionStatus');
- if(status)status.textContent='Seu clã: '+clanLabel(clan)+(state.players.length===2?' • 1x1: clãs exclusivos':'');
+ if(status)status.textContent=confirmed?`Clã confirmado: ${clanLabel(clan)}`:`Selecionado: ${clanLabel(clan)} • confirme para reservar`;
+ const confirm=$('#confirmClanBtn');
+ if(confirm){confirm.disabled=!me||confirmed;confirm.textContent=confirmed?'Confirmado ✓':'Confirmar clã'}
+ updateLobbyAuthority();
 }
 $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=async()=>{
- const requestedClan=normalizeClan(btn.dataset.clan);
- const before=localPlayer();if(!before)return;
- // So existe bloqueio quando ha exatamente dois HUMANOS e o outro ja confirmou o cla.
- // Sozinho na sala, ou jogando contra NPC, o jogador pode trocar livremente de cla;
- // no 1x1 contra NPC o bot simplesmente acompanha com o cla oposto.
+ const requestedClan=normalizeClan(btn.dataset.clan),before=localPlayer();if(!before||before.clanConfirmed)return;
  if(clanUnavailableForLocal(requestedClan)){renderClanSelection();return}
  if(NetworkAdapter.online){
+   try{if(!(await NetworkAdapter.setClan(requestedClan))){renderClanSelection();return}}catch(err){console.error(err);return}
+ }
+ const p=localPlayer();if(!p||p.clanConfirmed)return;
+ p.clan=requestedClan;p.clanChosen=true;p.clanSelectedAt=Date.now();
+ const bot=state.players.length===2?state.players.find(x=>!x.human):null;
+ if(bot)bot.clan=oppositeClan(requestedClan);
+ renderClanSelection();renderPlayers();configureWarShopForClan();
+});
+$('#confirmClanBtn').onclick=async()=>{
+ const before=localPlayer();if(!before||before.clanConfirmed)return;
+ if(NetworkAdapter.online){
    try{
-     const accepted=await NetworkAdapter.setClan(requestedClan);
-     if(!accepted){
-       const status=$('#clanSelectionStatus');if(status)status.textContent='Esse clã já está ocupado no 1x1.';
+     if(!(await NetworkAdapter.confirmClan())){
+       const status=$('#clanSelectionStatus');if(status)status.textContent='Esse clã acabou de ser confirmado pelo outro jogador.';
        renderClanSelection();return;
      }
    }catch(err){console.error(err);return}
  }
- // onValue pode reconstruir state.players durante o await acima. Rebusca o player
- // atual antes de alterar a selecao visual para nunca escrever num objeto obsoleto.
  const p=localPlayer();if(!p)return;
- p.clan=requestedClan;p.clanChosen=true;p.clanSelectedAt=Date.now();
- if(state.players.length===2)enforceTwoPlayerClanExclusivity(p.id);
+ p.clanChosen=true;p.clanConfirmed=true;
+ prepareWarClanAssignments();
  renderClanSelection();renderPlayers();configureWarShopForClan();
-});
+};
 function configureWarShopForClan(){
  const clan=normalizeClan(localPlayer()?.clan);
  $$('.clan-shop').forEach(group=>{
@@ -4189,6 +4232,7 @@ function configureWarShopForClan(){
 let warStartInFlight=false;
 $('#startWarBtn').onclick=async()=>{
  if(warStartInFlight||(NetworkAdapter.online&&!NetworkAdapter.isHost))return;
+ if(!allWarClanHumansConfirmed()){renderClanSelection();flash('Todos precisam confirmar o clã.',1.4);return}
  warStartInFlight=true;
  const btn=$('#startWarBtn');btn.disabled=true;
  try{
