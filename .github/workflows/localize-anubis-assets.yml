@@ -1,0 +1,164 @@
+name: Localize Egypt Anubis Assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/localize-anubis-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  localize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Download exact Anubis originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/egypt/anubis
+
+          download() {
+            url="$1"
+            out="$2"
+            echo "Downloading $out"
+            curl --http1.1 -fL               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 75               -A "Mozilla/5.0 GitHub-Actions Rampage-Asset-Mirror"               "$url" -o "$out"
+          }
+
+          download 'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png' 'assets/egypt/anubis/card.png' &
+          p1=$!
+          download 'https://i.postimg.cc/3R6FknJw/annubis-andando.gif' 'assets/egypt/anubis/walk.gif' &
+          p2=$!
+          download 'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif' 'assets/egypt/anubis/idle.gif' &
+          p3=$!
+          download 'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif' 'assets/egypt/anubis/attack-melee.gif' &
+          p4=$!
+          download 'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif' 'assets/egypt/anubis/attack-ranged.gif' &
+          p5=$!
+          download 'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif' 'assets/egypt/anubis/projectile.gif' &
+          p6=$!
+
+          wait "$p1" "$p2" "$p3" "$p4" "$p5" "$p6"
+
+      - name: Verify against uploaded originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/anubis.sha256 <<'EOF'
+          e051495d792edbf4377119f258a35c1f9abe87d9d5c87568c79622c8a7c4f706  assets/egypt/anubis/card.png
+          f4ae3bc763d986c10e782b845e82676ba63e533a53881c6f899fa301b203d025  assets/egypt/anubis/walk.gif
+          461f3e136d7d96182992a0f9627f6cca9903c5086dceb443b74764ad395cfce0  assets/egypt/anubis/idle.gif
+          99e0ccfb3e87ef42128b2ebc9f69e21c03d465e1fb4f3b7f3bb4253c6828063d  assets/egypt/anubis/attack-melee.gif
+          7f47da8ce909f47d03dd5274493dac129ab039378aa2fcbb41cd7d1822192ffe  assets/egypt/anubis/attack-ranged.gif
+          5f8a9e48c4029765c85d7e419d775f944098b03d6bca6a574a17c9baba82b37b  assets/egypt/anubis/projectile.gif
+          EOF
+          sha256sum -c /tmp/anubis.sha256
+
+          test "$(stat -c%s assets/egypt/anubis/card.png)" = "2906997"
+          test "$(stat -c%s assets/egypt/anubis/walk.gif)" = "223843"
+          test "$(stat -c%s assets/egypt/anubis/idle.gif)" = "206232"
+          test "$(stat -c%s assets/egypt/anubis/attack-melee.gif)" = "205154"
+          test "$(stat -c%s assets/egypt/anubis/attack-ranged.gif)" = "200020"
+          test "$(stat -c%s assets/egypt/anubis/projectile.gif)" = "181350"
+
+      - name: Replace Postimg with repository assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          mapping={
+            'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png':'assets/egypt/anubis/card.png',
+            'https://i.postimg.cc/3R6FknJw/annubis-andando.gif':'assets/egypt/anubis/walk.gif',
+            'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif':'assets/egypt/anubis/idle.gif',
+            'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif':'assets/egypt/anubis/attack-melee.gif',
+            'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif':'assets/egypt/anubis/attack-ranged.gif',
+            'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif':'assets/egypt/anubis/projectile.gif',
+          }
+          missing=[old for old in mapping if old not in t]
+          if missing:
+              # Idempotent reruns are OK if every local path is already present.
+              local_missing=[new for new in mapping.values() if new not in t]
+              if local_missing:
+                  raise SystemExit('Anubis URL anchors missing: '+repr(missing)+'; local paths missing: '+repr(local_missing))
+          for old,new in mapping.items():
+              t=t.replace(old,new)
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Refresh persistent asset cache
+        run: python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks: raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate local Anubis assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'assets/egypt/anubis/card.png',
+            "anubisIdle:'assets/egypt/anubis/idle.gif'",
+            "anubisWalk:'assets/egypt/anubis/walk.gif'",
+            "anubisMeleeAttack:'assets/egypt/anubis/attack-melee.gif'",
+            "anubisRangedAttack:'assets/egypt/anubis/attack-ranged.gif'",
+            "anubisProjectile:'assets/egypt/anubis/projectile.gif'",
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing local Anubis paths: '+repr(missing))
+          urls=[
+            'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png',
+            'https://i.postimg.cc/3R6FknJw/annubis-andando.gif',
+            'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif',
+            'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif',
+            'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif',
+            'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif',
+          ]
+          remain=[u for u in urls if u in t]
+          if remain: raise SystemExit('Postimg Anubis URLs still present: '+repr(remain))
+          for path in [
+            'assets/egypt/anubis/card.png',
+            'assets/egypt/anubis/walk.gif',
+            'assets/egypt/anubis/idle.gif',
+            'assets/egypt/anubis/attack-melee.gif',
+            'assets/egypt/anubis/attack-ranged.gif',
+            'assets/egypt/anubis/projectile.gif',
+          ]:
+              if not Path(path).is_file() or Path(path).stat().st_size<=0:
+                  raise SystemExit('Missing asset file: '+path)
+          print('Anubis is fully local and validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html sw.js assets/egypt/anubis; then
+            echo 'No localization changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt/anubis
+          git commit -m 'Store Egypt Anubis assets in repository'
+          git push origin main
