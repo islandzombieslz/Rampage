@@ -2329,115 +2329,69 @@ body.booting #landscapeRoot{visibility:hidden}
   #clanScreen #clanSelectionStatus{bottom:19.5% !important;font-size:7.5px !important}
 }
 
-
-
-
-/* CLAN MENU V4 FIX 2026-09-17 */
+/* CLAN MENU V6 SINGLE ACTION LAYOUT 2026-09-17 */
 #clanScreen>.card > .clan-options-grid{
-  bottom:26.2% !important;
-}
-#clanScreen #clanSelectionStatus{
-  bottom:21.2% !important;
-  z-index:18 !important;
-  pointer-events:none !important;
-}
-#clanScreen .clan-actions{
-  position:absolute !important;
-  left:21% !important;
-  right:21% !important;
-  bottom:13.4% !important;
-  display:grid !important;
-  grid-template-columns:1fr 1fr !important;
-  gap:8px !important;
-  z-index:30 !important;
-  pointer-events:auto !important;
-}
-#clanScreen .clan-actions #confirmClanBtn,
-#clanScreen .clan-actions #startWarBtn{
-  position:static !important;
-  inset:auto !important;
-  width:100% !important;
-  min-width:0 !important;
-  min-height:36px !important;
-  margin:0 !important;
-  padding:7px 8px !important;
-  font-size:10px !important;
-  line-height:1.05 !important;
-  white-space:normal !important;
-  z-index:31 !important;
-  pointer-events:auto !important;
-}
-#clanScreen .clan-options-grid .clan-option{
-  z-index:12 !important;
-  pointer-events:auto !important;
-}
-#clanScreen .clan-options-grid .clan-option:disabled{
-  cursor:not-allowed !important;
-}
-@media (max-height:650px) and (pointer:fine){
-  #clanScreen>.card > .clan-options-grid{bottom:27% !important}
-  #clanScreen #clanSelectionStatus{bottom:21.7% !important}
-  #clanScreen .clan-actions{left:20% !important;right:20% !important;bottom:13.1% !important;gap:6px !important}
-  #clanScreen .clan-actions #confirmClanBtn,
-  #clanScreen .clan-actions #startWarBtn{min-height:31px !important;font-size:9px !important;padding:5px 6px !important}
-}
-
-
-
-/* CLAN MENU V5 DEFINITIVE LAYOUT 2026-09-17 */
-#clanScreen>.card > .clan-options-grid{
-  bottom:27.2% !important;
+  bottom:27% !important;
 }
 #clanScreen #clanSelectionStatus{
   position:absolute !important;
   left:22% !important;
   right:22% !important;
-  bottom:21.7% !important;
+  bottom:20.2% !important;
+  width:auto !important;
+  margin:0 !important;
+  text-align:center !important;
   z-index:40 !important;
   pointer-events:none !important;
-  text-align:center !important;
 }
-#clanScreen .clan-actions{
-  position:static !important;
-  display:block !important;
-  pointer-events:none !important;
-}
-#clanScreen #confirmClanBtn,
-#clanScreen #startWarBtn{
+#clanScreen>.card > .clan-actions{
   position:absolute !important;
-  top:auto !important;
-  bottom:14.2% !important;
-  width:27.5% !important;
-  min-width:0 !important;
-  min-height:34px !important;
+  left:22% !important;
+  right:22% !important;
+  bottom:12.3% !important;
+  width:auto !important;
   height:auto !important;
   margin:0 !important;
-  padding:7px 7px !important;
-  font-size:9.5px !important;
-  line-height:1.1 !important;
-  white-space:normal !important;
-  z-index:50 !important;
+  padding:0 !important;
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  gap:8px !important;
+  z-index:60 !important;
   pointer-events:auto !important;
 }
-#clanScreen #confirmClanBtn{
-  left:21% !important;
-  right:auto !important;
-}
-#clanScreen #startWarBtn{
+#clanScreen>.card > .clan-actions > #confirmClanBtn,
+#clanScreen>.card > .clan-actions > #startWarBtn{
+  position:static !important;
+  inset:auto !important;
   left:auto !important;
-  right:21% !important;
-}
-#clanScreen .clan-options-grid,
-#clanScreen .clan-options-grid .clan-option{
+  right:auto !important;
+  top:auto !important;
+  bottom:auto !important;
+  display:block !important;
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  min-height:36px !important;
+  height:auto !important;
+  margin:0 !important;
+  padding:7px 8px !important;
+  font-size:9.5px !important;
+  line-height:1.08 !important;
+  white-space:normal !important;
+  transform:none !important;
+  z-index:61 !important;
   pointer-events:auto !important;
 }
-#clanScreen .clan-options-grid .clan-option{z-index:30 !important}
+#clanScreen>.card > .clan-actions > #confirmClanBtn:not(:disabled),
+#clanScreen>.card > .clan-actions > #startWarBtn:not(:disabled){
+  cursor:pointer !important;
+}
 @media (max-height:650px) and (pointer:fine){
   #clanScreen>.card > .clan-options-grid{bottom:28% !important}
-  #clanScreen #clanSelectionStatus{bottom:22.1% !important;font-size:7.4px !important}
-  #clanScreen #confirmClanBtn,#clanScreen #startWarBtn{bottom:14% !important;min-height:30px !important;font-size:8.2px !important;padding:5px !important}
-  #clanScreen #confirmClanBtn{left:20% !important}
-  #clanScreen #startWarBtn{right:20% !important}
+  #clanScreen #clanSelectionStatus{bottom:20.8% !important;font-size:7.4px !important}
+  #clanScreen>.card > .clan-actions{left:21% !important;right:21% !important;bottom:12% !important;gap:6px !important}
+  #clanScreen>.card > .clan-actions > #confirmClanBtn,
+  #clanScreen>.card > .clan-actions > #startWarBtn{min-height:31px !important;font-size:8.2px !important;padding:5px 6px !important}
 }
 
 /* EGYPT SHOP + VISUAL TUNING 2026-09-13 */
@@ -4283,6 +4237,7 @@ $('#lobbyContinue').onclick=async()=>{
 
 
 let clanDraft=null;
+let clanConfirmInFlight=false;
 function oppositeClan(clan){return normalizeClan(clan)==='egypt'?'warriors':'egypt'}
 function resetClanDraft(){
  const me=localPlayer();
@@ -4329,7 +4284,10 @@ function renderClanSelection(){
  const status=$('#clanSelectionStatus');
  if(status)status.textContent=confirmed?`Clã confirmado: ${clanLabel(shownClan)}`:`Selecionado: ${clanLabel(shownClan)}`;
  const confirm=$('#confirmClanBtn');
- if(confirm){confirm.disabled=confirmed;confirm.textContent=confirmed?'Confirmado ✓':'Confirmar clã'}
+ if(confirm){
+   confirm.disabled=confirmed||clanConfirmInFlight;
+   confirm.textContent=confirmed?'Confirmado ✓':(clanConfirmInFlight?'Confirmando...':'Confirmar clã');
+ }
  updateLobbyAuthority();
 }
 $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{
@@ -4347,20 +4305,31 @@ $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{
  }).catch(console.error);
 });
 $('#confirmClanBtn').onclick=async()=>{
- const me=localPlayer();if(!me||me.clanConfirmed)return;
+ const me=localPlayer();if(!me||me.clanConfirmed||clanConfirmInFlight)return;
  const selected=normalizeClan(clanDraft??me.clan);
  if(clanUnavailableForLocal(selected)){renderClanSelection();return}
- if(NetworkAdapter.online){
-   try{
+ clanConfirmInFlight=true;
+ renderClanSelection();
+ try{
+   if(NetworkAdapter.online){
      const ok=await NetworkAdapter.confirmClan(selected);
-     if(!ok){renderClanSelection();return}
-   }catch(err){console.error(err);return}
+     if(!ok){flash('Não foi possível confirmar esse clã.',1.4);return}
+   }
+   const current=localPlayer();if(!current)return;
+   current.clan=selected;
+   current.clanChosen=true;
+   current.clanConfirmed=true;
+   clanDraft=selected;
+   prepareWarClanAssignments();
+   renderPlayers();
+   configureWarShopForClan();
+ }catch(err){
+   console.error(err);
+   flash('Falha ao confirmar o clã.',1.4);
+ }finally{
+   clanConfirmInFlight=false;
+   renderClanSelection();
  }
- const current=localPlayer();if(!current)return;
- current.clan=selected;current.clanChosen=true;current.clanConfirmed=true;
- clanDraft=selected;
- prepareWarClanAssignments();
- renderClanSelection();renderPlayers();configureWarShopForClan();
 };
 function configureWarShopForClan(){
  const clan=normalizeClan(localPlayer()?.clan);
