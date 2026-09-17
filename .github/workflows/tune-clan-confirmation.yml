@@ -1,0 +1,81 @@
+name: Tune Clan Confirmation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tune_clan_confirmation.py'
+      - '.github/workflows/tune-clan-confirmation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-tune-clan-confirmation
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply clan confirmation system
+        run: python .github/tune_clan_confirmation.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate clan confirmation flow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'async confirmClan(){',
+            'id="confirmClanBtn"',
+            'function allWarClanHumansConfirmed()',
+            "$('#confirmClanBtn').onclick=async()=>{",
+            "confirm.textContent=confirmed?'Confirmado ✓':'Confirmar clã'",
+            "start.textContent=!allConfirmed?'Aguardando confirmações...'",
+            "bots[0].clan=oppositeClan(humans[0].clan)",
+            "if(!allWarClanHumansConfirmed()){renderClanSelection();flash('Todos precisam confirmar o clã.',1.4);return}"
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing clan confirmation flow: '+repr(missing))
+          if 'enforceTwoPlayerClanExclusivity(' in t:
+              raise SystemExit('Old premature clan forcing remains')
+          print('Clan select/confirm flow validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Add explicit clan selection confirmation flow'
+          git push origin main
