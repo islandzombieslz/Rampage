@@ -25,12 +25,13 @@ replace_one_of(
     'Naja full special invulnerability',
 )
 
-# 2) Pequeno offset visual para a direita e para baixo, sem mudar hitbox/logica.
+# 2) Offset visual perceptivel para a direita e para baixo, sem mudar hitbox/logica.
 replace_one_of(
     [
-        ".entity-visual.naja-visual .entity-body{\n  left:-8px;\n  top:-8px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}"
+        ".entity-visual.naja-visual .entity-body{\n  left:-8px;\n  top:-8px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
+        ".entity-visual.naja-visual .entity-body{\n  left:-2px;\n  top:-2px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}"
     ],
-    ".entity-visual.naja-visual .entity-body{\n  left:-2px;\n  top:-2px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
+    ".entity-visual.naja-visual .entity-body{\n  left:8px;\n  top:10px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
     'Naja visual offset',
 )
 
@@ -93,8 +94,8 @@ p.write_text(t, encoding='utf-8')
 
 required = [
     "return phase!==null;",
-    "left:-2px;",
-    "top:-2px;",
+    "left:8px;",
+    "top:10px;",
     "e.najaShieldSpecialUsed=false;",
     "e.najaShieldSpecialPending=false;",
     "out.najaShieldSpecialUsed=!!e.najaShieldSpecialUsed;",
@@ -109,4 +110,4 @@ missing = [x for x in required if x not in t]
 if missing:
     raise SystemExit('Missing Naja special behavior tuning: ' + repr(missing))
 
-print('Naja special invulnerability, offset and shield-break trigger applied.')
+print('Naja special invulnerability, stronger visual offset and shield-break trigger applied.')
