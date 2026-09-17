@@ -69,8 +69,9 @@ jobs:
           replace_once('e.damage=40;\n e.r=36;','e.damage=45;\n e.r=36;','Naja base damage')
           replace_once('applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});','applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});','Naja normal hit damage')
           replace_once('const NAJA_SPECIAL_DAMAGE=75;','const NAJA_SPECIAL_DAMAGE=85;','Naja special damage')
-          replace_once("e.type==='golem'?1.34:e.type==='naja'?1.18:","e.type==='golem'?1.34:e.type==='naja'?1.45:",'Naja visual scale')
+          replace_once("e.type==='golem'?1.34:e.type==='naja'?1.18:","e.type==='golem'?1.34:e.type==='naja'?1.75:",'Naja visual scale')
           replace_once('''     knockForce:1260,\n     knockTime:.56,\n     tilt:36,\n     shake:24,\n     shakeDuration:.62,''','''     knockForce:620,\n     knockTime:.42,\n     tilt:24,\n     shake:18,\n     shakeDuration:.46,''','Naja special knockback')
+          replace_once("if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='naja'))return false;","if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;",'Naja can engage flying dragon')
 
           p.write_text(t,encoding='utf-8')
           print('Naja tuning applied.')
@@ -103,7 +104,8 @@ jobs:
             'function resolveNajaEmergence(','NAJA_UNDERGROUND_MS=5000','NAJA_SPECIAL_DAMAGE=85',
             'e.hp=e.maxHp=600','e.shield=e.maxShield=200','e.damage=45','NAJA_ATTACK_INTERVAL_SEC=2',
             'applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});',
-            "e.type==='golem'?1.34:e.type==='naja'?1.45:",
+            "e.type==='golem'?1.34:e.type==='naja'?1.75:",
+            "if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;",
             'knockForce:620','knockTime:.42','tilt:24','shake:18','shakeDuration:.46',
             "if(target.type==='naja'&&najaIsInvulnerable(target))return",
             "if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false",
@@ -134,5 +136,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html sw.js assets/egypt/naja
-          git commit -m 'Tune Egypt Naja damage knockback and size'
+          git commit -m 'Increase Egypt Naja size and allow dragon attacks'
           git push origin main
