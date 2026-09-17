@@ -3109,7 +3109,7 @@ let NAJA_SPECIAL_EMERGE_DURATION=1600;
 const NAJA_ATTACK_INTERVAL_SEC=2;
 const NAJA_UNDERGROUND_MS=5000;
 const NAJA_SPECIAL_RADIUS=220;
-const NAJA_SPECIAL_DAMAGE=85;
+const NAJA_SPECIAL_DAMAGE=80;
 let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
 let BROWN_POWER_DURATION=2200;
@@ -4453,10 +4453,10 @@ function spawnNaja(x,y,team,color){
  e.clan='egypt';
  e.hp=e.maxHp=600;
  e.shield=e.maxShield=200;
- e.damage=45;
+ e.damage=60;
  e.r=36;
- // Exatamente a mesma velocidade do Golem Guerreiro.
- e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;
+ // Um pouco mais rápida que o Golem Guerreiro, sem perder o peso da unidade.
+ e.speed=state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100;
  e.attackCooldown=0;
  e.najaAttackSerial=0;
  e.najaNormalCount=0;
@@ -4569,6 +4569,7 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false;
  const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
  const brownStableHit=target.type==='brownWarrior' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
+ const najaStableHit=target.type==='naja' && !najaSpecialPhase(target) && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
 
  // Golem: contra Guerreiro/Mago o dano entra normalmente, mas ele é muito mais estável.
  // Mantém o ciclo já definido: 1 impacto empurra, os 3 seguintes não.
@@ -4592,13 +4593,22 @@ function applyCombatHit(target,attacker,amount,options={}){
    knockForce*=0.34;
    knockTime=Math.min(knockTime,0.12);
  }
+ // Naja: resistência leve a golpes comuns. Um impacto empurra, o seguinte é ignorado.
+ // Quando o empurrão entra, ele também é mais fraco e curto que o normal.
+ if(najaStableHit){
+   const cycle=Number(target.najaKnockCycle)||0;
+   applyKnockback=(cycle===0);
+   target.najaKnockCycle=(cycle+1)%2;
+   knockForce*=0.45;
+   knockTime=Math.min(knockTime,0.15);
+ }
  // Durante qualquer especial ativo, o alvo recebe só 50% da força de empurrão.
  if(entityHasActiveSpecial(target))knockForce*=.50;
  if(applyKnockback){
    target.knockTime=knockTime;
    target.knockVX=dx*knockForce;
    target.knockVY=dy*knockForce;
-   if(!golemVsWarriorMage&&!brownStableHit)target.moving=false;
+   if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;
  }
 
  if(options.shake){
@@ -5154,7 +5164,7 @@ function resolveNajaNormalImpact(e,p){
  if(!e.alive)return;
  const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
  if(target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118){
-   applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});
+   applyCombatHit(target,e,60,{knockForce:220,knockTime:.12,tilt:9});
  }
 }
 
