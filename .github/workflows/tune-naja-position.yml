@@ -1,10 +1,11 @@
-name: Tune Naja Position
+name: Tune Naja Position and Warrior Balance
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/tune_naja_special_behavior.py'
+      - '.github/tune_warrior_balance.py'
       - '.github/workflows/tune-naja-position.yml'
   workflow_dispatch:
 
@@ -28,8 +29,11 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
 
-      - name: Apply Naja visual position
+      - name: Apply Naja render position
         run: python .github/tune_naja_special_behavior.py
+
+      - name: Apply warrior balance
+        run: python .github/tune_warrior_balance.py
 
       - name: Check JavaScript syntax
         run: |
@@ -44,23 +48,30 @@ jobs:
           PY
           node --check /tmp/rampage-main.js
 
-      - name: Validate Naja position
+      - name: Validate changes
         run: |
           python - <<'PY'
           from pathlib import Path
           t=Path('index.html').read_text(encoding='utf-8')
           required=[
+            "const renderX=e.type==='naja'?sx+14*zoom:sx;",
+            "const renderY=e.type==='naja'?sy+16*zoom:sy;",
+            "el.style.left=renderX+'px'",
             '.entity-visual.naja-visual .entity-body{',
-            'left:8px;',
-            'top:10px;',
+            'left:-8px;',
+            'top:-8px;',
             'return phase!==null;',
             'e.najaShieldSpecialUsed=false;',
-            'const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;'
+            'const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;',
+            'warrior:65',
+            'Comprar Guerreiro por 65 gemas',
+            'Comprar Guerreiro do Egito por 65 gemas',
+            'e.attackCooldown=.50;'
           ]
           missing=[x for x in required if x not in t]
           if missing:
-              raise SystemExit('Missing Naja position/special tuning: '+repr(missing))
-          print('Naja position validation passed')
+              raise SystemExit('Missing Naja/warrior tuning: '+repr(missing))
+          print('Naja render position and warrior balance validation passed')
           PY
           git diff --check
 
@@ -73,5 +84,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git commit -m 'Move Egypt Naja visual right and down'
+          git commit -m 'Slow warrior attacks raise cost and fix Naja render position'
           git push origin main
