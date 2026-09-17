@@ -25,15 +25,28 @@ replace_one_of(
     'Naja full special invulnerability',
 )
 
-# 2) Offset visual perceptivel para a direita e para baixo, sem mudar hitbox/logica.
+# 2) O offset antigo mexia apenas dentro da imagem e quase nao alterava a posicao real.
+# Restaura o sprite interno e desloca o CONTAINER inteiro no render, incluindo todos os GIFs e barras.
 replace_one_of(
     [
-        ".entity-visual.naja-visual .entity-body{\n  left:-8px;\n  top:-8px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
+        ".entity-visual.naja-visual .entity-body{\n  left:8px;\n  top:10px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
         ".entity-visual.naja-visual .entity-body{\n  left:-2px;\n  top:-2px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}"
     ],
-    ".entity-visual.naja-visual .entity-body{\n  left:8px;\n  top:10px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
-    'Naja visual offset',
+    ".entity-visual.naja-visual .entity-body{\n  left:-8px;\n  top:-8px;\n  width:126px;\n  height:132px;\n  object-fit:contain;\n}",
+    'Restore Naja internal sprite offset',
 )
+
+old_render = """   const visualTop=sy-dragonLift*zoom;
+   if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
+   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}"""
+new_render = """   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
+   // Assim idle, caminhada, ataques, especiais e barras se movem juntos.
+   const renderX=e.type==='naja'?sx+14*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:sy;
+   const visualTop=renderY-dragonLift*zoom;
+   if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
+   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}"""
+replace_one_of([old_render], new_render, 'Naja real render position')
 
 # 3) Estado do especial unico disparado pelo rompimento do escudo.
 replace_one_of(
@@ -94,8 +107,11 @@ p.write_text(t, encoding='utf-8')
 
 required = [
     "return phase!==null;",
-    "left:8px;",
-    "top:10px;",
+    "left:-8px;",
+    "top:-8px;",
+    "const renderX=e.type==='naja'?sx+14*zoom:sx;",
+    "const renderY=e.type==='naja'?sy+16*zoom:sy;",
+    "el.style.left=renderX+'px'",
     "e.najaShieldSpecialUsed=false;",
     "e.najaShieldSpecialPending=false;",
     "out.najaShieldSpecialUsed=!!e.najaShieldSpecialUsed;",
@@ -108,6 +124,6 @@ required = [
 ]
 missing = [x for x in required if x not in t]
 if missing:
-    raise SystemExit('Missing Naja special behavior tuning: ' + repr(missing))
+    raise SystemExit('Missing Naja special/render tuning: ' + repr(missing))
 
-print('Naja special invulnerability, stronger visual offset and shield-break trigger applied.')
+print('Naja special behavior and real render offset applied.')
