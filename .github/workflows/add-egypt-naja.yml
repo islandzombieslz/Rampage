@@ -121,6 +121,91 @@ jobs:
           new_move="if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;"
           replace_one_of([old_move],new_move,'Naja knockback movement stability')
 
+          # Invulnerabilidade cobre todo o especial: entrada, subterrâneo e GIF de saída.
+          old_invuln="""function najaIsInvulnerable(e,now=performance.now()){
+ const phase=najaSpecialPhase(e,now);
+ return phase==='burrowing'||phase==='underground';
+}"""
+          new_invuln="""function najaIsInvulnerable(e,now=performance.now()){
+ const phase=najaSpecialPhase(e,now);
+ return phase!==null;
+}"""
+          replace_one_of([old_invuln],new_invuln,'Naja full special invulnerability')
+
+          # Desloca somente o corpo/sprite um pouco para a direita e para baixo.
+          old_body=""".entity-visual.naja-visual .entity-body{
+  left:-8px;
+  top:-8px;
+  width:126px;
+  height:132px;
+  object-fit:contain;
+}"""
+          new_body=""".entity-visual.naja-visual .entity-body{
+  left:-2px;
+  top:-2px;
+  width:126px;
+  height:132px;
+  object-fit:contain;
+}"""
+          replace_one_of([old_body],new_body,'Naja visual offset')
+
+          # Estado único do especial acionado quando o escudo zera.
+          old_spawn=""" e.najaAttackSerial=0;
+ e.najaNormalCount=0;
+ e.najaPhase='seek';
+ e.pendingNajaAttack=null;"""
+          new_spawn=""" e.najaAttackSerial=0;
+ e.najaNormalCount=0;
+ e.najaShieldSpecialUsed=false;
+ e.najaShieldSpecialPending=false;
+ e.najaPhase='seek';
+ e.pendingNajaAttack=null;"""
+          replace_one_of([old_spawn],new_spawn,'Naja shield special initial state')
+
+          old_snapshot="""   out.najaAttackSerial=Number(e.najaAttackSerial)||0;
+   out.najaNormalCount=Number(e.najaNormalCount)||0;
+   out.najaPhase=e.najaPhase||'seek';"""
+          new_snapshot="""   out.najaAttackSerial=Number(e.najaAttackSerial)||0;
+   out.najaNormalCount=Number(e.najaNormalCount)||0;
+   out.najaShieldSpecialUsed=!!e.najaShieldSpecialUsed;
+   out.najaShieldSpecialPending=!!e.najaShieldSpecialPending;
+   out.najaPhase=e.najaPhase||'seek';"""
+          replace_one_of([old_snapshot],new_snapshot,'Naja shield special network state')
+
+          old_before="const beforeDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);"
+          new_before="""const beforeShield=Math.max(0,Number(target.shield)||0);
+ const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);"""
+          replace_one_of([old_before],new_before,'Naja shield break detection baseline')
+
+          old_damage_tail=""" if(remaining>0)target.hp-=remaining;
+ const afterDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);"""
+          new_damage_tail=""" if(remaining>0)target.hp-=remaining;
+ // O primeiro rompimento do escudo da Naja arma exatamente um especial extra.
+ if(target.type==='naja'&&!target.najaShieldSpecialUsed&&beforeShield>0&&target.shield<=0){
+   target.najaShieldSpecialUsed=true;
+   target.najaShieldSpecialPending=true;
+   target.attackCooldown=0;
+ }
+ const afterDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);"""
+          replace_one_of([old_damage_tail],new_damage_tail,'Naja shield break special trigger')
+
+          old_special_start=""" }else{
+   // Cancela qualquer empurrão que já estivesse em andamento no instante em que cava.
+   e.knockTime=0;e.knockVX=0;e.knockVY=0;"""
+          new_special_start=""" }else{
+   // Consome o gatilho do escudo ao iniciar qualquer especial; o marcador 'used' impede repetição.
+   e.najaShieldSpecialPending=false;
+   // Cancela qualquer empurrão que já estivesse em andamento no instante em que cava.
+   e.knockTime=0;e.knockVX=0;e.knockVY=0;"""
+          replace_one_of([old_special_start],new_special_start,'Naja shield special consumption')
+
+          old_ai=""" // 4 ataques normais completos; o 5º ataque é o especial de escavação.
+ if((Number(e.najaNormalCount)||0)>=4){"""
+          new_ai=""" // Escudo zerado prioriza um especial único; depois segue o ciclo normal de 4 ataques + especial.
+ const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;
+ if(najaNeedsSpecial){"""
+          replace_one_of([old_ai],new_ai,'Naja shield special AI priority')
+
           p.write_text(t,encoding='utf-8')
           print('Naja tuning applied.')
           PY
@@ -159,6 +244,14 @@ jobs:
             "const najaStableHit=target.type==='naja' && !najaSpecialPhase(target)",
             'target.najaKnockCycle=(cycle+1)%2','knockForce*=0.45','knockTime=Math.min(knockTime,0.15)',
             "if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;",
+            "return phase!==null;",
+            'left:-2px;','top:-2px;',
+            'e.najaShieldSpecialUsed=false','e.najaShieldSpecialPending=false',
+            'out.najaShieldSpecialUsed=!!e.najaShieldSpecialUsed','out.najaShieldSpecialPending=!!e.najaShieldSpecialPending',
+            "target.type==='naja'&&!target.najaShieldSpecialUsed&&beforeShield>0&&target.shield<=0",
+            'target.najaShieldSpecialUsed=true','target.najaShieldSpecialPending=true',
+            'e.najaShieldSpecialPending=false',
+            'const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;',
             "if(target.type==='naja'&&najaIsInvulnerable(target))return",
             "if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false",
             'buy-egypt-naja','pendingNajaAttack','becameTeleported',
@@ -188,5 +281,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html sw.js assets/egypt/naja
-          git commit -m 'Tune Egypt Naja damage speed and knockback resistance'
+          git commit -m 'Make Naja special invulnerable and trigger on shield break'
           git push origin main
