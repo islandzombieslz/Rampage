@@ -1,0 +1,88 @@
+name: Tune Clan UI and Buffered Network
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tune_clan_network_v2.py'
+      - '.github/workflows/tune-clan-network-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-tune-clan-network-v2
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply clan UI and buffered network tuning
+        run: python .github/tune_clan_network_v2.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate clan UI and network v2
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            "if(room.status==='clan'){renderClanSelection();configureWarShopForClan();}",
+            'const remoteInterpMs=clamp(remoteGapMs*1.18,105,190);',
+            'netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs',
+            'const previousProjectiles=new Map((state.dragonProjectiles||[]).map(p=>[p.id,p]));',
+            'const projectileStep=Math.min(dt,.034),projectileSmooth=1-Math.exp(-9*dt);',
+            "const networkPushInterval=state.mode==='war'?120:120;",
+            'function enforceTwoPlayerClanExclusivity(',
+            'function clanUnavailableForLocal(',
+            'total===2&&humans.length===2'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing clan/network v2 tuning: '+repr(missing))
+          forbidden=[
+            'remoteExtrapolateMs=clamp(remoteGapSec*700,45,110)',
+            'netExtrapolateUntil:remoteNow+remoteExtrapolateMs',
+            'const rate=d>80?28:20,smooth=1-Math.exp(-rate*dt);'
+          ]
+          stale=[x for x in forbidden if x in t]
+          if stale:
+              raise SystemExit('Old extrapolation still present: '+repr(stale))
+          print('Clan UI sync and buffered network validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Smooth remote clients with buffered interpolation'
+          git push origin main
