@@ -1,0 +1,123 @@
+name: Add Egypt Anubis Direct
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-egypt-anubis-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Normalize composition anchors
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          old="const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};"
+          new="const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0};"
+          if new not in t:
+              if t.count(old)!=2: raise SystemExit(f'Expected 2 composition anchors, found {t.count(old)}')
+              t=t.replace(old,new)
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Apply Anubis integration
+        run: python .github/add_egypt_anubis.py
+
+      - name: Use provided Anubis asset URLs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          mapping={
+            'assets/egypt/anubis/card.png':'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png',
+            'assets/egypt/anubis/walk.gif':'https://i.postimg.cc/3R6FknJw/annubis-andando.gif',
+            'assets/egypt/anubis/idle.gif':'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif',
+            'assets/egypt/anubis/attack-melee.gif':'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif',
+            'assets/egypt/anubis/attack-ranged.gif':'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif',
+            'assets/egypt/anubis/projectile.gif':'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif',
+          }
+          for old,new in mapping.items(): t=t.replace(old,new)
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks: raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Anubis
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'id="buyEgyptAnubis"',
+            'Annubis do Egito — 450 gemas',
+            'anubis:450',
+            'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png',
+            'https://i.postimg.cc/3R6FknJw/annubis-andando.gif',
+            'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif',
+            'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif',
+            'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif',
+            'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif',
+            'function spawnAnubis(',
+            'const ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;',
+            "e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;",
+            "e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;",
+            "brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_1,'hit1Done')",
+            "brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_2,'hit2Done')",
+            "kind:'anubis'",
+            'burn:false',
+            "if(p.burn!==false&&target.alive)igniteDragonBurn(target,source);",
+            'function aiFightAnubis(',
+            'pendingAnubisAttack',
+            "p.kind==='anubis'?'anubisProjectile':'dragonFireball'",
+            "e.type==='anubis'?1.34",
+            'buy-egypt-anubis',
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing Anubis markers: '+repr(missing))
+          if t.count('id="buyEgyptAnubis"')!=1: raise SystemExit('Duplicate Anubis shop card')
+          if t.count('function spawnAnubis(')!=1: raise SystemExit('Duplicate spawnAnubis')
+          if t.count('function aiFightAnubis(')!=1: raise SystemExit('Duplicate aiFightAnubis')
+          if 'if(target.alive)igniteDragonBurn(target,source);' in t: raise SystemExit('Old unconditional burn path remains')
+          print('Anubis direct integration validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Add Egypt Anubis hybrid warrior'
+          git push origin main
