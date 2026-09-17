@@ -37,6 +37,18 @@ jobs:
           p.write_text(t,encoding='utf-8')
           PY
 
+      - name: Repair helper invocation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/add_egypt_anubis.py')
+          t=p.read_text(encoding='utf-8')
+          old='replace_once("function acquireDragonProjectileNode(layer){","function acquireDragonProjectileNode(layer,assetKey=\'dragonFireball\'){")'
+          new='replace_once("function acquireDragonProjectileNode(layer){","function acquireDragonProjectileNode(layer,assetKey=\'dragonFireball\'){",\'Projectile acquire signature\')'
+          if old in t: t=t.replace(old,new,1)
+          p.write_text(t,encoding='utf-8')
+          PY
+
       - name: Apply Anubis integration
         run: python .github/add_egypt_anubis.py
 
