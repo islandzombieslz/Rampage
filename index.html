@@ -2394,8 +2394,8 @@ body.booting #landscapeRoot{visibility:hidden}
   height:122px;
 }
 .entity-visual.naja-visual .entity-body{
-  left:8px;
-  top:10px;
+  left:-8px;
+  top:-8px;
   width:126px;
   height:132px;
   object-fit:contain;
@@ -2648,7 +2648,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     </button>
     <div id="shop" aria-label="Loja de tropas">
       <div class="shop-sprite-grid clan-shop" data-clan-shop="warriors">
-        <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 50 gemas" title="Guerreiro — 50 gemas">
+        <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 65 gemas" title="Guerreiro — 65 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
         </button>
         <button id="buyBrownWarrior" class="shop-sprite-card" aria-label="Comprar Guerreira Marrom por 450 gemas" title="Guerreira Marrom — 450 gemas">
@@ -2668,7 +2668,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
       </div>
       <div class="shop-sprite-grid clan-shop" data-clan-shop="egypt" hidden>
-        <button id="buyEgyptWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro do Egito por 50 gemas" title="Guerreiro do Egito — 50 gemas">
+        <button id="buyEgyptWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro do Egito por 65 gemas" title="Guerreiro do Egito — 65 gemas">
           <img src="assets/egypt/warrior/card.png" alt="Guerreiros do Egito" draggable="false" decoding="async">
         </button>
         <button id="buyEgyptMage" class="shop-sprite-card" aria-label="Comprar Mago do Egito por 550 gemas" title="Mago do Egito — 550 gemas">
@@ -3084,7 +3084,7 @@ const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:50,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});
+const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -5548,8 +5548,8 @@ function performAttack(e,preparedCandidates=null){
  else e.comboStep=1;
  e.lastAttackAt=now;
  e.lastCombatAt=now;
- // Guerreiros atacam um pouco mais devagar que na versão anterior.
- e.attackCooldown=.38;
+ // Guerreiros normais e do Egito atacam em cadencia um pouco mais lenta.
+ e.attackCooldown=.50;
  e.attackAnim=.30;
  e.attackSerial++;
  if(e.type==='king')e.kingNormalCount=Math.min(6,(Number(e.kingNormalCount)||0)+1);
@@ -7755,8 +7755,12 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        dragonLift=36*(1-Math.pow(1-progress,2));
      }else if(e.dragonFlightState==='flying')dragonLift=36;
    }
-   const visualTop=sy-dragonLift*zoom;
-   if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
+   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
+   // Assim idle, caminhada, ataques, especiais e barras se movem juntos.
+   const renderX=e.type==='naja'?sx+14*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:sy;
+   const visualTop=renderY-dragonLift*zoom;
+   if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
    const typeScale=e.type==='golem'?1.34:e.type==='naja'?1.75:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
