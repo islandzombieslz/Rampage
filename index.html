@@ -3109,7 +3109,7 @@ let NAJA_SPECIAL_EMERGE_DURATION=1600;
 const NAJA_ATTACK_INTERVAL_SEC=2;
 const NAJA_UNDERGROUND_MS=5000;
 const NAJA_SPECIAL_RADIUS=220;
-const NAJA_SPECIAL_DAMAGE=75;
+const NAJA_SPECIAL_DAMAGE=85;
 let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
 let BROWN_POWER_DURATION=2200;
@@ -4453,7 +4453,7 @@ function spawnNaja(x,y,team,color){
  e.clan='egypt';
  e.hp=e.maxHp=600;
  e.shield=e.maxShield=200;
- e.damage=40;
+ e.damage=45;
  e.r=36;
  // Exatamente a mesma velocidade do Golem Guerreiro.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;
@@ -5154,7 +5154,7 @@ function resolveNajaNormalImpact(e,p){
  if(!e.alive)return;
  const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
  if(target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118){
-   applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});
+   applyCombatHit(target,e,45,{knockForce:220,knockTime:.12,tilt:9});
  }
 }
 
@@ -5178,11 +5178,11 @@ function resolveNajaEmergence(e,p){
    if(!isRealCombatTarget(t)||t===e||t.team===e.team||najaIsUnderground(t))return;
    const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
    applyCombatHit(t,e,NAJA_SPECIAL_DAMAGE,{
-     knockForce:1260,
-     knockTime:.56,
-     tilt:36,
-     shake:24,
-     shakeDuration:.62,
+     knockForce:620,
+     knockTime:.42,
+     tilt:24,
+     shake:18,
+     shakeDuration:.46,
      allowFlying:true
    });
  });
@@ -7734,7 +7734,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='naja'?1.18:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='naja'?1.45:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
