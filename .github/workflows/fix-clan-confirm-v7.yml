@@ -1,0 +1,73 @@
+name: Fix Clan Confirm V7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_clan_confirm_v7.py'
+      - '.github/workflows/fix-clan-confirm-v7.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply V7 clan confirmation repair
+        run: python .github/fix_clan_confirm_v7.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?![^>]*type="module")[^>]*>(.*?)</script>',t,re.S)
+          Path('/tmp/rampage-last.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-last.js
+
+      - name: Validate V7 clan confirmation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'async confirmClan(clan){',
+            'await F.update(playerRef,{clan:selected,clanChosen:true,clanConfirmed:true',
+            'async function reconcileClanReservations(room){',
+            'reconcileClanReservations(room).catch(console.error);',
+            "flash('Falha de rede ao confirmar o clã.'",
+            'current.clanConfirmed=true;'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing V7 markers: '+repr(missing))
+          network=t[t.index('  async setClan(clan){'):t.index('  async sendInput(input)')]
+          if 'runTransaction(roomRef' in network: raise SystemExit('Old clan room transaction remains')
+          if t.count("$('#confirmClanBtn').onclick=async()=>{")!=1: raise SystemExit('Duplicate confirm handler')
+          print('V7 clan confirmation validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index.html changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Fix clan confirmation Firebase writes'
+          git push origin main
