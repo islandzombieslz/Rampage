@@ -1,0 +1,146 @@
+name: Add Egypt Anubis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/add_egypt_anubis.py'
+      - '.github/workflows/add-egypt-anubis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-add-egypt-anubis
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Download Anubis assets
+        run: |
+          set -euo pipefail
+          mkdir -p assets/egypt/anubis
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png' -o assets/egypt/anubis/card.png
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/3R6FknJw/annubis-andando.gif' -o assets/egypt/anubis/walk.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif' -o assets/egypt/anubis/idle.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif' -o assets/egypt/anubis/attack-melee.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif' -o assets/egypt/anubis/attack-ranged.gif
+          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif' -o assets/egypt/anubis/projectile.gif
+          for f in card.png walk.gif idle.gif attack-melee.gif attack-ranged.gif projectile.gif; do
+            test -s "assets/egypt/anubis/$f"
+          done
+
+      - name: Normalize composition anchors
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          t=p.read_text(encoding='utf-8')
+          old="const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};"
+          new="const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0};"
+          if new not in t:
+              count=t.count(old)
+              if count!=2:
+                  raise SystemExit(f'Expected 2 composition anchors, found {count}')
+              t=t.replace(old,new)
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Apply Anubis integration
+        run: python .github/add_egypt_anubis.py
+
+      - name: Refresh persistent asset cache
+        run: python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate Anubis integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'id="buyEgyptAnubis"',
+            'Annubis do Egito — 450 gemas',
+            'anubis:450',
+            'assets/egypt/anubis/card.png',
+            'assets/egypt/anubis/idle.gif',
+            'assets/egypt/anubis/walk.gif',
+            'assets/egypt/anubis/attack-melee.gif',
+            'assets/egypt/anubis/attack-ranged.gif',
+            'assets/egypt/anubis/projectile.gif',
+            'function spawnAnubis(',
+            'e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;',
+            "e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;",
+            'const ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;',
+            'function startAnubisAttack(',
+            'function aiFightAnubis(',
+            'function launchAnubisProjectile(',
+            "kind:'anubis'",
+            'burn:false',
+            "if(p.burn!==false&&target.alive)igniteDragonBurn(target,source);",
+            "brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_1,'hit1Done')",
+            "brownNormalHit(e,p,BROWN_NORMAL_DAMAGE_2,'hit2Done')",
+            'pendingAnubisAttack',
+            'buy-egypt-anubis',
+            'function buyEgyptAnubisForPlayer(',
+            "e.type==='anubis'?1.34",
+            'entity-anubis-melee',
+            'entity-anubis-ranged',
+            "p.kind==='anubis'?'anubisProjectile':'dragonFireball'",
+            'buyEgyptAnubisPerfEl',
+            'anubisAttackAssetsReady',
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing Anubis integration: '+repr(missing))
+          if t.count('id="buyEgyptAnubis"')!=1: raise SystemExit('Duplicate Anubis shop card')
+          if t.count('function spawnAnubis(')!=1: raise SystemExit('Duplicate spawnAnubis')
+          if t.count('function aiFightAnubis(')!=1: raise SystemExit('Duplicate aiFightAnubis')
+          if t.count('function launchAnubisProjectile(')!=1: raise SystemExit('Duplicate Anubis projectile function')
+          if 'if(target.alive)igniteDragonBurn(target,source);' in t:
+              raise SystemExit('Old unconditional Dragon burn path remains')
+          for f in ['card.png','walk.gif','idle.gif','attack-melee.gif','attack-ranged.gif','projectile.gif']:
+              q=Path('assets/egypt/anubis')/f
+              if not q.is_file() or q.stat().st_size<100:
+                  raise SystemExit('Invalid Anubis asset: '+str(q))
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          for asset in ['assets/egypt/anubis/card.png','assets/egypt/anubis/projectile.gif','assets/egypt/anubis/attack-ranged.gif']:
+              if asset not in sw: raise SystemExit('Anubis asset missing from service worker: '+asset)
+          print('Anubis integration validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html sw.js assets/egypt/anubis; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js assets/egypt/anubis
+          git commit -m 'Add Egypt Anubis hybrid warrior'
+          git push origin main
