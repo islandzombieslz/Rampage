@@ -2330,6 +2330,58 @@ body.booting #landscapeRoot{visibility:hidden}
 }
 
 
+
+
+/* CLAN MENU V4 FIX 2026-09-17 */
+#clanScreen>.card > .clan-options-grid{
+  bottom:26.2% !important;
+}
+#clanScreen #clanSelectionStatus{
+  bottom:21.2% !important;
+  z-index:18 !important;
+  pointer-events:none !important;
+}
+#clanScreen .clan-actions{
+  position:absolute !important;
+  left:21% !important;
+  right:21% !important;
+  bottom:13.4% !important;
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  gap:8px !important;
+  z-index:30 !important;
+  pointer-events:auto !important;
+}
+#clanScreen .clan-actions #confirmClanBtn,
+#clanScreen .clan-actions #startWarBtn{
+  position:static !important;
+  inset:auto !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:36px !important;
+  margin:0 !important;
+  padding:7px 8px !important;
+  font-size:10px !important;
+  line-height:1.05 !important;
+  white-space:normal !important;
+  z-index:31 !important;
+  pointer-events:auto !important;
+}
+#clanScreen .clan-options-grid .clan-option{
+  z-index:12 !important;
+  pointer-events:auto !important;
+}
+#clanScreen .clan-options-grid .clan-option:disabled{
+  cursor:not-allowed !important;
+}
+@media (max-height:650px) and (pointer:fine){
+  #clanScreen>.card > .clan-options-grid{bottom:27% !important}
+  #clanScreen #clanSelectionStatus{bottom:21.7% !important}
+  #clanScreen .clan-actions{left:20% !important;right:20% !important;bottom:13.1% !important;gap:6px !important}
+  #clanScreen .clan-actions #confirmClanBtn,
+  #clanScreen .clan-actions #startWarBtn{min-height:31px !important;font-size:9px !important;padding:5px 6px !important}
+}
+
 /* EGYPT SHOP + VISUAL TUNING 2026-09-13 */
 /* EGYPT MAGE INDIVIDUAL SUMMON CYCLE 2026-09-13 */
 /* EGYPT MAGE SHIELD + HALF-HP SPECIAL TRIGGERS 2026-09-13 */
@@ -2619,8 +2671,10 @@ window.dispatchEvent(new Event('firebase-ready'));
     </div>
     <div id="clanSelectionStatus">Selecionado: Guerreiros</div>
     <div class="divider"></div>
-    <button id="confirmClanBtn" type="button">Confirmar clã</button>
-    <button id="startWarBtn" class="primary">Iniciar preparação</button>
+    <div class="clan-actions">
+      <button id="confirmClanBtn" type="button">Confirmar clã</button>
+      <button id="startWarBtn" class="primary" type="button">Iniciar preparação</button>
+    </div>
   </div>
 </section>
 
@@ -2879,11 +2933,12 @@ const NetworkAdapter = {
       const total=humans.length+Math.max(0,Number(current.npcCount)||0);
       if(total===2&&humans.length===2){
         const other=humans.find(p=>p.uid!==this.localPlayerId);
-        // A selecao continua livre ate alguem CONFIRMAR. Depois disso o cla
-        // confirmado fica reservado e nao pode ser selecionado pelo adversario.
         if(other?.clanConfirmed&&normalizeClan(other.clan)===value){rejected=true;return}
       }
-      mine.clan=value;mine.clanChosen=true;mine.clanConfirmed=false;mine.clanSelectedAt=Date.now();
+      mine.clan=value;
+      mine.clanChosen=true;
+      mine.clanConfirmed=false;
+      mine.clanSelectedAt=Date.now();
       return current;
     });
     return !!result.committed&&!rejected;
@@ -2900,14 +2955,17 @@ const NetworkAdapter = {
       if(total===2&&humans.length===2){
         const other=humans.find(p=>p.uid!==this.localPlayerId);
         if(other?.clanConfirmed&&normalizeClan(other.clan)===selected){rejected=true;return}
-        // Se o outro apenas estava apontando para o mesmo cla, a confirmacao deste
-        // jogador ganha a reserva e move a selecao provisoria do outro para o livre.
         if(other&&!other.clanConfirmed&&normalizeClan(other.clan)===selected){
-          other.clan=selected==='egypt'?'warriors':'egypt';
-          other.clanChosen=true;other.clanSelectedAt=Date.now();
+          other.clan=oppositeClan(selected);
+          other.clanChosen=true;
+          other.clanConfirmed=false;
+          other.clanSelectedAt=Date.now();
         }
       }
-      mine.clan=selected;mine.clanChosen=true;mine.clanConfirmed=true;mine.clanConfirmedAt=Date.now();
+      mine.clan=selected;
+      mine.clanChosen=true;
+      mine.clanConfirmed=true;
+      mine.clanConfirmedAt=Date.now();
       return current;
     });
     return !!result.committed&&!rejected;
@@ -4139,16 +4197,38 @@ function updateLobbyAuthority(){
  const allConfirmed=allWarClanHumansConfirmed();
  const start=$('#startWarBtn');
  if(start){
-   start.disabled=(NetworkAdapter.online&&!host)||!allConfirmed;
-   start.textContent=!allConfirmed?'Aguardando confirmações...':(NetworkAdapter.online&&!host?'Aguardando o host...':'Iniciar preparação');
+   const nonHost=NetworkAdapter.online&&!host;
+   start.disabled=nonHost||!allConfirmed;
+   start.textContent=!allConfirmed?'Aguardando confirmações...':(nonHost?'Aguardando o host...':'Iniciar preparação');
  }
 }
 $('#lobbyContinue').onclick=async()=>{
   if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
   if(state.mode==='war'){
-    if(state.players.length<2){state.players.push({id:'p2',name:'Player 2',human:false,color:COLORS[1],clan:'warriors'});}
-    renderPlayers();navigateScreen('clanScreen');renderClanSelection();if(NetworkAdapter.online)await NetworkAdapter.pushLobbyState({status:'clan',npcCount:state.players.filter(p=>!p.human).length});
-  } else {startPVE();if(NetworkAdapter.online)await NetworkAdapter.pushState(serializeGame())}
+    if(state.players.length<2){
+      state.players.push({id:'p2',name:'Player 2',human:false,local:false,color:COLORS[1],clan:'warriors',clanChosen:true,clanConfirmed:true});
+    }
+    for(const p of state.players){
+      if(p.human){p.clanConfirmed=false;p.clanChosen=false}
+      else{p.clanConfirmed=true;p.clanChosen=true}
+    }
+    const humans=state.players.filter(p=>p.human),bots=state.players.filter(p=>!p.human);
+    if(state.players.length===2&&humans.length===1&&bots.length===1)bots[0].clan=oppositeClan(humans[0].clan);
+    renderPlayers();
+    navigateScreen('clanScreen');
+    renderClanSelection();
+    if(NetworkAdapter.online){
+      const patch={status:'clan',npcCount:bots.length};
+      for(const hp of humans){
+        patch[`players/${hp.id}/clanConfirmed`]=false;
+        patch[`players/${hp.id}/clanChosen`]=false;
+      }
+      await NetworkAdapter.pushLobbyState(patch);
+    }
+  } else {
+    startPVE();
+    if(NetworkAdapter.online)await NetworkAdapter.pushState(serializeGame());
+  }
 };
 
 
@@ -4157,7 +4237,6 @@ function allWarClanHumansConfirmed(){
  if(state.mode!=='war')return true;
  const humans=state.players.filter(p=>p.human);
  if(!humans.length||humans.some(p=>!p.clanConfirmed))return false;
- // Em 1x1 humano x humano a reserva e exclusiva.
  if(state.players.length===2&&humans.length===2&&normalizeClan(humans[0].clan)===normalizeClan(humans[1].clan))return false;
  return true;
 }
@@ -4171,53 +4250,84 @@ function prepareWarClanAssignments(){
  if(state.mode!=='war')return;
  const humans=state.players.filter(p=>p.human),bots=state.players.filter(p=>!p.human);
  if(state.players.length===2&&humans.length===1&&bots.length===1){
-   bots[0].clan=oppositeClan(humans[0].clan);bots[0].clanChosen=true;bots[0].clanConfirmed=true;
+   bots[0].clan=oppositeClan(humans[0].clan);
+   bots[0].clanChosen=true;
+   bots[0].clanConfirmed=true;
  }else if(state.players.length>=3){
    for(const p of bots){p.clan=Math.random()<.5?'warriors':'egypt';p.clanChosen=true;p.clanConfirmed=true}
  }
 }
-
 function renderClanSelection(){
- const me=localPlayer(),clan=normalizeClan(me?.clan),confirmed=!!me?.clanConfirmed;
+ const me=localPlayer();
+ const clan=normalizeClan(me?.clan);
+ const confirmed=!!me?.clanConfirmed;
  $$('.clan-option[data-clan]').forEach(btn=>{
    const optionClan=normalizeClan(btn.dataset.clan);
+   const unavailable=clanUnavailableForLocal(optionClan);
    btn.classList.toggle('selected',optionClan===clan);
-   const locked=confirmed||clanUnavailableForLocal(optionClan);
-   btn.disabled=locked;
-   btn.setAttribute('aria-disabled',locked?'true':'false');
+   btn.disabled=confirmed||unavailable;
+   btn.setAttribute('aria-disabled',(confirmed||unavailable)?'true':'false');
  });
  const status=$('#clanSelectionStatus');
- if(status)status.textContent=confirmed?`Clã confirmado: ${clanLabel(clan)}`:`Selecionado: ${clanLabel(clan)} • confirme para reservar`;
+ if(status)status.textContent=confirmed?`Clã confirmado: ${clanLabel(clan)}`:`Selecionado: ${clanLabel(clan)} • toque em Confirmar clã`;
  const confirm=$('#confirmClanBtn');
- if(confirm){confirm.disabled=!me||confirmed;confirm.textContent=confirmed?'Confirmado ✓':'Confirmar clã'}
+ if(confirm){
+   confirm.disabled=!me||confirmed;
+   confirm.textContent=confirmed?'Confirmado ✓':'Confirmar clã';
+ }
  updateLobbyAuthority();
 }
 $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=async()=>{
- const requestedClan=normalizeClan(btn.dataset.clan),before=localPlayer();if(!before||before.clanConfirmed)return;
+ const me=localPlayer();
+ if(!me||me.clanConfirmed)return;
+ const requestedClan=normalizeClan(btn.dataset.clan);
  if(clanUnavailableForLocal(requestedClan)){renderClanSelection();return}
- if(NetworkAdapter.online){
-   try{if(!(await NetworkAdapter.setClan(requestedClan))){renderClanSelection();return}}catch(err){console.error(err);return}
- }
- const p=localPlayer();if(!p||p.clanConfirmed)return;
- p.clan=requestedClan;p.clanChosen=true;p.clanSelectedAt=Date.now();
- const bot=state.players.length===2?state.players.find(x=>!x.human):null;
+ const previousClan=normalizeClan(me.clan);
+ // Feedback imediato: o clique no card apenas muda a selecao visual/local.
+ me.clan=requestedClan;
+ me.clanChosen=true;
+ me.clanSelectedAt=Date.now();
+ const bot=state.players.length===2?state.players.find(p=>!p.human):null;
  if(bot)bot.clan=oppositeClan(requestedClan);
- renderClanSelection();renderPlayers();configureWarShopForClan();
-});
-$('#confirmClanBtn').onclick=async()=>{
- const before=localPlayer();if(!before||before.clanConfirmed)return;
+ renderClanSelection();
+ configureWarShopForClan();
  if(NetworkAdapter.online){
    try{
-     if(!(await NetworkAdapter.confirmClan())){
-       const status=$('#clanSelectionStatus');if(status)status.textContent='Esse clã acabou de ser confirmado pelo outro jogador.';
+     const accepted=await NetworkAdapter.setClan(requestedClan);
+     if(!accepted){
+       const current=localPlayer();
+       if(current&&!current.clanConfirmed)current.clan=previousClan;
+       renderClanSelection();
+       return;
+     }
+     const current=localPlayer();
+     if(current&&!current.clanConfirmed){current.clan=requestedClan;current.clanChosen=true}
+     renderClanSelection();
+   }catch(err){
+     console.error(err);
+     const current=localPlayer();if(current&&!current.clanConfirmed)current.clan=previousClan;
+     renderClanSelection();
+   }
+ }
+});
+$('#confirmClanBtn').onclick=async()=>{
+ const me=localPlayer();if(!me||me.clanConfirmed)return;
+ if(NetworkAdapter.online){
+   try{
+     const accepted=await NetworkAdapter.confirmClan();
+     if(!accepted){
+       const status=$('#clanSelectionStatus');if(status)status.textContent='Esse clã acabou de ser reservado pelo outro jogador.';
        renderClanSelection();return;
      }
    }catch(err){console.error(err);return}
  }
- const p=localPlayer();if(!p)return;
- p.clanChosen=true;p.clanConfirmed=true;
+ const current=localPlayer();if(!current)return;
+ current.clanChosen=true;
+ current.clanConfirmed=true;
  prepareWarClanAssignments();
- renderClanSelection();renderPlayers();configureWarShopForClan();
+ renderClanSelection();
+ renderPlayers();
+ configureWarShopForClan();
 };
 function configureWarShopForClan(){
  const clan=normalizeClan(localPlayer()?.clan);
