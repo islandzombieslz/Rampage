@@ -1,0 +1,74 @@
+name: Smooth Remote War V2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/smooth_remote_war_v2.py'
+      - '.github/workflows/smooth-remote-war-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply buffered remote smoothing
+        run: python .github/smooth_remote_war_v2.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?![^>]*type="module")[^>]*>(.*?)</script>',t,re.S)
+          Path('/tmp/rampage-last.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-last.js
+
+      - name: Validate remote smoothing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'const REMOTE_WAR_RENDER_DELAY_MS=160;',
+            'const REMOTE_WAR_MAX_EXTRAP_MS=85;',
+            'function appendRemotePositionSample(',
+            'function sampleRemotePosition(',
+            'const netHistory=appendRemotePositionSample(old,toX,toY,remoteNow);',
+            'nextProjectiles.push({...old,netHistory:history,netRemovedAt:removedAt});',
+            'clientNow>=Number(p.netRemovedAt)+REMOTE_WAR_RENDER_DELAY_MS',
+            'out.netHistory=[{x:tx,y:ty,t:remoteNow-1},{x:tx,y:ty,t:remoteNow}];'
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing remote smoothing markers: '+repr(missing))
+          if 'Projectiles keep moving at render FPS between Firebase updates.' in t:
+            raise SystemExit('Old projectile client simulation remains')
+          print('Remote smoothing V2 validated.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index.html changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Smooth remote troop movement and dragon projectiles'
+          git push origin main
