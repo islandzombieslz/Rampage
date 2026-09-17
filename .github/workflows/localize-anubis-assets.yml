@@ -23,33 +23,95 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
 
-      - name: Download exact Anubis originals
-        shell: bash
+      - name: Download animated Anubis media in parallel ranges
+        timeout-minutes: 5
         run: |
-          set -euo pipefail
-          mkdir -p assets/egypt/anubis
+          python - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import shutil, time
 
-          download() {
-            url="$1"
-            out="$2"
-            echo "Downloading $out"
-            curl --http1.1 -fL               --retry 1 --retry-delay 1 --retry-all-errors               --connect-timeout 5 --max-time 20               -A "Mozilla/5.0 GitHub-Actions Rampage-Asset-Mirror"               "$url" -o "$out"
-          }
+          UA='Mozilla/5.0 GitHub-Actions Rampage-Asset-Mirror'
+          items=[
+              ('https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png', Path('assets/egypt/anubis/card.png')),
+              ('https://i.postimg.cc/3R6FknJw/annubis-andando.gif', Path('assets/egypt/anubis/walk.gif')),
+              ('https://i.postimg.cc/1tTr8J5R/annubis-parado.gif', Path('assets/egypt/anubis/idle.gif')),
+              ('https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif', Path('assets/egypt/anubis/attack-melee.gif')),
+              ('https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif', Path('assets/egypt/anubis/attack-ranged.gif')),
+              ('https://i.postimg.cc/gJ5HxNkm/power-annubis.gif', Path('assets/egypt/anubis/projectile.gif')),
+          ]
+          chunk_size=192*1024
+          root=Path('/tmp/anubis-parts')
+          shutil.rmtree(root,ignore_errors=True)
+          root.mkdir(parents=True)
+          for _,out in items:
+              out.parent.mkdir(parents=True,exist_ok=True)
 
-          download 'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png' 'assets/egypt/anubis/card.png' &
-          p1=$!
-          download 'https://i.postimg.cc/3R6FknJw/annubis-andando.gif' 'assets/egypt/anubis/walk.gif' &
-          p2=$!
-          download 'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif' 'assets/egypt/anubis/idle.gif' &
-          p3=$!
-          download 'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif' 'assets/egypt/anubis/attack-melee.gif' &
-          p4=$!
-          download 'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif' 'assets/egypt/anubis/attack-ranged.gif' &
-          p5=$!
-          download 'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif' 'assets/egypt/anubis/projectile.gif' &
-          p6=$!
+          def get_size(url):
+              req=Request(url,method='HEAD',headers={'User-Agent':UA,'Accept-Encoding':'identity'})
+              with urlopen(req,timeout=20) as r:
+                  size=r.headers.get('Content-Length')
+                  if not size: raise RuntimeError(f'No Content-Length for {url}')
+                  return int(size)
 
-          wait "$p1" "$p2" "$p3" "$p4" "$p5" "$p6"
+          meta=[]
+          tasks=[]
+          for file_index,(url,out) in enumerate(items):
+              size=get_size(url)
+              part_dir=root/f'{file_index:02d}'
+              part_dir.mkdir()
+              parts=[]
+              for part_index,start in enumerate(range(0,size,chunk_size)):
+                  end=min(size-1,start+chunk_size-1)
+                  part=part_dir/f'{part_index:05d}.part'
+                  parts.append((start,end,part))
+                  tasks.append((url,start,end,part))
+              meta.append((url,out,size,parts))
+              print(f'{out}: {size} bytes in {len(parts)} ranges')
+
+          def fetch_part(task):
+              url,start,end,part=task
+              expected=end-start+1
+              last=None
+              for attempt in range(5):
+                  try:
+                      req=Request(url,headers={
+                          'User-Agent':UA,
+                          'Accept-Encoding':'identity',
+                          'Range':f'bytes={start}-{end}',
+                      })
+                      with urlopen(req,timeout=45) as r:
+                          status=getattr(r,'status',None)
+                          if status!=206:
+                              raise RuntimeError(f'Range request returned HTTP {status}')
+                          data=r.read()
+                      if len(data)!=expected:
+                          raise RuntimeError(f'Range {start}-{end}: expected {expected}, got {len(data)}')
+                      part.write_bytes(data)
+                      return
+                  except Exception as exc:
+                      last=exc
+                      time.sleep(.5+attempt*.8)
+              raise RuntimeError(f'Failed {url} range {start}-{end}: {last}')
+
+          with ThreadPoolExecutor(max_workers=32) as pool:
+              futures=[pool.submit(fetch_part,t) for t in tasks]
+              for n,future in enumerate(as_completed(futures),1):
+                  future.result()
+                  if n%20==0 or n==len(futures):
+                      print(f'Ranges complete: {n}/{len(futures)}')
+
+          for url,out,size,parts in meta:
+              with out.open('wb') as dst:
+                  for _,_,part in parts:
+                      with part.open('rb') as src:
+                          shutil.copyfileobj(src,dst)
+              actual=out.stat().st_size
+              if actual!=size:
+                  raise RuntimeError(f'{out}: expected {size}, assembled {actual}')
+              print(f'Assembled {out}: {actual} bytes')
+          PY
 
       - name: Verify downloaded animated media
         shell: bash
