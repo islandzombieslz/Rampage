@@ -2383,6 +2383,48 @@ body.booting #landscapeRoot{visibility:hidden}
   top:61px;
 }
 
+
+/* EGYPT NAJA SYSTEM 2026-09-17 */
+.entity-visual.naja-visual{
+  width:110px;
+  height:130px;
+}
+.entity-visual.naja-visual .entity-facing{
+  width:110px;
+  height:122px;
+}
+.entity-visual.naja-visual .entity-body{
+  left:-8px;
+  top:-8px;
+  width:126px;
+  height:132px;
+  object-fit:contain;
+}
+.entity-visual.naja-visual .entity-bars{
+  left:18px;
+  top:-4px;
+  width:74px;
+}
+.entity-visual.naja-visual .hp-bg,
+.entity-visual.naja-visual .shield-bg{
+  width:74px;
+}
+.entity-visual.naja-visual .entity-weapon-facing{
+  display:none !important;
+}
+.entity-naja-attack,
+.entity-naja-special,
+.entity-naja-special-final{
+  opacity:0;
+}
+/* Subterrânea: nenhuma silhueta, barra ou marcador DOM fica visível. */
+.entity-visual.naja-visual.naja-underground .entity-facing,
+.entity-visual.naja-visual.naja-underground .entity-bars,
+.entity-visual.naja-visual.naja-underground .entity-weapon-facing{
+  visibility:hidden !important;
+  opacity:0 !important;
+}
+
 </style>
 
 <script type="module">
@@ -2571,7 +2613,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <img src="assets/egypt/ui/clan-card.png" alt="Clã Egito" loading="lazy" decoding="async">
         <div>
           <h3>Egito</h3>
-          <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito</div>
+          <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito • Naja do Egito</div>
         </div>
       </button>
     </div>
@@ -2631,6 +2673,9 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
         <button id="buyEgyptMage" class="shop-sprite-card" aria-label="Comprar Mago do Egito por 550 gemas" title="Mago do Egito — 550 gemas">
           <img src="assets/egypt/mage/card.png" alt="Magos do Egito" draggable="false" decoding="async">
+        </button>
+        <button id="buyEgyptNaja" class="shop-sprite-card" aria-label="Comprar Naja do Egito por 550 gemas" title="Naja do Egito — 550 gemas">
+          <img src="assets/egypt/naja/card.png" alt="Naja do Egito" draggable="false" decoding="async">
         </button>
       </div>
     </div>
@@ -2891,6 +2936,14 @@ const ASSETS = {
   egyptFemaleMageWalk:'assets/egypt/mage/female-walk.gif',
   egyptFemaleMageSpecial:'assets/egypt/mage/female-special.gif',
 
+
+  // Naja do Egito — clã Egito
+  najaIdle:'assets/egypt/naja/idle.gif',
+  najaWalk:'assets/egypt/naja/walk.gif',
+  najaAttack:'assets/egypt/naja/attack-normal.gif',
+  najaSpecial:'assets/egypt/naja/special-burrow.gif',
+  najaSpecialFinal:'assets/egypt/naja/special-emerge.gif',
+
   // Dragão Guerreiro — clã Guerreiros
   dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',
   dragonTakeoff:'assets/dragon/dragao-guerreiro-pulando.gif',
@@ -2900,7 +2953,7 @@ const ASSETS = {
 };
 
 /* PERSISTENT ASSET CACHE 2026-09-12 */
-const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/som-de-batalha.mp3":"f00bb902c04e5cdde50c","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"a1262c7c563be2832bee","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper-menus.png":"fe6c5ee3f25d35e7b434","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5"});
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/som-de-batalha.mp3":"f00bb902c04e5cdde50c","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"a1262c7c563be2832bee","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/naja/attack-normal.gif":"21a72d3b18444a00bcee","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/naja/idle.gif":"1d18872f7b8f6c15524f","assets/egypt/naja/special-burrow.gif":"d060111a4165a18d7b92","assets/egypt/naja/special-emerge.gif":"3b5ecf5f7f2a950c2c98","assets/egypt/naja/walk.gif":"ffaa3749396e1ce4917c","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper-menus.png":"fe6c5ee3f25d35e7b434","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5"});
 const BOOT_CACHE_NAME="rampage-assets-v3";
 const BOOT_MANIFEST_KEY="rampageAssetManifestV3";
 const BOOT_FETCH_CONCURRENCY=10;
@@ -3031,7 +3084,7 @@ const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:50,brownWarrior:450,king:400,golem:550,mage:550,dragon:450});
+const WAR_UNIT_COSTS=Object.freeze({warrior:50,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -3050,6 +3103,13 @@ let EGYPT_MAGE_SPECIAL_FEMALE_DURATION=3000;
 let EGYPT_MAGE_POWER_SPECIAL_DURATION=790;
 let GOLEM_NORMAL_DURATION=3000;
 let GOLEM_SPECIAL_DURATION=3300;
+let NAJA_NORMAL_DURATION=1200;
+let NAJA_SPECIAL_BURROW_DURATION=1600;
+let NAJA_SPECIAL_EMERGE_DURATION=1600;
+const NAJA_ATTACK_INTERVAL_SEC=2;
+const NAJA_UNDERGROUND_MS=5000;
+const NAJA_SPECIAL_RADIUS=220;
+const NAJA_SPECIAL_DAMAGE=75;
 let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
 let BROWN_POWER_DURATION=2200;
@@ -3091,8 +3151,10 @@ let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
 let golemAttackAssetsReady=false;
 let brownAttackAssetsReady=false;
+let najaAttackAssetsReady=false;
 const golemGifReadyKeys=new Set();
 const brownGifReadyKeys=new Set();
+const najaGifReadyKeys=new Set();
 
 // Soma os delays de todos os frames e retorna a duração de UM ciclo do GIF.
 // Esse valor é usado nos ataques para o estado do jogo não esconder o sprite
@@ -3135,14 +3197,14 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
+ const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
      const r=await fetch(src,{cache:'force-cache'});
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
-     const duration=key==='golemSpecial'?gifActionDurationMs(buf):gifCycleDurationMs(buf);
+     const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):gifCycleDurationMs(buf);
      gifRuntime.set(key,{blob:new Blob([buf],{type:'image/gif'}),duration});
      if(key==='magePower')MAGE_NORMAL_DURATION=validGifDuration(duration,MAGE_NORMAL_DURATION);
      if(key==='mageSpecial')MAGE_SPECIAL_MALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_MALE_DURATION);
@@ -3154,6 +3216,9 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(key==='egyptMagePowerSpecial')EGYPT_MAGE_POWER_SPECIAL_DURATION=validGifDuration(duration,EGYPT_MAGE_POWER_SPECIAL_DURATION);
      if(key==='golemAttack')GOLEM_NORMAL_DURATION=validGifDuration(duration,GOLEM_NORMAL_DURATION);
      if(key==='golemSpecial')GOLEM_SPECIAL_DURATION=validGifDuration(duration,GOLEM_SPECIAL_DURATION);
+     if(key==='najaAttack')NAJA_NORMAL_DURATION=validGifDuration(duration,NAJA_NORMAL_DURATION);
+     if(key==='najaSpecial')NAJA_SPECIAL_BURROW_DURATION=validGifDuration(duration,NAJA_SPECIAL_BURROW_DURATION);
+     if(key==='najaSpecialFinal')NAJA_SPECIAL_EMERGE_DURATION=validGifDuration(duration,NAJA_SPECIAL_EMERGE_DURATION);
      if(key==='brownAttack')BROWN_NORMAL_DURATION=validGifDuration(duration,BROWN_NORMAL_DURATION);
      if(key==='brownSpecial')BROWN_SPECIAL_BODY_DURATION=validGifDuration(duration,BROWN_SPECIAL_BODY_DURATION);
      if(key==='brownPower')BROWN_POWER_DURATION=validGifDuration(duration,BROWN_POWER_DURATION);
@@ -3169,6 +3234,10 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(key==='golemAttack'||key==='golemSpecial'){
        golemGifReadyKeys.add(key);
        if(golemGifReadyKeys.size===2)golemAttackAssetsReady=true;
+     }
+     if(key==='najaAttack'||key==='najaSpecial'||key==='najaSpecialFinal'){
+       najaGifReadyKeys.add(key);
+       if(najaGifReadyKeys.size===3)najaAttackAssetsReady=true;
      }
      if(key==='brownAttack'||key==='brownSpecial'||key==='brownPower'){
        brownGifReadyKeys.add(key);
@@ -3187,6 +3256,7 @@ setTimeout(()=>{egyptMagePowerAssetReady=true},2500);
 // Normalmente os dois GIFs já foram medidos antes disso; o fallback só é usado
 // em falha real de rede/CORS.
 setTimeout(()=>{golemAttackAssetsReady=true},3500);
+setTimeout(()=>{najaAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -3370,6 +3440,25 @@ function serializeWarEntityForNetwork(e,now){
        remainingMs:Math.max(0,Number(p.endAt)-now),
        impactRemainingMs:Math.max(0,Number(p.impactAt)-now),
        impacted:!!p.impacted
+     };
+   }
+ }else if(e.type==='naja'){
+   out.najaAttackKind=e.najaAttackKind??null;
+   out.najaAttackSerial=Number(e.najaAttackSerial)||0;
+   out.najaNormalCount=Number(e.najaNormalCount)||0;
+   out.najaPhase=e.najaPhase||'seek';
+   if(e.pendingNajaAttack){
+     const p=e.pendingNajaAttack;
+     out.pendingNajaAttack={
+       kind:p.kind,serial:Number(p.serial)||Number(e.najaAttackSerial)||0,targetId:p.targetId??null,
+       duration:Number(p.duration)||(p.kind==='special'?NAJA_SPECIAL_BURROW_DURATION+NAJA_UNDERGROUND_MS+NAJA_SPECIAL_EMERGE_DURATION:NAJA_NORMAL_DURATION),
+       remainingMs:Math.max(0,Number(p.endAt)-now),
+       impactRemainingMs:p.impactAt?Math.max(0,Number(p.impactAt)-now):0,
+       burrowRemainingMs:p.burrowAt?Math.max(0,Number(p.burrowAt)-now):0,
+       emergeRemainingMs:p.emergeAt?Math.max(0,Number(p.emergeAt)-now):0,
+       impacted:!!p.impacted,teleported:!!p.teleported,
+       targetX:Number.isFinite(Number(p.targetX))?Number(p.targetX):null,
+       targetY:Number.isFinite(Number(p.targetY))?Number(p.targetY):null
      };
    }
  }else if(e.type==='brownWarrior'){
@@ -3620,6 +3709,46 @@ function applyRemoteGame(game){
      }
      // Estado visual nunca pode sobreviver sozinho sem um ataque pendente real.
      if(!out.pendingGolemAttack)out.golemAttackKind=null;
+     if(out.pendingNajaAttack?.remainingMs!=null){
+       const p=out.pendingNajaAttack;
+       const serial=Number(p.serial)||Number(out.najaAttackSerial)||0;
+       const defaultDuration=p.kind==='special'?NAJA_SPECIAL_BURROW_DURATION+NAJA_UNDERGROUND_MS+NAJA_SPECIAL_EMERGE_DURATION:NAJA_NORMAL_DURATION;
+       const duration=Number(p.duration)||defaultDuration;
+       const remaining=Math.max(0,Number(p.remainingMs)||0);
+       const oldPending=old?.pendingNajaAttack;
+       const sameSerial=!!oldPending&&Number(oldPending.serial)===serial;
+       if(remaining<=0){
+         out.pendingNajaAttack=null;out.najaAttackKind=null;
+       }else if(sameSerial&&Number.isFinite(Number(oldPending.endAt))){
+         const rebuilt={...p,serial,duration,
+           startedAt:Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining),
+           endAt:Math.min(Number(oldPending.endAt),localNow+remaining),
+           impacted:!!(oldPending.impacted||p.impacted),teleported:!!(oldPending.teleported||p.teleported)
+         };
+         if(p.kind==='normal'){
+           rebuilt.impactAt=p.impacted?Math.min(Number(oldPending.impactAt)||localNow,localNow):(Number(oldPending.impactAt)||localNow+Math.max(0,Number(p.impactRemainingMs)||0));
+         }else{
+           rebuilt.burrowAt=Number(oldPending.burrowAt)||localNow+Math.max(0,Number(p.burrowRemainingMs)||0);
+           rebuilt.emergeAt=Number(oldPending.emergeAt)||localNow+Math.max(0,Number(p.emergeRemainingMs)||0);
+           rebuilt.targetX=Number.isFinite(Number(p.targetX))?Number(p.targetX):oldPending.targetX;
+           rebuilt.targetY=Number.isFinite(Number(p.targetY))?Number(p.targetY):oldPending.targetY;
+         }
+         out.pendingNajaAttack=rebuilt;
+       }else{
+         const rebuilt={...p,serial,duration,startedAt:localNow-Math.max(0,duration-remaining),endAt:localNow+remaining};
+         if(p.kind==='normal')rebuilt.impactAt=localNow+Math.max(0,Number(p.impactRemainingMs)||0);
+         else{
+           rebuilt.burrowAt=localNow+Math.max(0,Number(p.burrowRemainingMs)||0);
+           rebuilt.emergeAt=localNow+Math.max(0,Number(p.emergeRemainingMs)||0);
+         }
+         out.pendingNajaAttack=rebuilt;
+       }
+       // Quando o host marcou a emergência, o cliente deve SURGIR no ponto novo,
+       // não interpolar/deslizar cinco segundos de distância pelo mapa.
+       const becameTeleported=!!p.teleported&&!old?.pendingNajaAttack?.teleported;
+       if(becameTeleported){out.x=Number(e.x);out.y=Number(e.y);out.netTargetX=Number(e.x);out.netTargetY=Number(e.y)}
+     }
+     if(!out.pendingNajaAttack)out.najaAttackKind=null;
      if(out.pendingBrownAttack?.remainingMs!=null){
        const p=out.pendingBrownAttack;
        const serial=Number(p.serial)||Number(out.brownAttackSerial)||0;
@@ -3700,6 +3829,7 @@ function handleHostCommands(commands){
      if(clan==='warriors'&&cmd.type==='buy-dragon')buyDragonForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
+     if(clan==='egypt'&&cmd.type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
    }
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
@@ -4245,6 +4375,7 @@ function entityBase(type,x,y,team,color){
  // Máquina de estados do Golem: localizar -> aproximar -> atacar -> finalizar.
  specialCooldown:0,pendingGolemAttack:null,golemAttackKind:null,golemAttackSerial:0,golemNormalCount:0,
  golemPhase:'seek',golemLastAttackCompletedAt:0,
+ pendingNajaAttack:null,najaAttackKind:null,najaAttackSerial:0,najaNormalCount:0,najaPhase:'seek',
  pendingMageAttack:null,mageAttackKind:null,mageAttackSerial:0,mageCycle:0,
  warriorMageSpecialObservedHp:null,warriorMageHpTriggerPending:false,
  egyptSpecialObservedHp:null,egyptSpecialObservedShield:null,egyptHpTriggerPending:false,egyptShieldTriggerPending:false,
@@ -4316,6 +4447,24 @@ function spawnGolem(x,y,team,color){
  state.entities.push(e);
  return e;
 }
+
+function spawnNaja(x,y,team,color){
+ const e=entityBase('naja',x,y,team,color);
+ e.clan='egypt';
+ e.hp=e.maxHp=600;
+ e.shield=e.maxShield=200;
+ e.damage=40;
+ e.r=36;
+ // Exatamente a mesma velocidade do Golem Guerreiro.
+ e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;
+ e.attackCooldown=0;
+ e.najaAttackSerial=0;
+ e.najaNormalCount=0;
+ e.najaPhase='seek';
+ e.pendingNajaAttack=null;
+ state.entities.push(e);
+ return e;
+}
 function spawnMage(x,y,team,color,variant='male',clan='warriors'){
  const e=entityBase('mage',x,y,team,color);
  e.variant=variant==='female'?'female':'male';e.clan=normalizeClan(clan);e.hp=e.maxHp=200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
@@ -4355,12 +4504,30 @@ function entityHasActiveSpecial(e,now=performance.now()){
  if(!e?.alive)return false;
  if(e.type==='mage')return e.pendingMageAttack?.kind==='special'&&Number(e.pendingMageAttack.endAt)>now;
  if(e.type==='golem')return e.pendingGolemAttack?.kind==='special'&&Number(e.pendingGolemAttack.endAt)>now;
+ if(e.type==='naja')return e.pendingNajaAttack?.kind==='special'&&Number(e.pendingNajaAttack.endAt)>now;
  if(e.type==='brownWarrior')return e.pendingBrownAttack?.kind==='special'&&Number(e.pendingBrownAttack.endAt)>now;
  if(e.type==='king')return !!e.pendingKingSpecial&&Number(e.pendingKingSpecial.endAt)>now;
  return false;
 }
+
+function najaSpecialPhase(e,now=performance.now()){
+ const p=e?.type==='naja'?e.pendingNajaAttack:null;
+ if(!p||p.kind!=='special'||Number(p.endAt)<=now)return null;
+ if(now<Number(p.burrowAt))return 'burrowing';
+ if(now<Number(p.emergeAt))return 'underground';
+ return 'emerging';
+}
+function najaIsUnderground(e,now=performance.now()){
+ return najaSpecialPhase(e,now)==='underground';
+}
+function najaIsInvulnerable(e,now=performance.now()){
+ const phase=najaSpecialPhase(e,now);
+ return phase==='burrowing'||phase==='underground';
+}
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
+ // A Naja é invulnerável enquanto inicia a escavação e enquanto está subterrânea.
+ if(target.type==='naja'&&najaIsInvulnerable(target))return;
  if(!options.allowFlying&&target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return;
  const beforeDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
 
@@ -4398,6 +4565,8 @@ function applyCombatHit(target,attacker,amount,options={}){
  let knockForce=options.knockForce??430;
  let knockTime=options.knockTime??.28;
  let applyKnockback=true;
+ // Durante TODO o especial da Naja, inclusive ao emergir, ela nunca sofre empurrão.
+ if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false;
  const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
  const brownStableHit=target.type==='brownWarrior' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage');
 
@@ -4465,6 +4634,9 @@ function startEntityDeath(e,dx=0,dy=0){
  e.pendingGolemAttack=null;
  e.golemAttackKind=null;
  e.golemPhase='dead';
+ e.pendingNajaAttack=null;
+ e.najaAttackKind=null;
+ e.najaPhase='dead';
  e.pendingMageAttack=null;
  e.mageAttackKind=null;
  e.pendingBrownAttack=null;
@@ -4512,7 +4684,7 @@ function cleanupDeadEntities(now){
 /* Evita guerreiros vivos ocuparem exatamente o mesmo ponto.
    Mortos não participam da colisão, então nunca "grudam" no jogador. */
 function separateLivingEntities(){
- const living=state.entities.filter(e=>e.alive);
+ const living=state.entities.filter(e=>e.alive&&!najaIsUnderground(e));
  const cellSize=64;
  const grid=new Map();
 
@@ -4743,7 +4915,7 @@ function updateGolemRockEffects(now){
  }
 }
 
-const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','dragon','enemy']);
+const REAL_COMBAT_TYPES=new Set(['warrior','brownWarrior','king','mage','golem','naja','dragon','enemy']);
 // WAR FPS SWEEP 2026-09-09
 function isRealCombatTarget(t){
  // Set persistente: evita criar um array novo em cada teste de alvo.
@@ -4751,7 +4923,8 @@ function isRealCombatTarget(t){
 }
 function canEngageTarget(attacker,target){
  if(!isRealCombatTarget(target)||!attacker)return false;
- if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'))return false;
+ if(najaIsUnderground(target))return false;
+ if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='naja'))return false;
  return true;
 }
 
@@ -4895,6 +5068,175 @@ function updateGolemAttackState(e,now){
    e.golemLastAttackCompletedAt=now;
    clearGolemAttackState(e); // próximo frame obrigatoriamente localiza um alvo de novo
  }
+}
+
+
+function chooseNajaEmergenceTarget(e){
+ const source=(warFrameEnemiesByTeam.get(e.team)?.all||state.entities);
+ const enemies=[];
+ for(const t of source){
+   if(!isRealCombatTarget(t)||t===e||t.team===e.team||najaIsUnderground(t))continue;
+   // A Naja é terrestre: procura primeiro tropas no chão para sair debaixo delas.
+   if(t.type==='dragon'&&t.dragonFlightState==='flying')continue;
+   enemies.push(t);
+ }
+ if(!enemies.length){
+   for(const t of state.entities){
+     if(!isRealCombatTarget(t)||t===e||t.team===e.team||najaIsUnderground(t))continue;
+     enemies.push(t);
+   }
+ }
+ if(!enemies.length)return null;
+
+ const clusterRadius=175,clusterSq=clusterRadius*clusterRadius;
+ let best=enemies[0],bestCount=1,bestDist=Infinity,bestMembers=[best];
+ for(const candidate of enemies){
+   const members=[];
+   for(const other of enemies){
+     const dx=other.x-candidate.x,dy=other.y-candidate.y;
+     if(dx*dx+dy*dy<=clusterSq)members.push(other);
+   }
+   const dx=candidate.x-e.x,dy=candidate.y-e.y,ds=dx*dx+dy*dy;
+   if(members.length>bestCount||(members.length===bestCount&&ds<bestDist)){
+     best=candidate;bestCount=members.length;bestDist=ds;bestMembers=members;
+   }
+ }
+
+ // Havendo 2+ inimigos próximos, surge no centro do agrupamento. Caso contrário,
+ // qualquer tropa inimiga válida serve como destino (a escolhida mais próxima).
+ let x=best.x,y=best.y;
+ if(bestCount>1){
+   x=bestMembers.reduce((sum,t)=>sum+t.x,0)/bestMembers.length;
+   y=bestMembers.reduce((sum,t)=>sum+t.y,0)/bestMembers.length;
+ }
+ const b=warArenaBounds(e.r||36);
+ x=clamp(x,b.left,b.right);y=clamp(y,b.top,b.bottom);
+ return {x,y,targetId:best.id,count:bestCount};
+}
+
+function startNajaAttack(e,kind,target=null){
+ if(!e?.alive||e.type!=='naja'||e.pendingNajaAttack||e.attackCooldown>0||!najaAttackAssetsReady)return false;
+ if(!isRealCombatTarget(target)||target===e||target.team===e.team||!canEngageTarget(e,target))return false;
+ const d=dist(e,target);
+ if(kind==='normal'&&d>112)return false;
+ if(kind==='special'&&d>145)return false;
+ const now=performance.now();
+ e.lastAttackAt=now;e.lastCombatAt=now;e.moving=false;e.target=target;
+ e.heading=Math.atan2(target.y-e.y,target.x-e.x);if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
+ e.najaAttackKind=kind;e.najaAttackSerial=(Number(e.najaAttackSerial)||0)+1;e.najaPhase='attack';
+ const serial=e.najaAttackSerial;
+
+ if(kind==='normal'){
+   const duration=NAJA_NORMAL_DURATION;
+   // Um novo bote normal nunca começa antes de 2 segundos do anterior.
+   e.attackCooldown=NAJA_ATTACK_INTERVAL_SEC;
+   e.pendingNajaAttack={kind,serial,targetId:target.id,duration,startedAt:now,
+     impactAt:now+Math.min(Math.max(260,duration*.55),Math.max(260,duration-100)),
+     endAt:now+duration,impacted:false};
+ }else{
+   // Cancela qualquer empurrão que já estivesse em andamento no instante em que cava.
+   e.knockTime=0;e.knockVX=0;e.knockVY=0;
+   const burrowDuration=NAJA_SPECIAL_BURROW_DURATION;
+   const emergeDuration=NAJA_SPECIAL_EMERGE_DURATION;
+   const burrowAt=now+burrowDuration;
+   const emergeAt=burrowAt+NAJA_UNDERGROUND_MS;
+   const endAt=emergeAt+emergeDuration;
+   e.attackCooldown=(endAt-now)/1000;
+   e.pendingNajaAttack={kind,serial,targetId:target.id,duration:endAt-now,burrowDuration,emergeDuration,
+     startedAt:now,burrowAt,emergeAt,endAt,teleported:false,impacted:false,targetX:null,targetY:null};
+   addWarGoalProgress(e.team,'specials');
+ }
+ return true;
+}
+
+function resolveNajaNormalImpact(e,p){
+ if(p.impacted)return;p.impacted=true;
+ if(!e.alive)return;
+ const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
+ if(target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118){
+   applyCombatHit(target,e,40,{knockForce:220,knockTime:.12,tilt:9});
+ }
+}
+
+function resolveNajaEmergence(e,p){
+ if(p.teleported)return;
+ const destination=chooseNajaEmergenceTarget(e);
+ p.teleported=true;
+ if(destination){
+   p.targetId=destination.targetId;
+   p.targetX=destination.x;p.targetY=destination.y;
+   const target=warEntityById.get(destination.targetId)||state.entities.find(t=>t.id===destination.targetId);
+   if(target){const dx=target.x-e.x;if(Math.abs(dx)>4)e.facing=dx<0?-1:1;e.heading=Math.atan2(target.y-e.y,target.x-e.x)}
+   e.x=destination.x;e.y=destination.y;
+   constrainWarEntityToArena(e);
+ }
+
+ // O primeiro quadro da saída da terra já é o colisor do especial.
+ p.impacted=true;
+ const ox=e.x,oy=e.y,r=NAJA_SPECIAL_RADIUS,r2=r*r;
+ forEachWarSpatialCandidate(ox-r,oy-r,ox+r,oy+r,t=>{
+   if(!isRealCombatTarget(t)||t===e||t.team===e.team||najaIsUnderground(t))return;
+   const dx=t.x-ox,dy=t.y-oy;if(dx*dx+dy*dy>r2)return;
+   applyCombatHit(t,e,NAJA_SPECIAL_DAMAGE,{
+     knockForce:1260,
+     knockTime:.56,
+     tilt:36,
+     shake:24,
+     shakeDuration:.62,
+     allowFlying:true
+   });
+ });
+}
+
+function updateNajaAttackState(e,now){
+ const p=e.pendingNajaAttack;if(!p)return;
+ e.moving=false;
+ if(p.kind==='normal'){
+   if(!p.impacted&&now>=Number(p.impactAt||Infinity))resolveNajaNormalImpact(e,p);
+   if(now>=Number(p.endAt||0)){
+     e.najaNormalCount=Math.min(4,(Number(e.najaNormalCount)||0)+1);
+     e.pendingNajaAttack=null;e.najaAttackKind=null;e.najaPhase='seek';e.target=null;
+   }
+   return;
+ }
+
+ if(now<Number(p.burrowAt))e.najaPhase='burrowing';
+ else if(now<Number(p.emergeAt))e.najaPhase='underground';
+ else{
+   e.najaPhase='emerging';
+   if(!p.teleported)resolveNajaEmergence(e,p);
+ }
+
+ if(now>=Number(p.endAt||0)){
+   e.najaNormalCount=0;
+   e.pendingNajaAttack=null;e.najaAttackKind=null;e.najaPhase='seek';e.target=null;
+   e.attackCooldown=0;
+ }
+}
+
+function aiFightNaja(e,dt,forcedTeam,preparedCandidates=null){
+ if(!e.alive){e.moving=false;return}
+ if(e.pendingNajaAttack){e.moving=false;return}
+ const candidates=preparedCandidates||state.entities;
+ const target=nearestEngageableCandidate(e,candidates,forcedTeam,false);
+ if(!target){e.moving=false;e.target=null;e.najaPhase='seek';return}
+ e.target=target;
+ const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
+ e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
+ const moveSpeed=e.speed;
+
+ // 4 ataques normais completos; o 5º ataque é o especial de escavação.
+ if((Number(e.najaNormalCount)||0)>=4){
+   if(d<=145&&startNajaAttack(e,'special',target))return;
+   if(d>145){e.x+=dx/d*moveSpeed*dt;e.y+=dy/d*moveSpeed*dt;e.moving=true;e.najaPhase='approach'}
+   else e.moving=false;
+ }else if(d<=92){
+   if(startNajaAttack(e,'normal',target))return;
+   e.moving=false;e.najaPhase='approach';
+ }else{
+   e.x+=dx/d*moveSpeed*dt;e.y+=dy/d*moveSpeed*dt;e.moving=true;e.najaPhase='approach';
+ }
+ e.x=clamp(e.x,42,state.world.w-42);e.y=clamp(e.y,42,state.world.h-42);
 }
 
 function brownPowerPosition(p,at=performance.now()){
@@ -5174,7 +5516,7 @@ function updateKingSpecialState(e,now){
 }
 
 function performAttack(e,preparedCandidates=null){
- if(e.type==='golem'||e.type==='mage'||e.type==='brownWarrior')return;
+ if(e.type==='golem'||e.type==='naja'||e.type==='mage'||e.type==='brownWarrior')return;
  if(!e.alive||e.attackCooldown>0||e.knockTime>0||e.pendingKingSpecial)return;
  if(e.type==='king'&&(Number(e.kingNormalCount)||0)>=6){startKingSpecial(e);return}
  const now=performance.now();
@@ -5450,7 +5792,7 @@ function addWarDamageProgress(teamId,amount){
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  const clan=normalizeClan(p.clan);
- const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
+ const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage','buy-egypt-naja']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
  if(!allowed.has(type))return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
  else {
@@ -5462,6 +5804,7 @@ function requestWarPurchase(type){
    if(type==='buy-dragon')buyDragonForPlayer(p,false);
    if(type==='buy-egypt-warrior')buyEgyptWarriorForPlayer(p,false);
    if(type==='buy-egypt-mage')buyEgyptMageForPlayer(p,false);
+   if(type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
  }
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
@@ -5472,6 +5815,7 @@ $('#buyMage').onclick=()=>requestWarPurchase('buy-mage');
 $('#buyDragon').onclick=()=>requestWarPurchase('buy-dragon');
 $('#buyEgyptWarrior').onclick=()=>requestWarPurchase('buy-egypt-warrior');
 $('#buyEgyptMage').onclick=()=>requestWarPurchase('buy-egypt-mage');
+$('#buyEgyptNaja').onclick=()=>requestWarPurchase('buy-egypt-naja');
 function buyForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.warrior;if(p.gems<cost)return false;
@@ -5530,6 +5874,14 @@ function buyEgyptMageForPlayer(p,bot){
  spawnMage(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color,Math.random()<.5?'male':'female','egypt');
  return true;
 }
+
+function buyEgyptNajaForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='egypt')return false;
+ const cost=WAR_UNIT_COSTS.naja;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
+ const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*78;
+ spawnNaja(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);
+ return true;
+}
 function buyDragonForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.dragon;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
@@ -5540,7 +5892,7 @@ function buyDragonForPlayer(p,bot){
 
 
 function warCompositionForTeam(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};
  for(const e of state.entities){
    if(!e.alive||e.team!==teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -5548,7 +5900,7 @@ function warCompositionForTeam(teamId){
  return out;
 }
 function enemyWarComposition(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0};
  for(const e of state.entities){
    if(!e.alive||e.team===teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -5560,6 +5912,7 @@ function affordableBotWarTypes(p){
  if(normalizeClan(p.clan)==='egypt'){
    if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
    if(p.gems>=WAR_UNIT_COSTS.mage)types.push('mage');
+   if(p.gems>=WAR_UNIT_COSTS.naja)types.push('naja');
    return types;
  }
  if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
@@ -5574,7 +5927,7 @@ function chooseBotWarPurchase(p){
  const affordable=affordableBotWarTypes(p);
  if(!affordable.length)return null;
  const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
- const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon;
+ const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon+enemy.naja;
  const opening=(Number(p.botWarPurchases)||0)<2;
 
  // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
@@ -5583,7 +5936,7 @@ function chooseBotWarPurchase(p){
    return affordable[Math.floor(Math.random()*affordable.length)];
  }
 
- const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1};
+ const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1,naja:1};
  // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
  // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
@@ -5591,10 +5944,11 @@ function chooseBotWarPurchase(p){
  score.king+=enemy.warrior*.75+enemy.king*.55+enemy.mage*1.25+enemy.golem*.35;
  score.golem+=(enemy.warrior+enemy.king)*1.65+enemy.mage*.35+enemy.dragon*.45;
  score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55;
- score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70;
+ score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70+enemy.naja*.55;
+ score.naja+=(enemy.warrior+enemy.brownWarrior+enemy.king)*1.30+enemy.mage*.55+enemy.golem*.35+enemy.naja*.45;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
- if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10}
+ if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10;score.naja*=.25}
 
  // Pequeno redutor por repetição mantém composição variada, sem transformar
  // a escolha adaptativa numa regra rígida e previsível.
@@ -5610,6 +5964,7 @@ function chooseBotWarPurchase(p){
 function buyBotWarType(p,type){
  if(normalizeClan(p.clan)==='egypt'){
    if(type==='mage')return buyEgyptMageForPlayer(p,true);
+   if(type==='naja')return buyEgyptNajaForPlayer(p,true);
    return buyEgyptWarriorForPlayer(p,true);
  }
  if(type==='brownWarrior')return buyBrownWarriorForPlayer(p,true);
@@ -5774,7 +6129,7 @@ function updateWar(dt){
    }
 
    for(const e of living){
-     const avoidDragons=(e.type==='warrior'||e.type==='brownWarrior'||e.type==='king')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
+     const avoidDragons=(e.type==='warrior'||e.type==='brownWarrior'||e.type==='king'||e.type==='naja')&&(warFrameEnemiesByTeam.get(e.team)?.nonDragon.length||0)>0;
      aiFight(e,dt,null,warCandidatesFor(e,warCombatGrid,avoidDragons,now));
    }
    state.timeLeft-=dt;
@@ -6100,6 +6455,7 @@ function aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates=null){
 
 function aiFight(e,dt,forcedTeam,preparedCandidates=null){
  if(e.type==='brownWarrior'){aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates);return;}
+ if(e.type==='naja'){aiFightNaja(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='golem'){aiFightGolem(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='mage'){aiFightMage(e,dt,forcedTeam,preparedCandidates);return;}
  if(e.type==='dragon'){aiFightDragon(e,dt,forcedTeam,preparedCandidates);return;}
@@ -6327,7 +6683,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
-const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage');
+const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage'),buyEgyptNajaPerfEl=$('#buyEgyptNaja');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
 function flash(text,secs=.8){perfSetText(centerMessagePerfEl,text);messageUntil=performance.now()+secs*1000}
@@ -6424,6 +6780,9 @@ function updateEntities(dt){
    // Mantém o relógio de impacto do Golem mesmo se o frame da IA variar.
    if(e.type==='golem' && e.pendingGolemAttack){
      updateGolemAttackState(e,now);
+   }
+   if(e.type==='naja' && e.pendingNajaAttack){
+     updateNajaAttackState(e,now);
    }
    if(e.type==='brownWarrior' && e.pendingBrownAttack){
      updateBrownWarriorAttackState(e,now);
@@ -6588,7 +6947,7 @@ function draw(){
  syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
 }
 function drawEntityMarker(e){
- if(state.mode==='pve'||!e.alive)return;
+ if(state.mode==='pve'||!e.alive||najaIsUnderground(e))return;
  ctx.strokeStyle=e.color;ctx.lineWidth=(e.controlled?3:2)/state.camera.zoom;
  ctx.globalAlpha=e.controlled?.95:.58;
  ctx.beginPath();ctx.ellipse(e.x,e.y+31,27,9,0,0,Math.PI*2);ctx.stroke();
@@ -6951,6 +7310,21 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        <div class="hp-bg"><div class="hp-fill"></div></div>
        <div class="shield-bg"><div class="shield-fill"></div></div>
      </div>`;
+ }else if(e.type==='naja'){
+   el.classList.add('naja-visual','egypt-unit');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="najaIdle" src="${ASSETS.najaIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="najaWalk" src="${ASSETS.najaWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-naja-attack" data-asset-key="najaAttack" draggable="false" style="opacity:0">
+       <img class="entity-body entity-naja-special" data-asset-key="najaSpecial" draggable="false" style="opacity:0">
+       <img class="entity-body entity-naja-special-final" data-asset-key="najaSpecialFinal" draggable="false" style="opacity:0">
+     </div>
+     <div class="entity-weapon-facing"></div>
+     <div class="entity-bars">
+       <div class="hp-bg"><div class="hp-fill"></div></div>
+       <div class="shield-bg"><div class="shield-fill"></div></div>
+     </div>`;
  }else if(e.type==='mage'){
    el.classList.add('mage-visual');
    const egypt=e.clan==='egypt';
@@ -7035,6 +7409,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._brownSpecial=el.querySelector('.entity-brown-special');
  el._golemAttack=el.querySelector('.entity-golem-attack');
  el._golemSpecial=el.querySelector('.entity-golem-special');
+ el._najaAttack=el.querySelector('.entity-naja-attack');
+ el._najaSpecial=el.querySelector('.entity-naja-special');
+ el._najaSpecialFinal=el.querySelector('.entity-naja-special-final');
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
  el._mageHand=el.querySelector('.mage-hand');
@@ -7051,6 +7428,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el.dataset.attackSerial='-1';
  el.dataset.golemAttackSerial='-1';
  el.dataset.golemRockSerial='-1';
+ el.dataset.najaAttackSerial='-1';
+ el.dataset.najaEmergeSerial='-1';
  el.dataset.brownAttackSerial='-1';
  el.dataset.mageAttackSerial='-1';
  el.dataset.kingSpecialSerial='-1';
@@ -7060,6 +7439,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  // GIF que está entrando para ele aparecer desde o quadro 0.
  if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
  else if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
+ else if(e.type==='naja')el._gifKeys={idle:'najaIdle',walk:'najaWalk',attack:'najaAttack',special:'najaSpecial',emerge:'najaSpecialFinal'};
  else if(e.type==='mage'){const egypt=e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleMageIdle':'femaleMageIdle'):(egypt?'egyptMageIdle':'mageIdle'),walk:e.variant==='female'?(egypt?'egyptFemaleMageWalk':'femaleMageWalk'):(egypt?'egyptMageWalk':'mageWalk'),special:e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial')}}
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
@@ -7073,7 +7453,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -7085,8 +7465,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        const currentKey=img.dataset.assetKey||Object.keys(ASSETS).find(k=>ASSETS[k]===currentSrc.split('?')[0]);
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
-       const transientState=(img===el._golemAttack||img===el._brownAttack)?'attack':
-         (img===el._golemSpecial||img===el._brownSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null));
+       const transientState=(img===el._golemAttack||img===el._brownAttack||img===el._najaAttack)?'attack':
+         (img===el._najaSpecialFinal?'emerge':(img===el._golemSpecial||img===el._najaSpecial||img===el._brownSpecial||img===el._mageSpecial||img===el._kingSpecial||img===el._kingPower?'special':(img===el._dragonTakeoff?'takeoff':img===el._dragonAttack?'dragonAttack':null)));
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
@@ -7115,8 +7495,9 @@ function entitySpriteForState(el,stateName){
  if(stateName==='walk')return el._walk;
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
- if(stateName==='attack')return el._brownAttack||el._golemAttack;
- if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._mageSpecial||el._kingSpecial;
+ if(stateName==='attack')return el._brownAttack||el._golemAttack||el._najaAttack;
+ if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._najaSpecial||el._mageSpecial||el._kingSpecial;
+ if(stateName==='emerge')return el._najaSpecialFinal;
  if(stateName==='takeoff')return el._dragonTakeoff;
  if(stateName==='dragonAttack')return el._dragonAttack;
  return null;
@@ -7173,8 +7554,8 @@ function suspendEntityLoopGif(el){
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
  const sprites=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],
-   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._mageSpecial,'special'],
+   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],
+   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
    [el._kingSpecial,'special'],
    [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ];
@@ -7218,14 +7599,16 @@ function setEntitySpriteState(el,desired){
    if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired) scheduleEntityLoopGifSuspend(el,previous);
 
    // Ataques fechados continuam usando a lógica original de restart por serial.
-   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack)}
+   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack)}
    if(previous==='special'&&desired!=='special'){
      stopGif(el._brownSpecial);
      stopGif(el._golemSpecial);
+     stopGif(el._najaSpecial);
      stopGif(el._mageSpecial);
      stopGif(el._kingSpecial);
      stopGif(el._kingPower);
    }
+   if(previous==='emerge'&&desired!=='emerge')stopGif(el._najaSpecialFinal);
    if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
    if(previous==='dragonAttack'&&desired!=='dragonAttack')stopGif(el._dragonAttack);
  };
@@ -7304,6 +7687,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }else if(e.type==='golem'&&!activeGolemPending(e,localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='special')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
+     }else if(e.type==='naja'&&!(e.pendingNajaAttack&&e.pendingNajaAttack.endAt>localNow)&&
+        (el.dataset.anim==='attack'||el.dataset.anim==='special'||el.dataset.anim==='emerge')){
+       el.classList.remove('naja-underground');
+       setEntitySpriteState(el,e.moving?'walk':'idle');
      }else if(e.type==='mage'&&el.dataset.anim==='special'&&
               !(e.pendingMageAttack?.kind==='special'&&e.pendingMageAttack.endAt>localNow)){
        setEntitySpriteState(el,e.moving?'walk':'idle');
@@ -7347,7 +7734,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='naja'?1.18:e.type==='brownWarrior'?1.10:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
@@ -7420,6 +7807,30 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        el.dataset.brownAttackSerial=String(serial);
        if(kind==='special'&&specialBody)restartGif(el._brownSpecial,'brownSpecial',serial);
        else if(kind==='normal')restartGif(el._brownAttack,'brownAttack',serial);
+     }
+   }else if(e.type==='naja'){
+     const p=e.pendingNajaAttack;
+     const active=!!p&&Number(p.endAt)>localNow;
+     let desired=visualMoving?'walk':'idle';
+     let underground=false;
+     if(active&&p.kind==='normal')desired='attack';
+     else if(active&&p.kind==='special'){
+       if(localNow<Number(p.burrowAt)){desired='special'}
+       else if(localNow<Number(p.emergeAt)){desired='idle';underground=true}
+       else desired='emerge';
+     }
+     el.classList.toggle('naja-underground',underground);
+     setEntitySpriteState(el,desired);
+     const serial=Number(p?.serial||e.najaAttackSerial)||0;
+     if(active&&serial>0&&el.dataset.najaAttackSerial!==String(serial)){
+       el.dataset.najaAttackSerial=String(serial);
+       if(p.kind==='normal')restartGif(el._najaAttack,'najaAttack',serial);
+       else restartGif(el._najaSpecial,'najaSpecial',serial);
+     }
+     // O GIF final só começa quando a cobra realmente reaparece da terra.
+     if(active&&p.kind==='special'&&!underground&&localNow>=Number(p.emergeAt)&&serial>0&&el.dataset.najaEmergeSerial!==String(serial)){
+       el.dataset.najaEmergeSerial=String(serial);
+       restartGif(el._najaSpecialFinal,'najaSpecialFinal',serial);
      }
    }else if(e.type==='golem'){
      const pending=activeGolemPending(e,localNow);
@@ -7562,7 +7973,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      setEntityNodeVisible(el,false);
      scheduleEntityOffscreenSuspend(el);
      const entity=presentMap.get(id);
-     const transient=entity && (entity.deathStarted||entity.pendingBrownAttack||entity.pendingGolemAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
+     const transient=entity && (entity.deathStarted||entity.pendingBrownAttack||entity.pendingGolemAttack||entity.pendingNajaAttack||entity.pendingMageAttack||entity.pendingKingSpecial||entity.pendingDragonAttack||entity.dragonFlightState==='takeoff');
      const lastSeen=Number(el._lastVisibleAt||0);
      if(entity && !transient && localNow-lastSeen>ENTITY_NODE_RETENTION_MS){
        clearEntityOffscreenSuspend(el);
@@ -7631,6 +8042,7 @@ function updateHUD(){
     perfSetDisabled(buyDragonPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.dragon);
     perfSetDisabled(buyEgyptWarriorPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.warrior);
     perfSetDisabled(buyEgyptMagePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.mage);
+    perfSetDisabled(buyEgyptNajaPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.naja);
   }
 }
 function finishGame(msg){
