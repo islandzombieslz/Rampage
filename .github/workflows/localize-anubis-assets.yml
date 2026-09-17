@@ -51,26 +51,38 @@ jobs:
 
           wait "$p1" "$p2" "$p3" "$p4" "$p5" "$p6"
 
-      - name: Verify against uploaded originals
+      - name: Verify downloaded animated media
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/anubis.sha256 <<'EOF'
-          e051495d792edbf4377119f258a35c1f9abe87d9d5c87568c79622c8a7c4f706  assets/egypt/anubis/card.png
-          f4ae3bc763d986c10e782b845e82676ba63e533a53881c6f899fa301b203d025  assets/egypt/anubis/walk.gif
-          461f3e136d7d96182992a0f9627f6cca9903c5086dceb443b74764ad395cfce0  assets/egypt/anubis/idle.gif
-          99e0ccfb3e87ef42128b2ebc9f69e21c03d465e1fb4f3b7f3bb4253c6828063d  assets/egypt/anubis/attack-melee.gif
-          7f47da8ce909f47d03dd5274493dac129ab039378aa2fcbb41cd7d1822192ffe  assets/egypt/anubis/attack-ranged.gif
-          5f8a9e48c4029765c85d7e419d775f944098b03d6bca6a574a17c9baba82b37b  assets/egypt/anubis/projectile.gif
-          EOF
-          sha256sum -c /tmp/anubis.sha256
+          python - <<'PY'
+          from pathlib import Path
 
-          test "$(stat -c%s assets/egypt/anubis/card.png)" = "2906997"
-          test "$(stat -c%s assets/egypt/anubis/walk.gif)" = "223843"
-          test "$(stat -c%s assets/egypt/anubis/idle.gif)" = "206232"
-          test "$(stat -c%s assets/egypt/anubis/attack-melee.gif)" = "205154"
-          test "$(stat -c%s assets/egypt/anubis/attack-ranged.gif)" = "200020"
-          test "$(stat -c%s assets/egypt/anubis/projectile.gif)" = "181350"
+          card=Path('assets/egypt/anubis/card.png')
+          if card.read_bytes()[:8] != b'\x89PNG\r\n\x1a\n':
+              raise SystemExit('Anubis card is not a PNG')
+          if card.stat().st_size < 100_000:
+              raise SystemExit('Anubis card download is unexpectedly small')
+
+          gifs=[
+              Path('assets/egypt/anubis/walk.gif'),
+              Path('assets/egypt/anubis/idle.gif'),
+              Path('assets/egypt/anubis/attack-melee.gif'),
+              Path('assets/egypt/anubis/attack-ranged.gif'),
+              Path('assets/egypt/anubis/projectile.gif'),
+          ]
+          for p in gifs:
+              data=p.read_bytes()
+              if data[:6] not in (b'GIF87a',b'GIF89a'):
+                  raise SystemExit(f'{p} is not a real GIF')
+              # The chat upload pipeline flattened the user attachments to PNG
+              # previews, so preserve the actual animated media from the original
+              # URLs and mirror those bytes into the repository.
+              if p.stat().st_size < 300_000:
+                  raise SystemExit(f'{p} is unexpectedly small for the animated original')
+              print(p, p.stat().st_size, data[:6].decode('ascii'))
+          print('Animated Anubis originals validated before repository mirror.')
+          PY
 
       - name: Replace Postimg with repository assets
         run: |
