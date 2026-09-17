@@ -3616,9 +3616,11 @@ function applyRemoteGame(game){
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
  const remoteNow=performance.now();
- const remoteGapSec=NetworkAdapter.lastSnapshotReceivedAt?clamp((remoteNow-NetworkAdapter.lastSnapshotReceivedAt)/1000,.04,.25):.10;
+ const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,70,220):120;
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
- const remoteExtrapolateMs=clamp(remoteGapSec*700,45,110);
+ // Um pouco maior que o intervalo observado: o proximo snapshot normalmente chega
+ // antes do tween terminar, evitando a micro-parada entre pacotes sem prever fisica.
+ const remoteInterpMs=clamp(remoteGapMs*1.18,105,190);
  const firstFrame=$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
@@ -3628,10 +3630,10 @@ function applyRemoteGame(game){
    const previous=new Map(state.entities.map(e=>[e.id,e]));
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=performance.now();
-     let netVelocityX=0,netVelocityY=0;
-     if(Number(e.knockTime)>0){netVelocityX=Number(e.knockVX)||0;netVelocityY=Number(e.knockVY)||0}
-     else if(e.moving&&Number(e.speed)>0){netVelocityX=Math.cos(Number(e.heading)||0)*Number(e.speed);netVelocityY=Math.sin(Number(e.heading)||0)*Number(e.speed)}
-     const out={...e,x:old?.x??e.x,y:old?.y??e.y,netTargetX:Number(e.x)||0,netTargetY:Number(e.y)||0,netVelocityX,netVelocityY,netExtrapolateUntil:remoteNow+remoteExtrapolateMs,target:null,controlled:e.ownerId===NetworkAdapter.localPlayerId};
+     const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
+     const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
+     const toX=Number(e.x)||0,toY=Number(e.y)||0;
+     const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,target:null,controlled:e.ownerId===NetworkAdapter.localPlayerId};
      if(out.pendingMageAttack?.remainingMs!=null){
        const p=out.pendingMageAttack;
        const duration=p.duration||(p.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION);
@@ -3773,7 +3775,7 @@ function applyRemoteGame(game){
        // Quando o host marcou a emergência, o cliente deve SURGIR no ponto novo,
        // não interpolar/deslizar cinco segundos de distância pelo mapa.
        const becameTeleported=!!p.teleported&&!old?.pendingNajaAttack?.teleported;
-       if(becameTeleported){out.x=Number(e.x);out.y=Number(e.y);out.netTargetX=Number(e.x);out.netTargetY=Number(e.y);out.netVelocityX=0;out.netVelocityY=0;out.netExtrapolateUntil=remoteNow}
+       if(becameTeleported){out.x=Number(e.x);out.y=Number(e.y);out.netFromX=Number(e.x);out.netFromY=Number(e.y);out.netToX=Number(e.x);out.netToY=Number(e.y);out.netInterpStartedAt=remoteNow;out.netInterpDuration=1}
      }
      if(!out.pendingNajaAttack)out.najaAttackKind=null;
      if(out.pendingBrownAttack?.remainingMs!=null){
@@ -3820,7 +3822,15 @@ function applyRemoteGame(game){
      return out;
    });
  }
- if(Array.isArray(game.dragonProjectiles))state.dragonProjectiles=game.dragonProjectiles.map(p=>({...p}));
+ if(Array.isArray(game.dragonProjectiles)){
+   // Fireballs are visually simulated every frame on clients. The host remains
+   // authoritative; each snapshot only corrects their path smoothly.
+   const previousProjectiles=new Map((state.dragonProjectiles||[]).map(p=>[p.id,p]));
+   state.dragonProjectiles=game.dragonProjectiles.map(p=>{
+     const old=previousProjectiles.get(p.id),authX=Number(p.x)||0,authY=Number(p.y)||0;
+     return {...p,x:old?.x??authX,y:old?.y??authY,netTargetX:authX,netTargetY:authY};
+   });
+ }
  // REMOTE WAR ROUND TRANSITION SYNC
  // O host permanece como única autoridade. O cliente apenas reproduz a transição local.
  const remoteWarRoundChanged=!firstFrame&&state.mode==='war'&&Number(state.round)!==previousRound&&state.phase==='prep';
@@ -3882,7 +3892,7 @@ function syncFirebaseRoom(room){
    if(state.mode==='war'&&state.players.length===2&&(chosen1v1||bots.length))enforceTwoPlayerClanExclusivity(chosen1v1?.id||humans[0]?.id);
    renderPlayers();
    if(room.status==='clan'&&$('#clanScreen').style.display==='none')navigateScreen('clanScreen');
-   if(room.status==='clan')renderClanSelection();
+   if(room.status==='clan'){renderClanSelection();configureWarShopForClan();}
  }
  if((room.status==='playing'||room.status==='finished')&&room.game&&!NetworkAdapter.isHost)applyRemoteGame(room.game);
  handleHostCommands(room.commands);
@@ -4144,19 +4154,25 @@ function renderClanSelection(){
  if(status)status.textContent='Seu clã: '+clanLabel(clan)+(state.players.length===2?' • 1x1: clãs exclusivos':'');
 }
 $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=async()=>{
- const p=localPlayer();if(!p)return;
- const clan=normalizeClan(btn.dataset.clan);
- if(clanUnavailableForLocal(clan)){renderClanSelection();return}
+ const requestedClan=normalizeClan(btn.dataset.clan);
+ const before=localPlayer();if(!before)return;
+ // So existe bloqueio quando ha exatamente dois HUMANOS e o outro ja confirmou o cla.
+ // Sozinho na sala, ou jogando contra NPC, o jogador pode trocar livremente de cla;
+ // no 1x1 contra NPC o bot simplesmente acompanha com o cla oposto.
+ if(clanUnavailableForLocal(requestedClan)){renderClanSelection();return}
  if(NetworkAdapter.online){
    try{
-     const accepted=await NetworkAdapter.setClan(clan);
+     const accepted=await NetworkAdapter.setClan(requestedClan);
      if(!accepted){
        const status=$('#clanSelectionStatus');if(status)status.textContent='Esse clã já está ocupado no 1x1.';
        renderClanSelection();return;
      }
    }catch(err){console.error(err);return}
  }
- p.clan=clan;p.clanChosen=true;p.clanSelectedAt=Date.now();
+ // onValue pode reconstruir state.players durante o await acima. Rebusca o player
+ // atual antes de alterar a selecao visual para nunca escrever num objeto obsoleto.
+ const p=localPlayer();if(!p)return;
+ p.clan=requestedClan;p.clanChosen=true;p.clanSelectedAt=Date.now();
  if(state.players.length===2)enforceTwoPlayerClanExclusivity(p.id);
  renderClanSelection();renderPlayers();configureWarShopForClan();
 });
@@ -6839,16 +6855,24 @@ function loop(now){
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
    const clientNow=performance.now();
    for(const e of state.entities){
-     if(e.netTargetX==null)continue;
-     if(clientNow<Number(e.netExtrapolateUntil||0)){
-       const step=Math.min(dt,.034);
-       e.netTargetX+=(Number(e.netVelocityX)||0)*step;
-       e.netTargetY+=(Number(e.netVelocityY)||0)*step;
-     }
-     const dx=e.netTargetX-e.x,dy=e.netTargetY-e.y,d=Math.hypot(dx,dy);
-     if(d>260){e.x=e.netTargetX;e.y=e.netTargetY;continue}
-     const rate=d>80?28:20,smooth=1-Math.exp(-rate*dt);
-     e.x+=dx*smooth;e.y+=dy*smooth;
+     if(e.netToX==null)continue;
+     const duration=Math.max(1,Number(e.netInterpDuration)||120);
+     const alpha=clamp((clientNow-(Number(e.netInterpStartedAt)||clientNow))/duration,0,1);
+     // Linear on purpose: no overshoot, spring or predicted knockback correction.
+     e.x=(Number(e.netFromX)||0)+((Number(e.netToX)||0)-(Number(e.netFromX)||0))*alpha;
+     e.y=(Number(e.netFromY)||0)+((Number(e.netToY)||0)-(Number(e.netFromY)||0))*alpha;
+   }
+   // Projectiles keep moving at render FPS between Firebase updates. The target
+   // authority is advanced by the same velocity and the visible projectile converges
+   // slowly to it, so a correction never looks like a teleport backwards.
+   const projectileStep=Math.min(dt,.034),projectileSmooth=1-Math.exp(-9*dt);
+   for(const p of state.dragonProjectiles||[]){
+     const vx=Number(p.vx)||0,vy=Number(p.vy)||0;
+     p.x=(Number(p.x)||0)+vx*projectileStep;p.y=(Number(p.y)||0)+vy*projectileStep;
+     p.netTargetX=(Number(p.netTargetX)||0)+vx*projectileStep;p.netTargetY=(Number(p.netTargetY)||0)+vy*projectileStep;
+     const dx=p.netTargetX-p.x,dy=p.netTargetY-p.y;
+     if(dx*dx+dy*dy>240*240){p.x=p.netTargetX;p.y=p.netTargetY}
+     else{p.x+=dx*projectileSmooth;p.y+=dy*projectileSmooth}
    }
  }
  // Timers de golpe, knockback e remoção dos mortos continuam mesmo
@@ -6860,7 +6884,7 @@ function loop(now){
  updateGolemRockEffects(now);
  draw();
 
- const networkPushInterval=state.mode==='war'?100:120;
+ const networkPushInterval=state.mode==='war'?120:120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
    NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
