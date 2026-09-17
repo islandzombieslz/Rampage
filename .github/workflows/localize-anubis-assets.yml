@@ -33,7 +33,7 @@ jobs:
             url="$1"
             out="$2"
             echo "Downloading $out"
-            curl --http1.1 -fL               --retry 4 --retry-delay 2 --retry-all-errors               --connect-timeout 10 --max-time 75               -A "Mozilla/5.0 GitHub-Actions Rampage-Asset-Mirror"               "$url" -o "$out"
+            curl --http1.1 -fL               --retry 1 --retry-delay 1 --retry-all-errors               --connect-timeout 5 --max-time 20               -A "Mozilla/5.0 GitHub-Actions Rampage-Asset-Mirror"               "$url" -o "$out"
           }
 
           download 'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png' 'assets/egypt/anubis/card.png' &
