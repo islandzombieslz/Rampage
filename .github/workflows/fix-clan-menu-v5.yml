@@ -1,0 +1,89 @@
+name: Fix Clan Menu V5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix_clan_menu_v5.py'
+      - '.github/workflows/fix-clan-menu-v5.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-fix-clan-menu-v5
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Apply deterministic clan menu repair
+        run: python .github/fix_clan_menu_v5.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script>(.*?)</script>',html,re.S)
+          if not blocks:
+              raise SystemExit('No classic script block found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+
+      - name: Validate v5 clan menu
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            '/* CLAN MENU V5 DEFINITIVE LAYOUT 2026-09-17 */',
+            '#clanScreen #confirmClanBtn,',
+            'let clanDraft=null;',
+            'function resetClanDraft()',
+            "NetworkAdapter.confirmClan(selected)",
+            "$$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{",
+            "$('#confirmClanBtn').onclick=async()=>{",
+            "resetClanDraft();"
+          ]
+          missing=[x for x in required if x not in t]
+          if missing:
+              raise SystemExit('Missing v5 clan menu pieces: '+repr(missing))
+          exact={
+            'confirm HTML':t.count('id="confirmClanBtn"'),
+            'start HTML':t.count('id="startWarBtn"'),
+            'confirm handler':t.count("$('#confirmClanBtn').onclick=async()=>{"),
+            'card handler':t.count("$$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{"),
+            'render':t.count('function renderClanSelection(){'),
+            'draft':t.count('let clanDraft=null;'),
+          }
+          bad={k:v for k,v in exact.items() if v!=1}
+          if bad: raise SystemExit('Duplicate/missing clan structures: '+repr(bad))
+          print('V5 clan menu validation passed')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'No game change needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Fix clan menu layout and deterministic selection'
+          git push origin main
