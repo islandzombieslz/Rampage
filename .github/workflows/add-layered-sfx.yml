@@ -1,0 +1,94 @@
+name: Add Layered Game SFX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/add_layered_sfx.py'
+      - '.github/workflows/add-layered-sfx.yml'
+      - 'assets/audio/rampage-sfx.mp3'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-layered-sfx
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Refresh branch
+        run: git pull --rebase origin main
+
+      - name: Verify audio sprite
+        run: |
+          test -s assets/audio/rampage-sfx.mp3
+          test "$(stat -c%s assets/audio/rampage-sfx.mp3)" -gt 30000
+
+      - name: Apply layered SFX
+        run: python .github/add_layered_sfx.py
+
+      - name: Refresh persistent asset cache
+        run: python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          blocks=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',html,re.S)
+          if not blocks: raise SystemExit('No inline script found')
+          Path('/tmp/rampage-main.js').write_text(blocks[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage-main.js
+          node --check sw.js
+
+      - name: Validate SFX
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          required=[
+            "LAYERED SFX 2026-09-18",
+            "assets/audio/rampage-sfx.mp3",
+            "playSfxCue('transition',1,0,320);",
+            "b.classList.contains('plus')||b.classList.contains('minus')||b.id==='shopButton'",
+            "MELEE_FIGHT_SFX_TYPES",
+            "setLoopSfx('fight'",
+            "setLoopSfx('fire'",
+            "shakeSerial:Number(e.shakeSerial)||0",
+            "playWorldSfx('quake'",
+            "playWorldSfx('mage'",
+            "updateLayeredBattleSfx(now);",
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing SFX integration: '+repr(missing))
+          if 'assets/audio/rampage-sfx.mp3' not in sw:
+              raise SystemExit('SFX sprite missing from service worker')
+          print('Layered SFX validation passed.')
+          PY
+          git diff --check
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html sw.js
+          if git diff --cached --quiet; then
+            echo 'SFX integration already current.'
+            exit 0
+          fi
+          git commit -m 'Add layered menu and battle sound effects'
+          git push origin main
