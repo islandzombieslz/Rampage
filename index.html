@@ -3621,7 +3621,9 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
-     const r=await fetch(src,{cache:'force-cache'});
+     const probeUrl=new URL(src,location.href);
+     const crossOrigin=probeUrl.origin!==location.origin;
+     const r=await fetch(src,{cache:'force-cache',mode:crossOrigin?'cors':'same-origin'});
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
      const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):gifCycleDurationMs(buf);
