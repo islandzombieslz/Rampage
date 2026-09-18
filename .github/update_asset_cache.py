@@ -59,7 +59,9 @@ function assetKey(requestUrl){
    const relative=decodeURIComponent(url.pathname.slice(scope.pathname.length));
    if(Object.prototype.hasOwnProperty.call(ASSET_REVISIONS,relative))return relative;
  }
- const absolute=url.href;
+ const canonical=new URL(url.href);
+ canonical.searchParams.delete('gifStart');
+ const absolute=canonical.href;
  if(Object.prototype.hasOwnProperty.call(ASSET_REVISIONS,absolute))return absolute;
  return null;
 }
@@ -75,6 +77,8 @@ self.addEventListener('activate',event=>{
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
  const key=assetKey(event.request.url);if(!key)return;
+ // Duration probes need a readable CORS response; normal image requests stay cached.
+ if(/^https?:\/\//i.test(key)&&event.request.mode==='cors')return;
  event.respondWith((async()=>{
    const cache=await caches.open(CACHE_NAME);
    const lookup=cacheRequest(key);
