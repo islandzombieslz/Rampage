@@ -38,7 +38,25 @@ replace_once(
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
 #bootIntro{position:absolute;inset:0;z-index:2;background:#000;overflow:hidden;opacity:1;transition:opacity .55s ease;pointer-events:auto}
 #bootIntro.fade-out{opacity:0;pointer-events:none}
-#bootIntro iframe{position:absolute;left:50%;top:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;background:#000}""",
+#bootIntro iframe{position:absolute;left:50%;top:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;background:#000}
+@media (orientation:portrait){
+  #bootIntro{
+    position:fixed;
+    inset:auto;
+    left:50%;
+    top:50%;
+    width:100vh;
+    height:100vw;
+    transform:translate(-50%,-50%) rotate(90deg);
+    transform-origin:center center;
+  }
+  #bootIntro iframe{
+    width:100%;
+    height:100%;
+    min-width:0;
+    min-height:0;
+  }
+}""",
 'Boot intro CSS'
 )
 
