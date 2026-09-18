@@ -74,11 +74,17 @@ anubis_assets="""  // Annubis do Egito — clã Egito\n  anubisIdle:'assets/egyp
 insert_before(asset_anchor,anubis_assets,'Anubis assets')
 
 # ---------- Cost / attack constants ----------
-replace_once(
-    "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});",
-    "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550,anubis:450});",
-    'Anubis cost'
-)
+desired_costs="const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450});"
+if desired_costs not in t:
+    candidates=[
+        "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});",
+        "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550,anubis:450});",
+        "const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550});",
+    ]
+    found=[x for x in candidates if x in t]
+    if len(found)!=1:
+        raise SystemExit(f'Anubis cost: expected exactly 1 migration anchor, found {len(found)}')
+    t=t.replace(found[0],desired_costs,1)
 const_anchor="""const DRAGON_BURN_DURATION_MS=6000;\nconst gifRuntime=new Map();"""
 const_new="""const DRAGON_BURN_DURATION_MS=6000;\n\n// ANNUBIS DO EGITO: híbrido terrestre. Corpo a corpo = normal da Guerreira Marrom;\n// disparo = projétil teleguiado do Dragão, +10 de dano e sem queimadura.\nlet ANUBIS_MELEE_DURATION=1800;\nlet ANUBIS_RANGED_DURATION=1800;\nconst ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;\nconst ANUBIS_PROJECTILE_SPEED=DRAGON_FIREBALL_SPEED;\nconst gifRuntime=new Map();"""
 replace_once(const_anchor,const_new,'Anubis combat constants')

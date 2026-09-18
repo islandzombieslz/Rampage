@@ -54,8 +54,8 @@ jobs:
           from pathlib import Path
           t=Path('index.html').read_text(encoding='utf-8')
           required=[
-            "const renderX=e.type==='naja'?sx+14*zoom:sx;",
-            "const renderY=e.type==='naja'?sy+16*zoom:sy;",
+            "const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;",
+            "const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;",
             "el.style.left=renderX+'px'",
             '.entity-visual.naja-visual .entity-body{',
             'left:-8px;',
@@ -63,15 +63,22 @@ jobs:
             'return phase!==null;',
             'e.najaShieldSpecialUsed=false;',
             'const najaNeedsSpecial=!!e.najaShieldSpecialPending||(Number(e.najaNormalCount)||0)>=4;',
-            'warrior:65',
-            'Comprar Guerreiro por 65 gemas',
-            'Comprar Guerreiro do Egito por 65 gemas',
-            'e.attackCooldown=.50;'
+            'warrior:90',
+            'king:500',
+            'Comprar Guerreiro por 90 gemas',
+            'Comprar Guerreiro do Egito por 90 gemas',
+            'Comprar Rei Guerreiro por 500 gemas',
+            'e.attackCooldown=.50;',
+            'applyCombatHit(target,e,50,{',
+            'applyCombatHit(t,e,80,{',
+            'const MAGE_SPECIAL_HEAL=50;',
+            'const WAR_SPECIAL_OPENING_INVULN_MS=2000;',
+            'if(warSpecialOpeningInvulnerable(target))return;'
           ]
           missing=[x for x in required if x not in t]
           if missing:
               raise SystemExit('Missing Naja/warrior tuning: '+repr(missing))
-          print('Naja render position and warrior balance validation passed')
+          print('Naja/Anubis render and war balance validation passed')
           PY
           git diff --check
 
@@ -84,5 +91,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git commit -m 'Slow warrior attacks raise cost and fix Naja render position'
+          git commit -m 'Rebalance war units and special protection'
           git push origin main

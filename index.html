@@ -2836,13 +2836,13 @@ window.dispatchEvent(new Event('firebase-ready'));
     </button>
     <div id="shop" aria-label="Loja de tropas">
       <div class="shop-sprite-grid clan-shop" data-clan-shop="warriors">
-        <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 65 gemas" title="Guerreiro — 65 gemas">
+        <button id="buyWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro por 90 gemas" title="Guerreiro — 90 gemas">
           <img src="assets/ui/war-shop/card-guerreiros.png" alt="Guerreiro" draggable="false" decoding="async">
         </button>
         <button id="buyBrownWarrior" class="shop-sprite-card" aria-label="Comprar Guerreira Marrom por 450 gemas" title="Guerreira Marrom — 450 gemas">
           <img src="assets/ui/war-shop/card-guerreira-marrom.png" alt="Guerreira Marrom" draggable="false" decoding="async">
         </button>
-        <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 400 gemas" title="Rei Guerreiro — 400 gemas">
+        <button id="buyKing" class="shop-sprite-card" aria-label="Comprar Rei Guerreiro por 500 gemas" title="Rei Guerreiro — 500 gemas">
           <img src="assets/king/card.png" alt="Rei Guerreiro" draggable="false" decoding="async">
         </button>
         <button id="buyMage" class="shop-sprite-card" aria-label="Comprar Mago por 550 gemas" title="Mago — 550 gemas">
@@ -2856,7 +2856,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
       </div>
       <div class="shop-sprite-grid clan-shop" data-clan-shop="egypt" hidden>
-        <button id="buyEgyptWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro do Egito por 65 gemas" title="Guerreiro do Egito — 65 gemas">
+        <button id="buyEgyptWarrior" class="shop-sprite-card" aria-label="Comprar Guerreiro do Egito por 90 gemas" title="Guerreiro do Egito — 90 gemas">
           <img src="assets/egypt/warrior/card.png" alt="Guerreiros do Egito" draggable="false" decoding="async">
         </button>
         <button id="buyEgyptMage" class="shop-sprite-card" aria-label="Comprar Mago do Egito por 550 gemas" title="Mago do Egito — 550 gemas">
@@ -3322,7 +3322,7 @@ const WAR_TROOP_SPEED_MULTIPLIER=.50;
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550,anubis:450});
+const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -3368,9 +3368,10 @@ const MAGE_DAMAGE_DELAY=1000;
 const MAGE_SPECIAL_COOLDOWN=10;
 const MAGE_SPECIAL_RADIUS=215;
 const MAGE_SPECIAL_DAMAGE=100;
-const MAGE_SPECIAL_HEAL=30;
+const MAGE_SPECIAL_HEAL=50;
 const KING_SPECIAL_RADIUS=MAGE_SPECIAL_RADIUS;
 const KING_SPECIAL_DAMAGE=55;
+const WAR_SPECIAL_OPENING_INVULN_MS=2000;
 const KING_POWER_DELAY_MS=1000;
 
 // DRAGON WARRIOR SYSTEM
@@ -5003,7 +5004,7 @@ function spawnGolem(x,y,team,color){
  const e=entityBase('golem',x,y,team,color);
  e.hp=e.maxHp=600;
  e.shield=e.maxShield=200;
- e.damage=40;
+ e.damage=50;
  e.r=39;
  // Mantém a velocidade-base própria; no modo Guerra recebe -50% e um redutor extra leve.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:92;
@@ -5096,6 +5097,19 @@ function entityHasActiveSpecial(e,now=performance.now()){
  return false;
 }
 
+function warSpecialOpeningInvulnerable(e,now=performance.now()){
+ if(!e?.alive)return false;
+ if(e.type==='king'){
+   const p=e.pendingKingSpecial;
+   return !!p&&Number(p.endAt)>now&&now<Number(p.startedAt||0)+WAR_SPECIAL_OPENING_INVULN_MS;
+ }
+ if(e.type==='mage'&&e.clan==='warriors'){
+   const p=e.pendingMageAttack;
+   return p?.kind==='special'&&Number(p.endAt)>now&&now<Number(p.startedAt||0)+WAR_SPECIAL_OPENING_INVULN_MS;
+ }
+ return false;
+}
+
 function najaSpecialPhase(e,now=performance.now()){
  const p=e?.type==='naja'?e.pendingNajaAttack:null;
  if(!p||p.kind!=='special'||Number(p.endAt)<=now)return null;
@@ -5114,6 +5128,8 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
  // A Naja é invulnerável enquanto inicia a escavação e enquanto está subterrânea.
  if(target.type==='naja'&&najaIsInvulnerable(target))return;
+ // Rei e Mago Guerreiro ignoram dano e empurrão nos 2 primeiros segundos do especial.
+ if(warSpecialOpeningInvulnerable(target))return;
  if(!options.allowFlying&&target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'))return;
  const beforeShield=Math.max(0,Number(target.shield)||0);
  const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);
@@ -5621,7 +5637,7 @@ function resolveGolemImpact(e,pending){
    forEachWarSpatialCandidate(e.x-radius,e.y-radius,e.x+radius,e.y+radius,t=>{
      if(!isRealCombatTarget(t)||t===e||t.team===e.team)return;
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy>r2)return;
-     applyCombatHit(t,e,70,{
+     applyCombatHit(t,e,80,{
        knockForce:1120,
        knockTime:.50,
        tilt:34,
@@ -5633,7 +5649,7 @@ function resolveGolemImpact(e,pending){
    if(!e.alive)return;
    const target=warEntityById.get(pending.targetId)||state.entities.find(t=>t.id===pending.targetId&&isRealCombatTarget(t));
    if(target && isRealCombatTarget(target) && target.team!==e.team && dist(e,target)<=112){
-     applyCombatHit(target,e,40,{
+     applyCombatHit(target,e,50,{
        knockForce:760,
        knockTime:.40,
        tilt:24,

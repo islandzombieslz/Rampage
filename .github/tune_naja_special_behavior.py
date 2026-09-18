@@ -39,14 +39,23 @@ replace_one_of(
 old_render = """   const visualTop=sy-dragonLift*zoom;
    if(el._screenX!==sx){el._screenX=sx;el.style.left=sx+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}"""
-new_render = """   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
+naja_only_render = """   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
    // Assim idle, caminhada, ataques, especiais e barras se movem juntos.
    const renderX=e.type==='naja'?sx+14*zoom:sx;
    const renderY=e.type==='naja'?sy+16*zoom:sy;
    const visualTop=renderY-dragonLift*zoom;
    if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}"""
-replace_one_of([old_render], new_render, 'Naja real render position')
+new_render = """   // Naja e Annubis usam offset no CONTAINER REAL do render.
+   // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
+   // ao espelhar, a compensacao tambem precisa espelhar.
+   const anubisFace=(e.facing||1)>=0?1:-1;
+   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
+   const visualTop=renderY-dragonLift*zoom;
+   if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
+   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}"""
+replace_one_of([old_render,naja_only_render], new_render, 'Naja/Anubis real render position')
 
 # 3) Estado do especial unico disparado pelo rompimento do escudo.
 replace_one_of(
@@ -109,8 +118,8 @@ required = [
     "return phase!==null;",
     "left:-8px;",
     "top:-8px;",
-    "const renderX=e.type==='naja'?sx+14*zoom:sx;",
-    "const renderY=e.type==='naja'?sy+16*zoom:sy;",
+    "const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;",
+    "const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;",
     "el.style.left=renderX+'px'",
     "e.najaShieldSpecialUsed=false;",
     "e.najaShieldSpecialPending=false;",
