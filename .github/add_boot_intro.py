@@ -198,3 +198,5 @@ missing=[x for x in required if x not in t]
 if missing:
     raise SystemExit('Missing boot intro/menu SFX behavior: '+repr(missing))
 print('Alpha boot intro and transition sound rules applied.')
+
+# retrigger after workflow race fix
