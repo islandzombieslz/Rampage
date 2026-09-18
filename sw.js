@@ -29,6 +29,7 @@ self.addEventListener('activate',event=>{
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
  const key=assetKey(event.request.url);if(!key)return;
+ if(/^https?:\/\//i.test(key)&&event.request.mode==='cors')return;
  event.respondWith((async()=>{
    const cache=await caches.open(CACHE_NAME);
    const lookup=cacheRequest(key);
