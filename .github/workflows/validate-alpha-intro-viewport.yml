@@ -1,0 +1,49 @@
+name: Validate Alpha Intro Viewport
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - '.github/add_boot_intro.py'
+      - '.github/workflows/validate-alpha-intro-viewport.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Validate intro viewport geometry
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'function syncBootIntroViewport(){',
+            'window.visualViewport',
+            "const portrait=vh>vw;",
+            "intro.style.width=(portrait?vh:vw)+'px';",
+            "intro.style.height=(portrait?vw:vh)+'px';",
+            "rotate('+(portrait?'90deg':'0deg')+')",
+            "window.addEventListener('pageshow',sync",
+            "document.addEventListener('visibilitychange',sync",
+            "vv?.addEventListener('resize',sync",
+            'bindBootIntroViewport();',
+          ]
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit('Missing intro viewport fix: '+repr(missing))
+          if '@media (orientation:portrait){\n  #bootIntro{' in t:
+              raise SystemExit('Old orientation-media intro sizing still present')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts
+          Path('/tmp/rampage.js').write_text(scripts[-1],encoding='utf-8')
+          print('Alpha intro viewport geometry validated.')
+          PY
+          node --check /tmp/rampage.js

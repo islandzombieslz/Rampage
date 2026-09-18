@@ -58,6 +58,10 @@ jobs:
             "bootIntroCommand(frame,'setVolume',[100])",
             'await bootIntroDone;',
             'startBootIntro();',
+            'function syncBootIntroViewport(){',
+            'window.visualViewport',
+            "window.addEventListener('pageshow',sync",
+            "document.addEventListener('visibilitychange',sync",
             "current!=='menuScreen'",
             'screenWithFade(id,transitionSound)',
           ]

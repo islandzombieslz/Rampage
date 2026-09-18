@@ -36,26 +36,33 @@ replace_once(
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
-#bootIntro{position:absolute;inset:0;z-index:2;background:#000;overflow:hidden;opacity:1;transition:opacity .55s ease;pointer-events:auto}
+#bootIntro{
+  position:fixed;
+  inset:auto;
+  left:50%;
+  top:50%;
+  width:100vw;
+  height:100vh;
+  z-index:2;
+  background:#000;
+  overflow:hidden;
+  opacity:1;
+  transform:translate(-50%,-50%) rotate(0deg);
+  transform-origin:center center;
+  transition:opacity .55s ease;
+  pointer-events:auto;
+}
 #bootIntro.fade-out{opacity:0;pointer-events:none}
-#bootIntro iframe{position:absolute;left:50%;top:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;background:#000}
-@media (orientation:portrait){
-  #bootIntro{
-    position:fixed;
-    inset:auto;
-    left:50%;
-    top:50%;
-    width:100vh;
-    height:100vw;
-    transform:translate(-50%,-50%) rotate(90deg);
-    transform-origin:center center;
-  }
-  #bootIntro iframe{
-    width:100%;
-    height:100%;
-    min-width:0;
-    min-height:0;
-  }
+#bootIntro iframe{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  border:0;
+  pointer-events:none;
+  background:#000;
 }""",
 'Boot intro CSS'
 )
@@ -83,8 +90,47 @@ boot_intro=r'''
 const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
 const BOOT_INTRO_PLAY_MS=12400;
 let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
+let bootIntroViewportCleanup=()=>{};
 let resolveBootIntroDone=()=>{};
 const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
+
+function syncBootIntroViewport(){
+ const intro=document.getElementById('bootIntro');
+ if(!intro)return;
+ const vv=window.visualViewport;
+ const vw=Math.max(1,Math.round(vv?.width||window.innerWidth||document.documentElement.clientWidth||1));
+ const vh=Math.max(1,Math.round(vv?.height||window.innerHeight||document.documentElement.clientHeight||1));
+ const cx=Math.round((vv?.offsetLeft||0)+vw*.5);
+ const cy=Math.round((vv?.offsetTop||0)+vh*.5);
+ const portrait=vh>vw;
+ intro.style.left=cx+'px';
+ intro.style.top=cy+'px';
+ intro.style.width=(portrait?vh:vw)+'px';
+ intro.style.height=(portrait?vw:vh)+'px';
+ intro.style.transform='translate(-50%,-50%) rotate('+(portrait?'90deg':'0deg')+')';
+}
+function bindBootIntroViewport(){
+ const sync=()=>requestAnimationFrame(syncBootIntroViewport);
+ const vv=window.visualViewport;
+ window.addEventListener('resize',sync,{passive:true});
+ window.addEventListener('orientationchange',sync,{passive:true});
+ window.addEventListener('pageshow',sync,{passive:true});
+ document.addEventListener('visibilitychange',sync,{passive:true});
+ vv?.addEventListener('resize',sync,{passive:true});
+ vv?.addEventListener('scroll',sync,{passive:true});
+ bootIntroViewportCleanup=()=>{
+   window.removeEventListener('resize',sync);
+   window.removeEventListener('orientationchange',sync);
+   window.removeEventListener('pageshow',sync);
+   document.removeEventListener('visibilitychange',sync);
+   vv?.removeEventListener('resize',sync);
+   vv?.removeEventListener('scroll',sync);
+ };
+ syncBootIntroViewport();
+ setTimeout(syncBootIntroViewport,50);
+ setTimeout(syncBootIntroViewport,250);
+ setTimeout(syncBootIntroViewport,900);
+}
 
 function bootIntroCommand(frame,func,args=[]){
  try{
@@ -100,6 +146,7 @@ function finishBootIntro(){
  if(!intro){resolveBootIntroDone();return}
  intro.classList.add('fade-out');
  setTimeout(()=>{
+   bootIntroViewportCleanup();
    intro.remove();
    resolveBootIntroDone();
  },560);
@@ -107,6 +154,7 @@ function finishBootIntro(){
 function startBootIntro(){
  const intro=document.getElementById('bootIntro');
  if(!intro){finishBootIntro();return}
+ bindBootIntroViewport();
  const frame=document.createElement('iframe');
  frame.id='bootIntroFrame';
  frame.title='Introdução - Alpha (Mestre da Guerra)';
