@@ -124,7 +124,7 @@ replace_once(
     'Anubis entity state'
 )
 spawn_anchor="""function spawnDragon(x,y,team,color){"""
-spawn_anubis="""function spawnAnubis(x,y,team,color){\n const e=entityBase('anubis',x,y,team,color);\n e.clan='egypt';\n // Exatamente a mesma vida, escudo e velocidade-base do Dragão Guerreiro.\n e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;\n e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;\n e.attackCooldown=0;e.anubisAttackSerial=0;e.anubisNextShotAt=0;e.pendingAnubisAttack=null;\n state.entities.push(e);return e;\n}\n\n"""
+spawn_anubis="""function spawnAnubis(x,y,team,color){\n const e=entityBase('anubis',x,y,team,color);\n e.clan='egypt';\n // Exatamente a mesma vida, escudo e velocidade-base do Dragão Guerreiro.\n e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;\n e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;\n e.attackCooldown=0;e.anubisAttackSerial=0;e.anubisNextShotAt=0;e.pendingAnubisAttack=null;\n state.entities.push(e);return e;\n}\n\n"""
 insert_before(spawn_anchor,spawn_anubis,'spawnAnubis')
 
 # ---------- Combat target type ----------
