@@ -71,7 +71,7 @@ jobs:
           ]
           present=[x for x in forbidden if x in t]
           assert not present, 'Old Brown Warrior tuning remains: '+repr(present)
-          assert t.count('https://i.postimg.cc/')==2, 'External arena asset count changed'
+          assert t.count('https://i.postimg.cc/')==0, 'Unexpected runtime Postimg dependency returned'
           print('Brown Warrior tuning validation passed.')
           PY
 
