@@ -36,39 +36,36 @@ replace_once(
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
-#bootIntro{position:absolute;inset:0;z-index:2;background:#000;overflow:hidden;opacity:1;transition:opacity .55s ease;pointer-events:auto}
+#bootIntro{
+  position:fixed;
+  left:50%;
+  top:50%;
+  width:100vw;
+  height:100vh;
+  z-index:2;
+  background:#000;
+  overflow:hidden;
+  opacity:1;
+  transform:translate(-50%,-50%);
+  transform-origin:center center;
+  transition:opacity .55s ease;
+  pointer-events:auto;
+}
 #bootIntro.fade-out{opacity:0;pointer-events:none}
-/* A intro fica totalmente isolada do viewport do jogo. O iframe 16:9 usa cover.
-   dvh/dvw acompanham corretamente a barra do Chrome ao reabrir a aba. */
+/* Intro sempre horizontal: em portrait a camada inteira é girada,
+   sem alterar a viewport do jogo. */
 #bootIntro iframe{
   position:absolute;
   left:50%;
   top:50%;
-  width:100vw;
-  height:56.25vw;
-  min-width:177.78vh;
-  min-height:100vh;
-  width:100dvw;
-  height:56.25dvw;
-  min-width:177.78dvh;
-  min-height:100dvh;
+  width:177.78vh;
+  height:100vh;
+  min-width:100vw;
+  min-height:56.25vw;
   transform:translate(-50%,-50%);
   border:0;
   pointer-events:none;
   background:#000;
-}
-@media (orientation:portrait) and (max-width:900px){
-  #bootIntro iframe{
-    width:100vh;
-    height:56.25vh;
-    min-width:177.78vw;
-    min-height:100vw;
-    width:100dvh;
-    height:56.25dvh;
-    min-width:177.78dvw;
-    min-height:100dvw;
-    transform:translate(-50%,-50%) rotate(90deg);
-  }
 }""",
 'Boot intro CSS'
 )
@@ -96,8 +93,48 @@ boot_intro=r'''
 const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
 const BOOT_INTRO_PLAY_MS=12400;
 let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
+let bootIntroViewportCleanup=()=>{};
 let resolveBootIntroDone=()=>{};
 const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
+
+function syncBootIntroLandscape(){
+ const intro=document.getElementById('bootIntro');
+ if(!intro)return;
+ const rawW=Math.max(1,window.innerWidth||document.documentElement.clientWidth||1);
+ const rawH=Math.max(1,window.innerHeight||document.documentElement.clientHeight||1);
+ const portrait=rawH>rawW;
+ const viewW=portrait?rawH:rawW;
+ const viewH=portrait?rawW:rawH;
+ intro.style.left='50%';
+ intro.style.top='50%';
+ intro.style.width=viewW+'px';
+ intro.style.height=viewH+'px';
+ intro.style.transform='translate(-50%,-50%) rotate('+(portrait?'90deg':'0deg')+')';
+ const frame=intro.querySelector('iframe');
+ if(frame){
+   const coverW=Math.max(viewW,viewH*(16/9));
+   const coverH=coverW*(9/16);
+   frame.style.left='50%';
+   frame.style.top='50%';
+   frame.style.width=coverW+'px';
+   frame.style.height=coverH+'px';
+   frame.style.transform='translate(-50%,-50%)';
+ }
+}
+function bindBootIntroLandscape(){
+ const sync=()=>requestAnimationFrame(syncBootIntroLandscape);
+ window.addEventListener('resize',sync,{passive:true});
+ window.addEventListener('orientationchange',sync,{passive:true});
+ window.screen.orientation?.addEventListener?.('change',sync);
+ bootIntroViewportCleanup=()=>{
+   window.removeEventListener('resize',sync);
+   window.removeEventListener('orientationchange',sync);
+   window.screen.orientation?.removeEventListener?.('change',sync);
+ };
+ syncBootIntroLandscape();
+ setTimeout(syncBootIntroLandscape,80);
+ setTimeout(syncBootIntroLandscape,350);
+}
 
 function bootIntroCommand(frame,func,args=[]){
  try{
@@ -110,9 +147,10 @@ function finishBootIntro(){
  clearTimeout(bootIntroTimer);
  clearTimeout(bootIntroFallbackTimer);
  const intro=document.getElementById('bootIntro');
- if(!intro){resolveBootIntroDone();return}
+ if(!intro){bootIntroViewportCleanup();resolveBootIntroDone();return}
  intro.classList.add('fade-out');
  setTimeout(()=>{
+   bootIntroViewportCleanup();
    intro.remove();
    resolveBootIntroDone();
  },560);
@@ -120,6 +158,7 @@ function finishBootIntro(){
 function startBootIntro(){
  const intro=document.getElementById('bootIntro');
  if(!intro){finishBootIntro();return}
+ bindBootIntroLandscape();
  const frame=document.createElement('iframe');
  frame.id='bootIntroFrame';
  frame.title='Introdução - Alpha (Mestre da Guerra)';
@@ -128,8 +167,6 @@ function startBootIntro(){
  frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
  frame.setAttribute('aria-hidden','true');
  frame.addEventListener('load',()=>{
-   // Reforça áudio 100% + reprodução. A política do navegador ainda pode vetar
-   // autoplay com som em uma primeira visita sem interação do usuário.
    const kick=()=>{
      bootIntroCommand(frame,'unMute');
      bootIntroCommand(frame,'setVolume',[100]);
@@ -143,7 +180,8 @@ function startBootIntro(){
  frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
    '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
  intro.appendChild(frame);
- // Se YouTube estiver indisponível, nunca prende o usuário na tela preta.
+ syncBootIntroLandscape();
+ try{requestGameFullscreenLandscape().catch(()=>{})}catch(_){}
  bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
 }
 '''
@@ -222,15 +260,24 @@ required=[
     "bootIntroCommand(frame,'setVolume',[100])",
     "await bootIntroDone;",
     "startBootIntro();",
-    "width:100dvw;",
-    "width:100dvh;",
-    "rotate(90deg)",
+    "function syncBootIntroLandscape(){",
+    "const viewW=portrait?rawH:rawW;",
+    "const coverW=Math.max(viewW,viewH*(16/9));",
+    "bindBootIntroLandscape();",
+    "syncBootIntroLandscape();",
+    "width:100vw;",
+    "height:100vh;",
     "current!=='menuScreen'",
     "screenWithFade(id,transitionSound)",
 ]
 missing=[x for x in required if x not in t]
 if missing:
     raise SystemExit('Missing boot intro/menu SFX behavior: '+repr(missing))
+intro=t[t.index("/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */"):t.index('function bootReadSavedManifest')]
+forbidden=['window.visualViewport','applyLandscapeFallback()','try{resize()}']
+bad=[x for x in forbidden if x in intro]
+if bad:
+    raise SystemExit('Boot intro must stay isolated from game viewport: '+repr(bad))
 print('Alpha boot intro and transition sound rules applied.')
 
 # retrigger after workflow race fix

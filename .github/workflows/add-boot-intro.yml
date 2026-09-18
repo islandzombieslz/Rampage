@@ -58,19 +58,26 @@ jobs:
             "bootIntroCommand(frame,'setVolume',[100])",
             'await bootIntroDone;',
             'startBootIntro();',
-            '#bootIntro{position:absolute;inset:0;',
-            'width:100dvw;',
-            'width:100dvh;',
-            'rotate(90deg)',
+            '#bootIntro{',
+            'position:fixed;',
+            'width:100vw;',
+            'height:100vh;',
+            'function syncBootIntroLandscape(){',
+            'const viewW=portrait?rawH:rawW;',
+            'const coverW=Math.max(viewW,viewH*(16/9));',
+            'bindBootIntroLandscape();',
+            'syncBootIntroLandscape();',
             "current!=='menuScreen'",
             'screenWithFade(id,transitionSound)',
           ]
           missing=[x for x in required if x not in t]
-          if missing: raise SystemExit('Intro validation missing: '+repr(missing))
+          if missing:
+              raise SystemExit('Intro validation missing: '+repr(missing))
           intro=t[t.index("/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */"):t.index('function bootReadSavedManifest')]
-          forbidden=['syncBootIntroViewport','bindBootIntroViewport','bootIntroViewportCleanup','applyLandscapeFallback()','try{resize()}','intro.style.width','intro.style.height']
+          forbidden=['window.visualViewport','applyLandscapeFallback()','try{resize()}']
           bad=[x for x in forbidden if x in intro]
-          if bad: raise SystemExit('Intro must not alter game viewport: '+repr(bad))
+          if bad:
+              raise SystemExit('Intro must stay isolated from game viewport: '+repr(bad))
           print('Alpha boot intro validation passed.')
           PY
           git diff --check
@@ -85,5 +92,5 @@ jobs:
             echo 'Boot intro already current.'
             exit 0
           fi
-          git commit -m 'Add Alpha intro before loading screen'
+          git commit -m 'Keep Alpha intro horizontal'
           git push origin main
