@@ -29,9 +29,6 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
 
-      - name: Vendor Isis assets into the repository
-        run: python .github/vendor_isis_assets.py
-
       - name: Validate Isis and War unit rules
         run: python .github/rebalance_war_units_v3.py
 
