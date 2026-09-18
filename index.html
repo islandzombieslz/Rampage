@@ -3223,61 +3223,6 @@ function setBootProgress(value){
  if(text)text.textContent=pct+'%';if(bar)bar.style.width=pct+'%';
 }
 function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');if(el)el.textContent=text}
-
-/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */
-const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
-const BOOT_INTRO_PLAY_MS=12400;
-let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
-let resolveBootIntroDone=()=>{};
-const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
-
-function bootIntroCommand(frame,func,args=[]){
- try{
-   frame?.contentWindow?.postMessage(JSON.stringify({event:'command',func,args}),'*');
- }catch(_){}
-}
-function finishBootIntro(){
- if(bootIntroFinished)return;
- bootIntroFinished=true;
- clearTimeout(bootIntroTimer);
- clearTimeout(bootIntroFallbackTimer);
- const intro=document.getElementById('bootIntro');
- if(!intro){resolveBootIntroDone();return}
- intro.classList.add('fade-out');
- setTimeout(()=>{
-   intro.remove();
-   resolveBootIntroDone();
- },560);
-}
-function startBootIntro(){
- const intro=document.getElementById('bootIntro');
- if(!intro){finishBootIntro();return}
- const frame=document.createElement('iframe');
- frame.id='bootIntroFrame';
- frame.title='Introdução - Alpha (Mestre da Guerra)';
- frame.tabIndex=-1;
- frame.setAttribute('allow','autoplay; encrypted-media');
- frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
- frame.setAttribute('aria-hidden','true');
- frame.addEventListener('load',()=>{
-   // Reforça áudio 100% + reprodução. A política do navegador ainda pode vetar
-   // autoplay com som em uma primeira visita sem interação do usuário.
-   const kick=()=>{
-     bootIntroCommand(frame,'unMute');
-     bootIntroCommand(frame,'setVolume',[100]);
-     bootIntroCommand(frame,'playVideo');
-   };
-   kick();setTimeout(kick,260);setTimeout(kick,900);
-   clearTimeout(bootIntroTimer);
-   bootIntroTimer=setTimeout(finishBootIntro,BOOT_INTRO_PLAY_MS);
- },{once:true});
- const origin=encodeURIComponent(location.origin);
- frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
-   '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
- intro.appendChild(frame);
- // Se YouTube estiver indisponível, nunca prende o usuário na tela preta.
- bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
-}
 function bootReadSavedManifest(){
  try{return JSON.parse(localStorage.getItem(BOOT_MANIFEST_KEY)||'{}')||{}}catch(_){return {}}
 }
@@ -3375,13 +3320,9 @@ async function runBootLoader(){
    assetWarning.textContent=`${failed} recurso(s) não puderam ser atualizados.`;
    assetWarning.classList.add('show');
  }
- // O carregamento nunca pausa: apenas seguramos a SAÍDA visual até a intro terminar.
- await bootIntroDone;
- await new Promise(resolve=>setTimeout(resolve,220));
  document.body.classList.remove('booting');
  const loader=document.getElementById('bootLoader');
  if(loader){loader.classList.add('done');setTimeout(()=>loader.remove(),120)}
- playDesiredMusic({restart:true});
 }
 
 const state = {
