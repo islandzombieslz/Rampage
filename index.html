@@ -3069,7 +3069,14 @@ const NetworkAdapter = {
           if(key==='players'&&!s.exists()){this.removeRoomIfEmpty(code).catch(()=>{});return}
           // O host acabou de gerar esse snapshot; processá-lo outra vez localmente
           // só repete trabalho de sala/DOM sem mudar a autoridade do jogo.
-          if(key==='game'&&this.isHost)return;
+          if(key==='game'){
+            if(this.isHost)return;
+            // /game é o caminho quente (cerca de 8 snapshots/s). Antes ele passava
+            // por syncFirebaseRoom e reprocessava settings, botões e lobby inteiro
+            // em cada pacote. Agora aplica somente o snapshot do combate.
+            if(this.roomCache.game)applyRemoteGame(this.roomCache.game);
+            return;
+          }
           syncFirebaseRoom(this.roomCache);
         });
         this.roomUnsubscribes.push(unsubscribe);
@@ -3571,10 +3578,10 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  return total;
 }
 
-// Pré-carrega TODOS os GIFs do jogo. Quando CORS permite o fetch, guardamos
-// o arquivo em Blob. Cada vez que uma animação precisa começar, uma Object URL
-// NOVA é criada: o navegador é obrigado a iniciar no quadro 0, em vez de
-// reaproveitar um GIF oculto/cacheado que já estava no meio.
+// Mede previamente a duração dos GIFs de ataque, mas NÃO mantém cópias Blob na memória.
+// O cache persistente do Service Worker conserva os bytes originais. Ao reiniciar um GIF,
+// usamos uma URL única que o SW resolve para o mesmo arquivo cacheado, iniciando no quadro 0
+// sem duplicar centenas de MB no heap e sem alterar qualidade, frames ou resolução.
 (async function preloadAllGameGifs(){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
@@ -3587,7 +3594,11 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
      const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):gifCycleDurationMs(buf);
-     gifRuntime.set(key,{blob:new Blob([buf],{type:'image/gif'}),duration});
+     // WAR MEMORY JANK FIX 2026-09-18
+     // Mantemos apenas a duração. Guardar Blob de todos os ataques segurava ~178 MB
+     // de GIF comprimido no heap durante a partida. O Service Worker já mantém os
+     // mesmos bytes originais no cache persistente, sem qualquer perda de qualidade.
+     gifRuntime.set(key,{duration});
      if(key==='magePower')MAGE_NORMAL_DURATION=validGifDuration(duration,MAGE_NORMAL_DURATION);
      if(key==='mageSpecial')MAGE_SPECIAL_MALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_MALE_DURATION);
      if(key==='femaleMageSpecial')MAGE_SPECIAL_FEMALE_DURATION=validGifDuration(duration,MAGE_SPECIAL_FEMALE_DURATION);
@@ -4213,13 +4224,16 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 
 function appendRemotePositionSample(old,x,y,timestamp){
- const history=Array.isArray(old?.netHistory)?old.netHistory.slice(-(REMOTE_WAR_HISTORY_LIMIT-1)):[];
+ // Reutiliza o buffer curto da própria entidade: evita duas novas arrays por
+ // unidade a cada snapshot sem mudar um único ponto da interpolação.
+ const history=Array.isArray(old?.netHistory)?old.netHistory:[];
  const nx=Number(x)||0,ny=Number(y)||0,nt=Number(timestamp)||performance.now();
+ while(history.length>=REMOTE_WAR_HISTORY_LIMIT)history.shift();
  const last=history[history.length-1];
  if(last&&Math.abs(Number(last.x)-nx)<.001&&Math.abs(Number(last.y)-ny)<.001&&nt-Number(last.t)<18){
-   last.t=nt;
+   last.x=nx;last.y=ny;last.t=nt;
  }else history.push({x:nx,y:ny,t:nt});
- return history.slice(-REMOTE_WAR_HISTORY_LIMIT);
+ return history;
 }
 
 function sampleRemotePosition(obj,now,allowExtrapolation=false){
@@ -4248,6 +4262,8 @@ function sampleRemotePosition(obj,now,allowExtrapolation=false){
  return {x:(Number(last.x)||0)+vx*(extra/1000),y:(Number(last.y)||0)+vy*(extra/1000)};
 }
 
+const remotePreviousEntities=new Map();
+// WAR NETWORK JANK FIX 2026-09-18
 function applyRemoteGame(game){
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
@@ -4263,7 +4279,9 @@ function applyRemoteGame(game){
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
  if(Array.isArray(game.entities)){
-   const previous=new Map(state.entities.map(e=>[e.id,e]));
+   remotePreviousEntities.clear();
+   for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
+   const previous=remotePreviousEntities;
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=performance.now();
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
@@ -4603,8 +4621,12 @@ function syncFirebaseRoom(room){
  if(room.settings){
    state.mode=room.settings.mode??state.mode;state.pveTime=room.settings.pveTime??state.pveTime;state.warTime=room.settings.warTime??state.warTime;state.rounds=room.settings.rounds??state.rounds;state.difficulty=room.settings.difficulty??state.difficulty;state.speed=room.settings.speed??state.speed;
    state.gems=normalizeWarStartingGems(room.settings.gems??state.gems);
-   const gemsLabel=$('#gemsVal');if(gemsLabel)gemsLabel.textContent=state.gems;
-   renderWarLobbySettings();
+   // Durante a luta estes controles estão ocultos. Evitar consultas/toggles de DOM
+   // aqui elimina jank sem alterar o estado recebido do Firebase.
+   if(room.status==='lobby'||room.status==='clan'){
+     const gemsLabel=$('#gemsVal');if(gemsLabel)gemsLabel.textContent=state.gems;
+     renderWarLobbySettings();
+   }
  }
  // O roster simples do Firebase só reconstrói state.players enquanto a sala ainda
  // está realmente em lobby/clã. No começo da guerra, state.players já possui gems,
@@ -4626,7 +4648,7 @@ function syncFirebaseRoom(room){
  }
  if((room.status==='playing'||room.status==='finished')&&room.game&&!NetworkAdapter.isHost)applyRemoteGame(room.game);
  handleHostCommands(room.commands);
- updateLobbyAuthority();
+ if(room.status==='lobby'||room.status==='clan')updateLobbyAuthority();
 }
 async function initFirebaseAccountUI(){const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');try{await F.getRedirectResult(F.firebaseAuth)}catch(_){}F.onAuthStateChanged(F.firebaseAuth,user=>{NetworkAdapter.localPlayerId=user?.uid||null;if(user){const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';$('#guestLogin').style.display='none';$('#googleLogin').style.display='none';$('#saveNick').style.display='block';$('#logoutBtn').style.display='block'}else{name.textContent='Entrar';status.textContent='Escolha convidado ou Google.';$('#guestLogin').style.display='block';$('#googleLogin').style.display='block';$('#saveNick').style.display='none';$('#logoutBtn').style.display='none'}})}
 window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
