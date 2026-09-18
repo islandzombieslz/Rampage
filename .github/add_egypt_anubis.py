@@ -448,7 +448,7 @@ replace_once(
 )
 
 # ---------- Projectile render asset selection ----------
-replace_once("function acquireDragonProjectileNode(layer){","function acquireDragonProjectileNode(layer,assetKey='dragonFireball'){")
+replace_once("function acquireDragonProjectileNode(layer){","function acquireDragonProjectileNode(layer,assetKey='dragonFireball'){",'Dynamic projectile function signature')
 replace_once(
     "   img.dataset.assetKey='dragonFireball';\n }\n if(img._poolGifSuspendTimer){clearTimeout(img._poolGifSuspendTimer);img._poolGifSuspendTimer=null}\n if(!img.hasAttribute('src'))img.src=ASSETS.dragonFireball;",
     "   img.dataset.assetKey=assetKey;\n }\n if(img._poolGifSuspendTimer){clearTimeout(img._poolGifSuspendTimer);img._poolGifSuspendTimer=null}\n if(img.dataset.assetKey!==assetKey){stopGif(img);img.dataset.assetKey=assetKey}\n if(!img.hasAttribute('src'))img.src=ASSETS[assetKey];",
