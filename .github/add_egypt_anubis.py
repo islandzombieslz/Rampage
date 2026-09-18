@@ -42,13 +42,31 @@ replace_once('Guerreiro/Guerreira do Egito • Mago/Maga do Egito • Naja do Eg
 
 # ---------- CSS: same visual footprint/scale as Golem ----------
 css_anchor='''/* ===== GUERREIRA MARROM ===== */'''
-legacy_anubis_css='''/* ===== ANNUBIS DO EGITO ===== */\n.entity-visual.anubis-visual{width:102px;height:130px}\n.entity-visual.anubis-visual .entity-facing{width:102px;height:122px}\n.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}\n.entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}\n.entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}\n.entity-visual.anubis-visual .entity-weapon-facing{display:none !important}\n.entity-anubis-melee,.entity-anubis-ranged{opacity:0}\n\n'''
-anubis_css='''/* ===== ANNUBIS DO EGITO ===== */\n.entity-visual.anubis-visual{width:102px;height:130px}\n.entity-visual.anubis-visual .entity-facing{width:102px;height:122px}\n/* O GIF tem bastante transparencia a direita/abaixo. Compensacao visual centraliza o corpo no circulo sem mover hitbox/barras. */\n.entity-visual.anubis-visual .entity-body{left:3px;top:1px;width:120px;height:140px;object-fit:contain}\n.entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}\n.entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}\n.entity-visual.anubis-visual .entity-weapon-facing{display:none !important}\n.entity-anubis-melee,.entity-anubis-ranged{opacity:0}\n\n'''
+old_anubis_css='''/* ===== ANNUBIS DO EGITO ===== */\n.entity-visual.anubis-visual{width:102px;height:130px}\n.entity-visual.anubis-visual .entity-facing{width:102px;height:122px}\n/* O GIF tem bastante transparencia a direita/abaixo. Compensacao visual centraliza o corpo no circulo sem mover hitbox/barras. */\n.entity-visual.anubis-visual .entity-body{left:3px;top:1px;width:120px;height:140px;object-fit:contain}\n.entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}\n.entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}\n.entity-visual.anubis-visual .entity-weapon-facing{display:none !important}\n.entity-anubis-melee,.entity-anubis-ranged{opacity:0}\n\n'''
+anubis_css='''/* ===== ANNUBIS DO EGITO ===== */\n.entity-visual.anubis-visual{width:102px;height:130px}\n.entity-visual.anubis-visual .entity-facing{width:102px;height:122px}\n/* Alinhamento real do Annubis e feito no container externo em syncEntityVisuals(). */\n.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}\n.entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}\n.entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}\n.entity-visual.anubis-visual .entity-weapon-facing{display:none !important}\n.entity-anubis-melee,.entity-anubis-ranged{opacity:0}\n\n'''
 if anubis_css not in t:
-    if legacy_anubis_css in t:
-        replace_once(legacy_anubis_css,anubis_css,'Anubis visual alignment')
+    if old_anubis_css in t:
+        replace_once(old_anubis_css,anubis_css,'Anubis internal sprite reset')
     else:
-        insert_before(css_anchor,anubis_css,'Anubis CSS')
+        # Older install without the temporary centering patch.
+        legacy='''.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}'''
+        if legacy not in t:
+            insert_before(css_anchor,anubis_css,'Anubis CSS')
+
+# The visible placement must be adjusted on the real screen container.
+old_render='''   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
+   // Assim idle, caminhada, ataques, especiais e barras se movem juntos.
+   const renderX=e.type==='naja'?sx+14*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:sy;
+   const visualTop=renderY-dragonLift*zoom;'''
+new_render='''   // Naja e Annubis usam offset no CONTAINER REAL do render.
+   // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
+   // ao espelhar, a compensacao tambem precisa espelhar.
+   const anubisFace=(e.facing||1)>=0?1:-1;
+   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
+   const visualTop=renderY-dragonLift*zoom;'''
+replace_once(old_render,new_render,'Anubis real render position')
 
 # ---------- Asset map ----------
 asset_anchor="""  // Dragão Guerreiro — clã Guerreiros\n  dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',"""

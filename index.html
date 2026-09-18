@@ -1305,8 +1305,8 @@ html,body{
 /* ===== ANNUBIS DO EGITO ===== */
 .entity-visual.anubis-visual{width:102px;height:130px}
 .entity-visual.anubis-visual .entity-facing{width:102px;height:122px}
-/* O GIF tem bastante transparencia a direita/abaixo. Compensacao visual centraliza o corpo no circulo sem mover hitbox/barras. */
-.entity-visual.anubis-visual .entity-body{left:3px;top:1px;width:120px;height:140px;object-fit:contain}
+/* Alinhamento real do Annubis e feito no container externo em syncEntityVisuals(). */
+.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}
 .entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}
 .entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}
 .entity-visual.anubis-visual .entity-weapon-facing{display:none !important}
@@ -8492,10 +8492,12 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        dragonLift=36*(1-Math.pow(1-progress,2));
      }else if(e.dragonFlightState==='flying')dragonLift=36;
    }
-   // A Naja precisa de offset no container real do render, nao apenas dentro do PNG/GIF.
-   // Assim idle, caminhada, ataques, especiais e barras se movem juntos.
-   const renderX=e.type==='naja'?sx+14*zoom:sx;
-   const renderY=e.type==='naja'?sy+16*zoom:sy;
+   // Naja e Annubis usam offset no CONTAINER REAL do render.
+   // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
+   // ao espelhar, a compensacao tambem precisa espelhar.
+   const anubisFace=(e.facing||1)>=0?1:-1;
+   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-dragonLift*zoom;
    if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}

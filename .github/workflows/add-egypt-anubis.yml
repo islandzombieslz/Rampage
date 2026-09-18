@@ -28,16 +28,9 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
 
-      - name: Download Anubis assets
+      - name: Verify local Anubis assets
         run: |
           set -euo pipefail
-          mkdir -p assets/egypt/anubis
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/MHQbVVvH/card-anubbis-do-egito.png' -o assets/egypt/anubis/card.png
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/3R6FknJw/annubis-andando.gif' -o assets/egypt/anubis/walk.gif
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/1tTr8J5R/annubis-parado.gif' -o assets/egypt/anubis/idle.gif
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/L51BLLn2/ataque-normal-annubis.gif' -o assets/egypt/anubis/attack-melee.gif
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/XJXgNTWf/ataque-a-distancia-annubis.gif' -o assets/egypt/anubis/attack-ranged.gif
-          curl -L --fail --retry 3 --retry-delay 2 'https://i.postimg.cc/gJ5HxNkm/power-annubis.gif' -o assets/egypt/anubis/projectile.gif
           for f in card.png walk.gif idle.gif attack-melee.gif attack-ranged.gif projectile.gif; do
             test -s "assets/egypt/anubis/$f"
           done
