@@ -1305,7 +1305,8 @@ html,body{
 /* ===== ANNUBIS DO EGITO ===== */
 .entity-visual.anubis-visual{width:102px;height:130px}
 .entity-visual.anubis-visual .entity-facing{width:102px;height:122px}
-.entity-visual.anubis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}
+/* O GIF tem bastante transparencia a direita/abaixo. Compensacao visual centraliza o corpo no circulo sem mover hitbox/barras. */
+.entity-visual.anubis-visual .entity-body{left:3px;top:1px;width:120px;height:140px;object-fit:contain}
 .entity-visual.anubis-visual .entity-bars{left:14px;top:-5px;width:74px}
 .entity-visual.anubis-visual .hp-bg,.entity-visual.anubis-visual .shield-bg{width:74px}
 .entity-visual.anubis-visual .entity-weapon-facing{display:none !important}
