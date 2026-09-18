@@ -230,11 +230,11 @@ replace_once(
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
  screenTransitionBusy=true;fade.classList.add('show');""",
-"""function screenWithFade(id){
+"""function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- playLayeredSfx('transition',.75,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.75,0,260);
  screenTransitionBusy=true;fade.classList.add('show');""",
 'Menu transition SFX'
 )
@@ -249,6 +249,19 @@ replace_once(
  if(id!=='gameScreen')stopLayeredBattleLoops();""",
 'Stop battle loops on navigation'
 )
+
+# Preserve the rule that the transition SFX is only between internal menu screens.
+old_nav_tail=""" // Qualquer entrada, saída ou troca entre menus recebe fade-out + fade-in.
+ if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id);
+ else screen(id);"""
+new_nav_tail=""" // O fade visual continua em todas as trocas; o SFX toca somente ENTRE menus internos.
+ // Não toca ao sair do menu inicial nem quando a navegação entra na partida.
+ const transitionSound=MENU_SCREEN_IDS.has(current)&&MENU_SCREEN_IDS.has(id)&&current!=='menuScreen';
+ if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id,transitionSound);
+ else screen(id);"""
+if new_nav_tail not in t and old_nav_tail in t:
+    t=t.replace(old_nav_tail,new_nav_tail,1)
+
 
 replace_once(
 " hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,knockVX:0,knockVY:0,knockTime:0,",

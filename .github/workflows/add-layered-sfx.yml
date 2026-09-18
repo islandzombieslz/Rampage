@@ -80,6 +80,7 @@ jobs:
           required=[
             'LAYERED SFX 2026-09-18',
             "playLayeredSfx('transition',.75,0,260);",
+            "current!=='menuScreen'",
             "button.classList.contains('plus')||button.classList.contains('minus')||button.id==='shopButton'",
             'MELEE_FIGHT_SFX_TYPES',
             'meleeFightSfxAttacking',

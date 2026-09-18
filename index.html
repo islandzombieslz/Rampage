@@ -2260,13 +2260,16 @@ button::-moz-focus-inner{border:0}
 /* ===== BOOT LOADER 2026-09-12 ===== */
 body.booting{background:#000;overflow:hidden}
 body.booting #landscapeRoot{visibility:hidden}
-#bootLoader{position:fixed;inset:0;z-index:60000;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;transition:opacity .22s ease;pointer-events:auto}
+#bootLoader{position:fixed;inset:0;z-index:60000;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;transition:opacity .22s ease;pointer-events:auto;overflow:hidden}
 #bootLoader.done{opacity:0;pointer-events:none}
-#bootLoaderBox{width:min(420px,78vw);text-align:center}
+#bootLoaderBox{width:min(420px,78vw);text-align:center;position:relative;z-index:1}
 #bootLoaderTitle{font-size:14px;font-weight:800;letter-spacing:3px;margin-bottom:14px}
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
+#bootIntro{position:absolute;inset:0;z-index:2;background:#000;overflow:hidden;opacity:1;transition:opacity .55s ease;pointer-events:auto}
+#bootIntro.fade-out{opacity:0;pointer-events:none}
+#bootIntro iframe{position:absolute;left:50%;top:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;background:#000}
 
 
 /* EGYPT CLAN SYSTEM 2026-09-13 */
@@ -2624,6 +2627,7 @@ window.dispatchEvent(new Event('firebase-ready'));
 </head>
 <body class="booting">
 <div id="bootLoader" role="status" aria-live="polite" aria-label="Carregando jogo">
+  <div id="bootIntro" aria-hidden="true"></div>
   <div id="bootLoaderBox">
     <div id="bootLoaderTitle">CARREGANDO</div>
     <div id="bootLoaderPercent">0%</div>
@@ -3201,6 +3205,61 @@ function setBootProgress(value){
  if(text)text.textContent=pct+'%';if(bar)bar.style.width=pct+'%';
 }
 function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');if(el)el.textContent=text}
+
+/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */
+const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
+const BOOT_INTRO_PLAY_MS=12400;
+let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
+let resolveBootIntroDone=()=>{};
+const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
+
+function bootIntroCommand(frame,func,args=[]){
+ try{
+   frame?.contentWindow?.postMessage(JSON.stringify({event:'command',func,args}),'*');
+ }catch(_){}
+}
+function finishBootIntro(){
+ if(bootIntroFinished)return;
+ bootIntroFinished=true;
+ clearTimeout(bootIntroTimer);
+ clearTimeout(bootIntroFallbackTimer);
+ const intro=document.getElementById('bootIntro');
+ if(!intro){resolveBootIntroDone();return}
+ intro.classList.add('fade-out');
+ setTimeout(()=>{
+   intro.remove();
+   resolveBootIntroDone();
+ },560);
+}
+function startBootIntro(){
+ const intro=document.getElementById('bootIntro');
+ if(!intro){finishBootIntro();return}
+ const frame=document.createElement('iframe');
+ frame.id='bootIntroFrame';
+ frame.title='Introdução - Alpha (Mestre da Guerra)';
+ frame.tabIndex=-1;
+ frame.setAttribute('allow','autoplay; encrypted-media');
+ frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+ frame.setAttribute('aria-hidden','true');
+ frame.addEventListener('load',()=>{
+   // Reforça áudio 100% + reprodução. A política do navegador ainda pode vetar
+   // autoplay com som em uma primeira visita sem interação do usuário.
+   const kick=()=>{
+     bootIntroCommand(frame,'unMute');
+     bootIntroCommand(frame,'setVolume',[100]);
+     bootIntroCommand(frame,'playVideo');
+   };
+   kick();setTimeout(kick,260);setTimeout(kick,900);
+   clearTimeout(bootIntroTimer);
+   bootIntroTimer=setTimeout(finishBootIntro,BOOT_INTRO_PLAY_MS);
+ },{once:true});
+ const origin=encodeURIComponent(location.origin);
+ frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
+   '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
+ intro.appendChild(frame);
+ // Se YouTube estiver indisponível, nunca prende o usuário na tela preta.
+ bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
+}
 function bootReadSavedManifest(){
  try{return JSON.parse(localStorage.getItem(BOOT_MANIFEST_KEY)||'{}')||{}}catch(_){return {}}
 }
@@ -3298,9 +3357,13 @@ async function runBootLoader(){
    assetWarning.textContent=`${failed} recurso(s) não puderam ser atualizados.`;
    assetWarning.classList.add('show');
  }
+ // O carregamento nunca pausa: apenas seguramos a SAÍDA visual até a intro terminar.
+ await bootIntroDone;
+ await new Promise(resolve=>setTimeout(resolve,220));
  document.body.classList.remove('booting');
  const loader=document.getElementById('bootLoader');
  if(loader){loader.classList.add('done');setTimeout(()=>loader.remove(),120)}
+ playDesiredMusic({restart:true});
 }
 
 const state = {
@@ -3541,6 +3604,7 @@ function fadeMusic(audio,target,duration,onDone){
  requestAnimationFrame(step);
 }
 function playDesiredMusic({restart=false}={}){
+ if(document.body?.classList.contains('booting'))return;
  const mode=desiredMusicMode,next=musicFor(mode);
  if(!next)return;
  if(activeMusicEl===next&&!next.paused){
@@ -3808,11 +3872,11 @@ document.addEventListener('pointerdown',ev=>{
 document.addEventListener('keydown',warmLayeredSfx,{capture:true});
 
 let screenTransitionBusy=false,queuedScreenId=null;
-function screenWithFade(id){
+function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- playLayeredSfx('transition',.75,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.75,0,260);
  screenTransitionBusy=true;fade.classList.add('show');
  setTimeout(()=>{
    screen(id);
@@ -3831,8 +3895,10 @@ function navigateScreen(id){
  if(id!=='gameScreen')stopLayeredBattleLoops();
  if(id==='gameScreen')setMusicMode('battle');
  else if(MENU_SCREEN_IDS.has(id))setMusicMode('menu');
- // Qualquer entrada, saída ou troca entre menus recebe fade-out + fade-in.
- if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id);
+ // O fade visual continua em todas as trocas; o SFX toca somente ENTRE menus internos.
+ // Não toca ao sair do menu inicial nem quando a navegação entra na partida.
+ const transitionSound=MENU_SCREEN_IDS.has(current)&&MENU_SCREEN_IDS.has(id)&&current!=='menuScreen';
+ if(MENU_SCREEN_IDS.has(current)||MENU_SCREEN_IDS.has(id))screenWithFade(id,transitionSound);
  else screen(id);
 }
 /* ROOM/GEMS/BARS TUNING 2026-09-09 */
@@ -7722,7 +7788,14 @@ function loop(now){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-runBootLoader().catch(err=>{console.error(err);document.body.classList.remove('booting');document.getElementById('bootLoader')?.remove()});
+startBootIntro();
+runBootLoader().catch(async err=>{
+ console.error(err);
+ await bootIntroDone.catch(()=>{});
+ document.body.classList.remove('booting');
+ document.getElementById('bootLoader')?.remove();
+ playDesiredMusic({restart:true});
+});
 
 function updateEntities(dt){
  const now=performance.now();
