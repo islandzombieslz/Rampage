@@ -10,6 +10,17 @@ required=[
     "const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);",
     "const ISIS_SPECIAL_DELAY_MS=2000;",
     "const ISIS_HEAL_AMOUNT=15;",
+    "const ISIS_MAX_ALLIES=3;",
+    "e.speed=state.mode==='war'?102*WAR_TROOP_SPEED_MULTIPLIER:102;",
+    "if(isisProtected)amount=5;",
+    "let applyKnockback=!isisProtected;",
+    "if(startIsisAttack(e,'special'))return;",
+    "https://i.postimg.cc/mDmVgsh8/card-isis.png",
+    "https://i.postimg.cc/j5xZT5qc/isis-do-egito-andando.gif",
+    "https://i.postimg.cc/LX9NSX4x/isis-do-egito-parada.gif",
+    "https://i.postimg.cc/NMsptMGm/isis-do-egito-ataque-normal.gif",
+    "https://i.postimg.cc/63MzpXTk/isis-do-egito-especial.gif",
+    "https://i.postimg.cc/tTq2bTRz/isis-poder-do-especial.gif",
     "function updateIsisAttackState(",
     "function syncIsisPowerEffects(",
     "const WAR_BASIC_WARRIOR_SPEED_MULTIPLIER=.92;",
@@ -26,4 +37,17 @@ required=[
 missing=[x for x in required if x not in t]
 if missing:
     raise SystemExit('War rebalance v3 missing: '+repr(missing))
+
+forbidden=[
+    "assets/egypt/isis/card.webp",
+    "assets/egypt/isis/idle.webp",
+    "assets/egypt/isis/walk.webp",
+    "assets/egypt/isis/attack-normal.webp",
+    "assets/egypt/isis/special.webp",
+    "assets/egypt/isis/power-special.webp",
+]
+stale=[x for x in forbidden if x in t]
+if stale:
+    raise SystemExit('Old Isis assets still referenced: '+repr(stale))
+
 print('War rebalance v3 validated.')
