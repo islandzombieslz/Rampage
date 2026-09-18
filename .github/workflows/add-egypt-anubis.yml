@@ -86,7 +86,7 @@ jobs:
             'assets/egypt/anubis/attack-ranged.gif',
             'assets/egypt/anubis/projectile.gif',
             'function spawnAnubis(',
-            'e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;',
+            'e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;',
             "e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;",
             'const ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;',
             'function startAnubisAttack(',

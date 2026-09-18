@@ -1,0 +1,34 @@
+name: Validate War Rebalance V3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - '.github/rebalance_war_units_v3.py'
+      - '.github/workflows/rebalance-war-units-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Validate requested balance
+        run: python .github/rebalance_war_units_v3.py
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
+          assert scripts
+          Path('/tmp/rampage.js').write_text(scripts[-1],encoding='utf-8')
+          PY
+          node --check /tmp/rampage.js

@@ -74,12 +74,14 @@ anubis_assets="""  // Annubis do Egito — clã Egito\n  anubisIdle:'assets/egyp
 insert_before(asset_anchor,anubis_assets,'Anubis assets')
 
 # ---------- Cost / attack constants ----------
-desired_costs="const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450});"
+desired_costs="const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450});"
 if desired_costs not in t:
     candidates=[
         "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550});",
         "const WAR_UNIT_COSTS=Object.freeze({warrior:65,brownWarrior:450,king:400,golem:550,mage:550,dragon:450,naja:550,anubis:450});",
         "const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550});",
+        "const WAR_UNIT_COSTS=Object.freeze({warrior:90,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450});",
+        "const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550});",
     ]
     found=[x for x in candidates if x in t]
     if len(found)!=1:
@@ -508,7 +510,7 @@ required=[
     'anubis:450',
     'const ANUBIS_PROJECTILE_DAMAGE=DRAGON_FIREBALL_DAMAGE+10;',
     "function spawnAnubis(",
-    "e.hp=e.maxHp=150;e.shield=e.maxShield=50;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;",
+    "e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;",
     "e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;",
     "function startAnubisAttack(",
     "function aiFightAnubis(",
