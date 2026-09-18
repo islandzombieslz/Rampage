@@ -191,6 +191,8 @@ function startBootIntro(){
  frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
    '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
  intro.appendChild(frame);
+ // O iframe só existe a partir daqui: recalcula o cover imediatamente.
+ syncBootIntroViewport();
  // Se YouTube estiver indisponível, nunca prende o usuário na tela preta.
  bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
 }

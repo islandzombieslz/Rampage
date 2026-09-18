@@ -30,8 +30,12 @@ jobs:
             "const vw=Math.max(1,Math.round(window.innerWidth||document.documentElement.clientWidth||1));",
             "const vh=Math.max(1,Math.round(window.innerHeight||document.documentElement.clientHeight||1));",
             "const portrait=vh>vw;",
-            "intro.style.width=(portrait?vh:vw)+'px';",
-            "intro.style.height=(portrait?vw:vh)+'px';",
+            "const introW=portrait?vh:vw;",
+            "const introH=portrait?vw:vh;",
+            "intro.style.width=introW+'px';",
+            "intro.style.height=introH+'px';",
+            "const coverW=Math.max(introW,introH*(16/9));",
+            "const coverH=coverW*(9/16);",
             "rotate('+(portrait?'90deg':'0deg')+')",
             "window.addEventListener('pageshow',sync",
             "document.addEventListener('visibilitychange',sync",
@@ -42,8 +46,8 @@ jobs:
           missing=[x for x in required if x not in t]
           if missing: raise SystemExit('Missing intro viewport fix: '+repr(missing))
           intro=t[t.index('function syncBootIntroViewport(){'):t.index('function bindBootIntroViewport(){')]
-          if 'visualViewport' in intro:
-              raise SystemExit('Intro must not depend on visualViewport')
+          if 'const vv=window.visualViewport' in intro or 'vv?.' in intro:
+              raise SystemExit('Intro must not depend on visualViewport geometry')
           if '@media (orientation:portrait){\n  #bootIntro{' in t:
               raise SystemExit('Old orientation-media intro sizing still present')
           scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
