@@ -58,20 +58,19 @@ jobs:
             "bootIntroCommand(frame,'setVolume',[100])",
             'await bootIntroDone;',
             'startBootIntro();',
-            'function syncBootIntroViewport(){',
-            "const vw=Math.max(1,Math.round(window.innerWidth||document.documentElement.clientWidth||1));",
-            "const vh=Math.max(1,Math.round(window.innerHeight||document.documentElement.clientHeight||1));",
-            "const introW=portrait?vh:vw;",
-            "const coverW=Math.max(introW,introH*(16/9));",
-            "window.addEventListener('pageshow',sync",
-            "document.addEventListener('visibilitychange',sync",
-            'try{applyLandscapeFallback()}catch(_){}',
-            'try{resize()}catch(_){}',
+            '#bootIntro{position:absolute;inset:0;',
+            'width:100dvw;',
+            'width:100dvh;',
+            'rotate(90deg)',
             "current!=='menuScreen'",
             'screenWithFade(id,transitionSound)',
           ]
           missing=[x for x in required if x not in t]
           if missing: raise SystemExit('Intro validation missing: '+repr(missing))
+          intro=t[t.index("/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */"):t.index('function bootReadSavedManifest')]
+          forbidden=['syncBootIntroViewport','bindBootIntroViewport','bootIntroViewportCleanup','applyLandscapeFallback()','try{resize()}','intro.style.width','intro.style.height']
+          bad=[x for x in forbidden if x in intro]
+          if bad: raise SystemExit('Intro must not alter game viewport: '+repr(bad))
           print('Alpha boot intro validation passed.')
           PY
           git diff --check

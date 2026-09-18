@@ -19,40 +19,54 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Validate intro viewport geometry
+      - name: Validate isolated full-screen intro
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
           t=Path('index.html').read_text(encoding='utf-8')
           required=[
-            'function syncBootIntroViewport(){',
-            "const vw=Math.max(1,Math.round(window.innerWidth||document.documentElement.clientWidth||1));",
-            "const vh=Math.max(1,Math.round(window.innerHeight||document.documentElement.clientHeight||1));",
-            "const portrait=vh>vw;",
-            "const introW=portrait?vh:vw;",
-            "const introH=portrait?vw:vh;",
-            "intro.style.width=introW+'px';",
-            "intro.style.height=introH+'px';",
-            "const coverW=Math.max(introW,introH*(16/9));",
-            "const coverH=coverW*(9/16);",
-            "rotate('+(portrait?'90deg':'0deg')+')",
-            "window.addEventListener('pageshow',sync",
-            "document.addEventListener('visibilitychange',sync",
-            'bindBootIntroViewport();',
-            'try{applyLandscapeFallback()}catch(_){}',
-            'try{resize()}catch(_){}',
+            '#bootIntro{position:absolute;inset:0;',
+            'width:100dvw;',
+            'height:56.25dvw;',
+            'min-width:177.78dvh;',
+            '@media (orientation:portrait) and (max-width:900px){',
+            'width:100dvh;',
+            'height:56.25dvh;',
+            'min-width:177.78dvw;',
+            'rotate(90deg)',
+            "BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q'",
+            'function startBootIntro(){',
+            'await bootIntroDone;',
+            'startBootIntro();',
+            '#landscapeRoot{',
+            'width:100dvw;',
+            'height:100dvh;',
+            'function refreshMobileViewportLayout(){',
+            'function applyLandscapeFallback(){',
           ]
           missing=[x for x in required if x not in t]
-          if missing: raise SystemExit('Missing intro viewport fix: '+repr(missing))
-          intro=t[t.index('function syncBootIntroViewport(){'):t.index('function bindBootIntroViewport(){')]
-          if 'const vv=window.visualViewport' in intro or 'vv?.' in intro:
-              raise SystemExit('Intro must not depend on visualViewport geometry')
-          if '@media (orientation:portrait){\n  #bootIntro{' in t:
-              raise SystemExit('Old orientation-media intro sizing still present')
+          if missing:
+              raise SystemExit('Missing full-screen intro/game viewport rule: '+repr(missing))
+
+          intro=t[t.index("/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */"):t.index('function bootReadSavedManifest')]
+          forbidden=[
+            'syncBootIntroViewport',
+            'bindBootIntroViewport',
+            'bootIntroViewportCleanup',
+            'applyLandscapeFallback()',
+            'try{resize()}',
+            'intro.style.width',
+            'intro.style.height',
+            'window.visualViewport',
+          ]
+          bad=[x for x in forbidden if x in intro]
+          if bad:
+              raise SystemExit('Intro is still modifying game/mobile viewport: '+repr(bad))
+
           scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',t,re.S)
           assert scripts
           Path('/tmp/rampage.js').write_text(scripts[-1],encoding='utf-8')
-          print('Alpha intro viewport geometry validated.')
+          print('Intro is isolated; original game full-screen viewport remains intact.')
           PY
           node --check /tmp/rampage.js

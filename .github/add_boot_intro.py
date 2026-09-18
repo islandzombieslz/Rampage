@@ -36,35 +36,39 @@ replace_once(
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
-#bootIntro{
-  position:fixed;
-  inset:auto;
-  left:50%;
-  top:50%;
-  width:100vw;
-  height:100vh;
-  z-index:2;
-  background:#000;
-  overflow:hidden;
-  opacity:1;
-  transform:translate(-50%,-50%) rotate(0deg);
-  transform-origin:center center;
-  transition:opacity .55s ease;
-  pointer-events:auto;
-}
+#bootIntro{position:absolute;inset:0;z-index:2;background:#000;overflow:hidden;opacity:1;transition:opacity .55s ease;pointer-events:auto}
 #bootIntro.fade-out{opacity:0;pointer-events:none}
+/* A intro fica totalmente isolada do viewport do jogo. O iframe 16:9 usa cover.
+   dvh/dvw acompanham corretamente a barra do Chrome ao reabrir a aba. */
 #bootIntro iframe{
   position:absolute;
   left:50%;
   top:50%;
-  width:100%;
-  height:100%;
-  min-width:0;
-  min-height:0;
+  width:100vw;
+  height:56.25vw;
+  min-width:177.78vh;
+  min-height:100vh;
+  width:100dvw;
+  height:56.25dvw;
+  min-width:177.78dvh;
+  min-height:100dvh;
   transform:translate(-50%,-50%);
   border:0;
   pointer-events:none;
   background:#000;
+}
+@media (orientation:portrait) and (max-width:900px){
+  #bootIntro iframe{
+    width:100vh;
+    height:56.25vh;
+    min-width:177.78vw;
+    min-height:100vw;
+    width:100dvh;
+    height:56.25dvh;
+    min-width:177.78dvw;
+    min-height:100dvw;
+    transform:translate(-50%,-50%) rotate(90deg);
+  }
 }""",
 'Boot intro CSS'
 )
@@ -92,54 +96,8 @@ boot_intro=r'''
 const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
 const BOOT_INTRO_PLAY_MS=12400;
 let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
-let bootIntroViewportCleanup=()=>{};
 let resolveBootIntroDone=()=>{};
 const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
-
-function syncBootIntroViewport(){
- const intro=document.getElementById('bootIntro');
- if(!intro)return;
- // Usa a viewport de layout normal, como o jogo fazia antes da intro.
- // Evita visualViewport: no Chrome móvel ele pode voltar reduzido/deslocado ao reabrir a aba.
- const vw=Math.max(1,Math.round(window.innerWidth||document.documentElement.clientWidth||1));
- const vh=Math.max(1,Math.round(window.innerHeight||document.documentElement.clientHeight||1));
- const portrait=vh>vw;
- const introW=portrait?vh:vw;
- const introH=portrait?vw:vh;
- intro.style.left='50%';
- intro.style.top='50%';
- intro.style.width=introW+'px';
- intro.style.height=introH+'px';
- intro.style.transform='translate(-50%,-50%) rotate('+(portrait?'90deg':'0deg')+')';
- // Player 16:9 em modo "cover": preenche toda a tela horizontal e corta apenas o excesso.
- const frame=intro.querySelector('iframe');
- if(frame){
-   const coverW=Math.max(introW,introH*(16/9));
-   const coverH=coverW*(9/16);
-   frame.style.left='50%';
-   frame.style.top='50%';
-   frame.style.width=coverW+'px';
-   frame.style.height=coverH+'px';
-   frame.style.transform='translate(-50%,-50%)';
- }
-}
-function bindBootIntroViewport(){
- const sync=()=>requestAnimationFrame(syncBootIntroViewport);
- window.addEventListener('resize',sync,{passive:true});
- window.addEventListener('orientationchange',sync,{passive:true});
- window.addEventListener('pageshow',sync,{passive:true});
- document.addEventListener('visibilitychange',sync,{passive:true});
- bootIntroViewportCleanup=()=>{
-   window.removeEventListener('resize',sync);
-   window.removeEventListener('orientationchange',sync);
-   window.removeEventListener('pageshow',sync);
-   document.removeEventListener('visibilitychange',sync);
- };
- syncBootIntroViewport();
- setTimeout(syncBootIntroViewport,50);
- setTimeout(syncBootIntroViewport,250);
- setTimeout(syncBootIntroViewport,900);
-}
 
 function bootIntroCommand(frame,func,args=[]){
  try{
@@ -155,19 +113,13 @@ function finishBootIntro(){
  if(!intro){resolveBootIntroDone();return}
  intro.classList.add('fade-out');
  setTimeout(()=>{
-   bootIntroViewportCleanup();
    intro.remove();
-   // Devolve imediatamente o dimensionamento ao fluxo original do jogo.
-   try{applyLandscapeFallback()}catch(_){}
-   try{resize()}catch(_){}
-   requestAnimationFrame(()=>{try{resize()}catch(_){}});
    resolveBootIntroDone();
  },560);
 }
 function startBootIntro(){
  const intro=document.getElementById('bootIntro');
  if(!intro){finishBootIntro();return}
- bindBootIntroViewport();
  const frame=document.createElement('iframe');
  frame.id='bootIntroFrame';
  frame.title='Introdução - Alpha (Mestre da Guerra)';
@@ -191,8 +143,6 @@ function startBootIntro(){
  frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
    '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
  intro.appendChild(frame);
- // O iframe só existe a partir daqui: recalcula o cover imediatamente.
- syncBootIntroViewport();
  // Se YouTube estiver indisponível, nunca prende o usuário na tela preta.
  bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
 }
@@ -272,6 +222,9 @@ required=[
     "bootIntroCommand(frame,'setVolume',[100])",
     "await bootIntroDone;",
     "startBootIntro();",
+    "width:100dvw;",
+    "width:100dvh;",
+    "rotate(90deg)",
     "current!=='menuScreen'",
     "screenWithFade(id,transitionSound)",
 ]
