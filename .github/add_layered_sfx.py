@@ -21,235 +21,250 @@ def insert_after(anchor,addition,label):
         raise SystemExit(f'{label}: expected 1 anchor, found {c}')
     t=t.replace(anchor,anchor+addition,1)
 
-# Layered SFX system. Web Audio keeps these effects independent from menu/battle music.
-music_anchor="""battleMusic.volume=.82;
-"""
 sfx_system=r'''
 /* ==================== LAYERED SFX 2026-09-18 ==================== */
-const SFX_SPRITE_URL='assets/audio/rampage-sfx.mp3';
-const SFX_CUES=Object.freeze({
- click2:{start:0.000,duration:0.183},
- click:{start:0.253,duration:0.157},
- transition:{start:0.480,duration:2.116},
- fight:{start:2.666,duration:6.243},
- quake:{start:8.979,duration:2.220},
- fire:{start:11.269,duration:2.377},
- mage:{start:13.716,duration:4.650}
+const SFX_ASSETS=Object.freeze({
+ click:'assets/audio/sfx/click.mp3',
+ click2:'assets/audio/sfx/click2.mp3',
+ transition:'assets/audio/sfx/transition.mp3',
+ melee:'assets/audio/sfx/melee.mp3',
+ shake:'assets/audio/sfx/shake.mp3',
+ burn:'assets/audio/sfx/burn.mp3',
+ mage:'assets/audio/sfx/mage.mp3'
 });
-let sfxContext=null,sfxBuffer=null,sfxDecodePromise=null;
-let sfxArrayBufferPromise=fetch(SFX_SPRITE_URL,{cache:'force-cache'}).then(r=>{
- if(!r.ok)throw Error('SFX sprite '+r.status);
- return r.arrayBuffer();
-}).catch(err=>{console.warn('SFX preload failed',err);return null});
-const sfxLastPlay=new Map();
-const sfxLoopChannels=new Map();
-let layeredBattleSfxLastUpdate=0;
+let layeredSfxContext=null;
+const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
+ key,
+ fetch(url,{cache:'force-cache'}).then(r=>{
+   if(!r.ok)throw Error('SFX '+key+' '+r.status);
+   return r.arrayBuffer();
+ }).catch(err=>{console.warn('SFX preload failed',key,err);return null})
+]));
+const layeredSfxBuffers=new Map();
+const layeredSfxDecodePromises=new Map();
+const layeredSfxLastAt=new Map();
+const layeredSfxLoops=new Map();
+let layeredBattleSfxLastScan=0;
 const MELEE_FIGHT_SFX_TYPES=new Set(['warrior','brownWarrior','king','golem','naja','anubis']);
 
-function getSfxContext(){
- if(!sfxContext){
+function getLayeredSfxContext(){
+ if(!layeredSfxContext){
    const AC=window.AudioContext||window.webkitAudioContext;
    if(!AC)return null;
-   sfxContext=new AC();
+   layeredSfxContext=new AC();
  }
- if(sfxContext.state==='suspended')sfxContext.resume().catch(()=>{});
- return sfxContext;
+ if(layeredSfxContext.state==='suspended')layeredSfxContext.resume().catch(()=>{});
+ return layeredSfxContext;
 }
-async function ensureSfxReady(){
- const ctx=getSfxContext();if(!ctx)return null;
- if(sfxBuffer)return sfxBuffer;
- if(!sfxDecodePromise){
-   sfxDecodePromise=(async()=>{
-     const raw=await sfxArrayBufferPromise;
-     if(!raw)return null;
-     try{
-       sfxBuffer=await ctx.decodeAudioData(raw.slice(0));
-       return sfxBuffer;
-     }catch(err){console.warn('SFX decode failed',err);return null}
-   })();
- }
- return sfxDecodePromise;
+async function ensureLayeredSfxBuffer(key){
+ if(layeredSfxBuffers.has(key))return layeredSfxBuffers.get(key);
+ if(layeredSfxDecodePromises.has(key))return layeredSfxDecodePromises.get(key);
+ const ctx=getLayeredSfxContext();if(!ctx)return null;
+ const promise=(async()=>{
+   const raw=await layeredSfxRaw.get(key);
+   if(!raw)return null;
+   try{
+     const decoded=await ctx.decodeAudioData(raw.slice(0));
+     layeredSfxBuffers.set(key,decoded);
+     return decoded;
+   }catch(err){
+     console.warn('SFX decode failed',key,err);
+     return null;
+   }
+ })();
+ layeredSfxDecodePromises.set(key,promise);
+ return promise;
 }
-function sfxZoomGain(){
+function warmLayeredSfx(){
+ getLayeredSfxContext();
+ for(const key of Object.keys(SFX_ASSETS))ensureLayeredSfxBuffer(key);
+}
+function warZoomSfxVolume(){
  if(state.mode!=='war')return 1;
- const z=Number(state.camera?.zoom)||1;
+ const z=clamp(Number(state.camera?.zoom)||1,.55,2.15);
  const t=clamp((z-.55)/(2.15-.55),0,1);
- return .035+.965*Math.pow(t,1.55);
+ return .025+.975*Math.pow(t,1.45);
 }
 function worldSfxMix(x,y){
  if(state.mode!=='war')return {gain:1,pan:0};
- const z=Number(state.camera?.zoom)||1,vp=gameViewportSize();
+ const z=clamp(Number(state.camera?.zoom)||1,.55,2.15);
+ const vp=gameViewportSize();
  const sx=(Number(x)-Number(state.camera.x||0))*z;
  const sy=(Number(y)-Number(state.camera.y||0))*z;
  const cx=vp.w*.5,cy=vp.h*.5;
  const dist=Math.hypot(sx-cx,sy-cy);
- const radius=Math.hypot(vp.w,vp.h)*.72;
- const spatial=Math.pow(clamp(1-dist/radius,0,1),.72);
+ const radius=Math.max(1,Math.hypot(vp.w,vp.h)*.72);
+ const spatial=Math.pow(clamp(1-dist/radius,0,1),.70);
  const pan=clamp((sx-cx)/Math.max(1,vp.w*.52),-1,1);
- return {gain:sfxZoomGain()*spatial,pan};
+ return {gain:warZoomSfxVolume()*spatial,pan};
 }
-async function playSfxCue(name,volume=1,pan=0,cooldownMs=0){
- const cue=SFX_CUES[name];if(!cue)return;
- const now=performance.now(),last=Number(sfxLastPlay.get(name))||0;
- if(cooldownMs&&now-last<cooldownMs)return;
- sfxLastPlay.set(name,now);
- const buffer=await ensureSfxReady(),ctx=sfxContext;
- if(!buffer||!ctx||ctx.state!=='running')return;
+async function playLayeredSfx(key,volume=1,pan=0,cooldownMs=0){
+ if(!SFX_ASSETS[key])return false;
+ const now=performance.now(),last=Number(layeredSfxLastAt.get(key))||-Infinity;
+ if(cooldownMs&&now-last<cooldownMs)return false;
+ layeredSfxLastAt.set(key,now);
+ const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
+ if(!buffer||!ctx||ctx.state!=='running')return false;
  const src=ctx.createBufferSource(),gain=ctx.createGain();
  src.buffer=buffer;gain.gain.value=clamp(volume,0,1);
  src.connect(gain);
  if(ctx.createStereoPanner){
-   const panner=ctx.createStereoPanner();panner.pan.value=clamp(pan,-1,1);
+   const panner=ctx.createStereoPanner();
+   panner.pan.value=clamp(pan,-1,1);
    gain.connect(panner);panner.connect(ctx.destination);
  }else gain.connect(ctx.destination);
- src.start(0,cue.start,Math.min(cue.duration,Math.max(.01,buffer.duration-cue.start)));
-}
-function playWorldSfx(name,x,y,baseVolume=1,cooldownMs=0){
- const m=worldSfxMix(x,y);
- if(m.gain<=.008)return;
- playSfxCue(name,baseVolume*m.gain,m.pan,cooldownMs);
-}
-async function setLoopSfx(name,volume,pan=0){
- const cue=SFX_CUES[name];if(!cue)return;
- const target=clamp(volume,0,1);
- let ch=sfxLoopChannels.get(name);
- if(!ch&&target>.005){
-   const buffer=await ensureSfxReady(),ctx=sfxContext;
-   if(!buffer||!ctx||ctx.state!=='running')return;
-   // Condition might have vanished while decoding.
-   ch=sfxLoopChannels.get(name);
-   if(!ch){
-     const src=ctx.createBufferSource(),gain=ctx.createGain();
-     src.buffer=buffer;src.loop=true;src.loopStart=cue.start;src.loopEnd=cue.start+cue.duration;
-     gain.gain.value=0;src.connect(gain);
-     let panner=null;
-     if(ctx.createStereoPanner){panner=ctx.createStereoPanner();gain.connect(panner);panner.connect(ctx.destination)}
-     else gain.connect(ctx.destination);
-     src.start(0,cue.start);
-     ch={src,gain,panner};sfxLoopChannels.set(name,ch);
-   }
- }
- if(!ch)return;
- const ctx=sfxContext;
- ch.gain.gain.cancelScheduledValues(ctx.currentTime);
- ch.gain.gain.setTargetAtTime(target,ctx.currentTime,target>0?.07:.12);
- if(ch.panner)ch.panner.pan.setTargetAtTime(clamp(pan,-1,1),ctx.currentTime,.08);
-}
-function stopBattleSfxLoops(){
- setLoopSfx('fight',0,0);
- setLoopSfx('fire',0,0);
-}
-function meleeFightSoundCandidate(e){
- if(!e?.alive||!MELEE_FIGHT_SFX_TYPES.has(e.type))return false;
- if(e.type==='naja'&&najaIsUnderground(e))return false;
- if(e.type==='anubis'&&e.pendingAnubisAttack?.kind==='ranged')return false;
+ src.start();
  return true;
 }
-function bestMeleeFightCluster(){
- const fighters=state.entities.filter(meleeFightSoundCandidate);
+function playWorldLayeredSfx(key,x,y,baseVolume=1,cooldownMs=0){
+ const mix=worldSfxMix(x,y);
+ if(mix.gain<=.006)return false;
+ return playLayeredSfx(key,baseVolume*mix.gain,mix.pan,cooldownMs);
+}
+async function setLayeredLoop(key,volume,pan=0){
+ const target=clamp(volume,0,1);
+ let channel=layeredSfxLoops.get(key);
+ if(!channel&&target>.004){
+   const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
+   if(!buffer||!ctx||ctx.state!=='running')return;
+   channel=layeredSfxLoops.get(key);
+   if(!channel){
+     const src=ctx.createBufferSource(),gain=ctx.createGain();
+     src.buffer=buffer;src.loop=true;gain.gain.value=0;src.connect(gain);
+     let panner=null;
+     if(ctx.createStereoPanner){
+       panner=ctx.createStereoPanner();
+       gain.connect(panner);panner.connect(ctx.destination);
+     }else gain.connect(ctx.destination);
+     src.start();
+     channel={src,gain,panner};
+     layeredSfxLoops.set(key,channel);
+   }
+ }
+ if(!channel)return;
+ const ctx=layeredSfxContext;
+ channel.gain.gain.cancelScheduledValues(ctx.currentTime);
+ channel.gain.gain.setTargetAtTime(target,ctx.currentTime,target>.004?.07:.13);
+ if(channel.panner)channel.panner.pan.setTargetAtTime(clamp(pan,-1,1),ctx.currentTime,.08);
+}
+function stopLayeredBattleLoops(){
+ setLayeredLoop('melee',0,0);
+ setLayeredLoop('burn',0,0);
+}
+function meleeFightSfxCandidate(e){
+ if(!e?.alive||!MELEE_FIGHT_SFX_TYPES.has(e.type))return false;
+ if(e.type==='naja'&&najaIsUnderground(e))return false;
+ return true;
+}
+function meleeFightSfxAttacking(e,now){
+ if(e.type==='warrior')return Number(e.attackAnim)>0;
+ if(e.type==='king')return Number(e.attackAnim)>0&&!e.pendingKingSpecial;
+ if(e.type==='brownWarrior')return e.pendingBrownAttack?.kind==='normal'&&Number(e.pendingBrownAttack.endAt)>now;
+ if(e.type==='golem')return e.pendingGolemAttack?.kind==='normal'&&Number(e.pendingGolemAttack.endAt)>now;
+ if(e.type==='naja')return e.pendingNajaAttack?.kind==='normal'&&Number(e.pendingNajaAttack.endAt)>now;
+ if(e.type==='anubis')return e.pendingAnubisAttack?.kind==='melee'&&Number(e.pendingAnubisAttack.endAt)>now;
+ return false;
+}
+function bestMeleeFightSfxCluster(now){
+ const fighters=state.entities.filter(meleeFightSfxCandidate);
  if(fighters.length<4)return null;
- const engageSq=140*140,linkSq=205*205;
- const engaged=fighters.filter(a=>fighters.some(b=>{
-   if(a===b||a.team===b.team)return false;
-   const dx=a.x-b.x,dy=a.y-b.y;return dx*dx+dy*dy<=engageSq;
- }));
- if(engaged.length<4)return null;
- const seen=new Set();let best=null,bestScore=0;
- for(const seed of engaged){
-   if(seen.has(seed.id))continue;
-   const stack=[seed],group=[];seen.add(seed.id);
-   while(stack.length){
-     const a=stack.pop();group.push(a);
-     for(const b of engaged){
-       if(seen.has(b.id))continue;
-       const dx=a.x-b.x,dy=a.y-b.y;
-       if(dx*dx+dy*dy<=linkSq){seen.add(b.id);stack.push(b)}
-     }
+ const clusterSq=170*170,enemySq=125*125;
+ let best=null,bestGain=0;
+ for(const attacker of fighters){
+   if(!meleeFightSfxAttacking(attacker,now))continue;
+   const group=[];let enemyClose=false;
+   for(const other of fighters){
+     const dx=other.x-attacker.x,dy=other.y-attacker.y,d2=dx*dx+dy*dy;
+     if(d2<=clusterSq)group.push(other);
+     if(other.team!==attacker.team&&d2<=enemySq)enemyClose=true;
    }
-   if(group.length<4||new Set(group.map(e=>e.team)).size<2)continue;
-   let crossCombat=false;
-   for(let i=0;i<group.length&&!crossCombat;i++)for(let j=i+1;j<group.length;j++){
-     if(group[i].team===group[j].team)continue;
-     const dx=group[i].x-group[j].x,dy=group[i].y-group[j].y;
-     if(dx*dx+dy*dy<=engageSq){crossCombat=true;break}
-   }
-   if(!crossCombat)continue;
-   const x=group.reduce((s,e)=>s+e.x,0)/group.length;
-   const y=group.reduce((s,e)=>s+e.y,0)/group.length;
+   if(group.length<4||!enemyClose||new Set(group.map(e=>e.team)).size<2)continue;
+   const x=group.reduce((sum,e)=>sum+e.x,0)/group.length;
+   const y=group.reduce((sum,e)=>sum+e.y,0)/group.length;
    const mix=worldSfxMix(x,y);
-   const score=mix.gain*(1+Math.min(8,group.length-4)*.06);
-   if(score>bestScore){bestScore=score;best={x,y,count:group.length,mix}}
+   if(mix.gain>bestGain){bestGain=mix.gain;best={x,y,mix,count:group.length}}
  }
  return best;
 }
-function bestBurnSoundSource(now){
- let best=null,bestGain=0,count=0;
+function bestBurnSfxSource(now){
+ let best=null,bestGain=0;
  for(const e of state.entities){
    if(!e.alive||Number(e.dragonBurnUntil||0)<=now)continue;
-   count++;
    const mix=worldSfxMix(e.x,e.y);
    if(mix.gain>bestGain){bestGain=mix.gain;best={x:e.x,y:e.y,mix}}
  }
- if(best)best.count=count;
  return best;
 }
 function updateLayeredBattleSfx(now){
- if(now-layeredBattleSfxLastUpdate<110)return;
- layeredBattleSfxLastUpdate=now;
+ if(now-layeredBattleSfxLastScan<110)return;
+ layeredBattleSfxLastScan=now;
  if(state.mode!=='war'||!state.running||state.phase!=='combat'){
-   stopBattleSfxLoops();return;
+   stopLayeredBattleLoops();
+   return;
  }
- const fight=bestMeleeFightCluster();
- if(fight){
-   const density=Math.min(1,.76+(fight.count-4)*.045);
-   setLoopSfx('fight',fight.mix.gain*density,fight.mix.pan);
- }else setLoopSfx('fight',0,0);
- const burn=bestBurnSoundSource(now);
- if(burn){
-   const amount=Math.min(1,.78+Math.max(0,burn.count-1)*.055);
-   setLoopSfx('fire',burn.mix.gain*amount,burn.mix.pan);
- }else setLoopSfx('fire',0,0);
+ const fight=bestMeleeFightSfxCluster(now);
+ if(fight)setLayeredLoop('melee',fight.mix.gain,fight.mix.pan);
+ else setLayeredLoop('melee',0,0);
+ const burning=bestBurnSfxSource(now);
+ if(burning)setLayeredLoop('burn',burning.mix.gain,burning.mix.pan);
+ else setLayeredLoop('burn',0,0);
 }
 
-// Unlock/decode on the first real gesture and route UI click sounds without
-// touching the existing menu/battle music elements.
 document.addEventListener('pointerdown',ev=>{
- getSfxContext();ensureSfxReady();
- const b=ev.target.closest?.('button');
- if(!b||b.disabled||b.id==='attackBtn')return;
- if(b.classList.contains('plus')||b.classList.contains('minus')||b.id==='shopButton'){
-   playSfxCue('click2',.46,0,28);
+ warmLayeredSfx();
+ const button=ev.target.closest?.('button');
+ if(!button||button.disabled||button.id==='attackBtn')return;
+ if(button.classList.contains('plus')||button.classList.contains('minus')||button.id==='shopButton'){
+   playLayeredSfx('click2',.55,0,25);
  }else{
-   playSfxCue('click',.42,0,24);
+   playLayeredSfx('click',.50,0,20);
  }
 },{capture:true,passive:true});
+document.addEventListener('keydown',warmLayeredSfx,{capture:true});
 '''
-insert_after(music_anchor,sfx_system,'Layered SFX engine')
+insert_after("playDesiredMusic({restart:true});\n",sfx_system,'Layered SFX engine')
 
-# Every actual menu fade starts the transition sound once.
 replace_once(
 """function screenWithFade(id){
  if(screenTransitionBusy){queuedScreenId=id;return}
- const fade=$('#screenTransitionFade');""",
+ const fade=$('#screenTransitionFade');
+ if(!fade){screen(id);return}
+ screenTransitionBusy=true;fade.classList.add('show');""",
 """function screenWithFade(id){
  if(screenTransitionBusy){queuedScreenId=id;return}
- playSfxCue('transition',1,0,320);
- const fade=$('#screenTransitionFade');""",
+ const fade=$('#screenTransitionFade');
+ if(!fade){screen(id);return}
+ playLayeredSfx('transition',.75,0,260);
+ screenTransitionBusy=true;fade.classList.add('show');""",
 'Menu transition SFX'
 )
 
-# Networked quake event state.
 replace_once(
-""" hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,knockVX:0,knockVY:0,knockTime:0,""",
-""" hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,shakeSerial:0,shakePower:0,knockVX:0,knockVY:0,knockTime:0,""",
-'Entity quake state'
+"""function navigateScreen(id){
+ const current=$('.screen.active')?.id||null;
+ if(current===id)return;""",
+"""function navigateScreen(id){
+ const current=$('.screen.active')?.id||null;
+ if(current===id)return;
+ if(id!=='gameScreen')stopLayeredBattleLoops();""",
+'Stop battle loops on navigation'
 )
+
 replace_once(
-"""   hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,""",
+" hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,knockVX:0,knockVY:0,knockTime:0,",
+" hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,shakeSerial:0,shakePower:0,knockVX:0,knockVY:0,knockTime:0,",
+'Entity shake SFX state'
+)
+
+replace_once(
 """   hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
-   shakeSerial:Number(e.shakeSerial)||0,shakePower:Number(e.shakePower)||0,""",
-'Serialize quake state'
+   deathStarted:e.deathStarted?1:0,""",
+"""   hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
+   shakeSerial:Number(e.shakeSerial)||0,shakePower:Number(e.shakePower)||0,
+   deathStarted:e.deathStarted?1:0,""",
+'Serialize shake SFX event'
 )
+
 replace_once(
 """ if(options.shake){
    triggerHitCameraShake(target,options.shake,options.shakeDuration??.42);
@@ -259,36 +274,34 @@ replace_once(
    target.shakePower=Number(options.shake)||12;
    triggerHitCameraShake(target,options.shake,options.shakeDuration??.42);
  }""",
-'Quake event serial'
+'Shake event serial'
 )
 
-# New visual nodes start with the current quake serial, avoiding stale sounds on join/camera reveal.
 replace_once(
 """ el._lastHitSerial=0;
  el._lastRegenSerial=0;""",
 """ el._lastHitSerial=0;
  el._lastShakeSerial=Number(e.shakeSerial)||0;
  el._lastRegenSerial=0;""",
-'Quake visual baseline'
+'Shake SFX visual baseline'
 )
 
-# Visible networked quake events play once at the affected world position.
 hit_anchor="""   if((el._lastHitSerial||0)!==(e.hitSerial||0)){
 """
-quake_hook="""   if((el._lastShakeSerial||0)!==(e.shakeSerial||0)){
+shake_hook="""   if((el._lastShakeSerial||0)!==(e.shakeSerial||0)){
      el._lastShakeSerial=e.shakeSerial||0;
      if(e.shakeSerial>0){
-       const power=clamp((Number(e.shakePower)||12)/22,.45,1);
-       playWorldSfx('quake',e.x,e.y,.95*power,90);
+       const shakeGain=clamp((Number(e.shakePower)||12)/22,.45,1);
+       playWorldLayeredSfx('shake',e.x,e.y,shakeGain,90);
      }
    }
 
 """
-if quake_hook not in t:
-    if hit_anchor not in t: raise SystemExit('Quake render anchor missing')
-    t=t.replace(hit_anchor,quake_hook+hit_anchor,1)
+if shake_hook not in t:
+    if t.count(hit_anchor)!=1:
+        raise SystemExit('Shake render anchor missing/duplicate')
+    t=t.replace(hit_anchor,shake_hook+hit_anchor,1)
 
-# Any Mage normal or special attack gets its spatial one-shot, including remote players.
 replace_once(
 """     if(el.dataset.mageAttackSerial!==String(e.mageAttackSerial)){
        el.dataset.mageAttackSerial=String(e.mageAttackSerial);
@@ -296,13 +309,12 @@ replace_once(
      }""",
 """     if(el.dataset.mageAttackSerial!==String(e.mageAttackSerial)){
        el.dataset.mageAttackSerial=String(e.mageAttackSerial);
-       if(e.mageAttackSerial>0)playWorldSfx('mage',e.x,e.y,.92,70);
+       if(e.mageAttackSerial>0)playWorldLayeredSfx('mage',e.x,e.y,1,55);
        if(e.mageAttackSerial>0&&special)restartGif(el._mageSpecial,el._gifKeys?.special||(e.variant==='female'?'femaleMageSpecial':'mageSpecial'),e.mageAttackSerial);
      }""",
 'Mage attack SFX'
 )
 
-# Update area loops after the camera/game render is current.
 replace_once(
 """ updateGolemRockEffects(now);
  draw();
@@ -320,18 +332,26 @@ p.write_text(t,encoding='utf-8')
 
 required=[
  "LAYERED SFX 2026-09-18",
- "const SFX_SPRITE_URL='assets/audio/rampage-sfx.mp3';",
- "playSfxCue('transition',1,0,320);",
- "b.classList.contains('plus')||b.classList.contains('minus')||b.id==='shopButton'",
- "const MELEE_FIGHT_SFX_TYPES=new Set(['warrior','brownWarrior','king','golem','naja','anubis']);",
- "setLoopSfx('fight'",
- "setLoopSfx('fire'",
+ "assets/audio/sfx/click.mp3",
+ "assets/audio/sfx/click2.mp3",
+ "assets/audio/sfx/transition.mp3",
+ "assets/audio/sfx/melee.mp3",
+ "assets/audio/sfx/shake.mp3",
+ "assets/audio/sfx/burn.mp3",
+ "assets/audio/sfx/mage.mp3",
+ "playLayeredSfx('transition',.75,0,260);",
+ "button.classList.contains('plus')||button.classList.contains('minus')||button.id==='shopButton'",
+ "MELEE_FIGHT_SFX_TYPES",
+ "meleeFightSfxAttacking",
+ "setLayeredLoop('melee'",
+ "setLayeredLoop('burn'",
  "shakeSerial:Number(e.shakeSerial)||0",
  "target.shakeSerial=(Number(target.shakeSerial)||0)+1;",
- "playWorldSfx('quake'",
- "playWorldSfx('mage'",
+ "playWorldLayeredSfx('shake'",
+ "playWorldLayeredSfx('mage'",
  "updateLayeredBattleSfx(now);",
 ]
 missing=[x for x in required if x not in t]
-if missing: raise SystemExit('Missing layered SFX integration: '+repr(missing))
-print('Layered UI and battle SFX integration applied.')
+if missing:
+    raise SystemExit('Missing layered SFX integration: '+repr(missing))
+print('Layered UI and War battle SFX integration applied.')

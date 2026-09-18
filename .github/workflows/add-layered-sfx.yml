@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/add_layered_sfx.py'
       - '.github/workflows/add-layered-sfx.yml'
-      - 'assets/audio/rampage-sfx.mp3'
+      - 'assets/audio/sfx/**'
   workflow_dispatch:
 
 permissions:
@@ -29,10 +29,22 @@ jobs:
       - name: Refresh branch
         run: git pull --rebase origin main
 
-      - name: Verify audio sprite
+      - name: Verify seven SFX assets
         run: |
-          test -s assets/audio/rampage-sfx.mp3
-          test "$(stat -c%s assets/audio/rampage-sfx.mp3)" -gt 30000
+          set -euo pipefail
+          for f in click.mp3 click2.mp3 transition.mp3 melee.mp3 shake.mp3 burn.mp3 mage.mp3; do
+            test -s "assets/audio/sfx/$f"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          for p in Path('assets/audio/sfx').glob('*.mp3'):
+              b=p.read_bytes()
+              if len(b)<500:
+                  raise SystemExit(f'SFX too small: {p}')
+              if not (b.startswith(b'ID3') or b[:2] in (b'\xff\xfb',b'\xff\xf3',b'\xff\xf2')):
+                  raise SystemExit(f'Invalid MP3 header: {p}')
+          print('Seven local SFX assets validated.')
+          PY
 
       - name: Apply layered SFX
         run: python .github/add_layered_sfx.py
@@ -53,29 +65,35 @@ jobs:
           node --check /tmp/rampage-main.js
           node --check sw.js
 
-      - name: Validate SFX
+      - name: Validate SFX integration
         run: |
           python - <<'PY'
           from pathlib import Path
           t=Path('index.html').read_text(encoding='utf-8')
           sw=Path('sw.js').read_text(encoding='utf-8')
-          required=[
-            "LAYERED SFX 2026-09-18",
-            "assets/audio/rampage-sfx.mp3",
-            "playSfxCue('transition',1,0,320);",
-            "b.classList.contains('plus')||b.classList.contains('minus')||b.id==='shopButton'",
-            "MELEE_FIGHT_SFX_TYPES",
-            "setLoopSfx('fight'",
-            "setLoopSfx('fire'",
-            "shakeSerial:Number(e.shakeSerial)||0",
-            "playWorldSfx('quake'",
-            "playWorldSfx('mage'",
-            "updateLayeredBattleSfx(now);",
+          assets=[
+            'assets/audio/sfx/click.mp3','assets/audio/sfx/click2.mp3',
+            'assets/audio/sfx/transition.mp3','assets/audio/sfx/melee.mp3',
+            'assets/audio/sfx/shake.mp3','assets/audio/sfx/burn.mp3',
+            'assets/audio/sfx/mage.mp3'
           ]
-          missing=[x for x in required if x not in t]
+          required=[
+            'LAYERED SFX 2026-09-18',
+            "playLayeredSfx('transition',.75,0,260);",
+            "button.classList.contains('plus')||button.classList.contains('minus')||button.id==='shopButton'",
+            'MELEE_FIGHT_SFX_TYPES',
+            'meleeFightSfxAttacking',
+            "setLayeredLoop('melee'",
+            "setLayeredLoop('burn'",
+            'shakeSerial:Number(e.shakeSerial)||0',
+            "playWorldLayeredSfx('shake'",
+            "playWorldLayeredSfx('mage'",
+            'updateLayeredBattleSfx(now);'
+          ]
+          missing=[x for x in required+assets if x not in t]
           if missing: raise SystemExit('Missing SFX integration: '+repr(missing))
-          if 'assets/audio/rampage-sfx.mp3' not in sw:
-              raise SystemExit('SFX sprite missing from service worker')
+          missing_sw=[a for a in assets if a not in sw]
+          if missing_sw: raise SystemExit('SFX missing from service worker: '+repr(missing_sw))
           print('Layered SFX validation passed.')
           PY
           git diff --check
@@ -90,5 +108,5 @@ jobs:
             echo 'SFX integration already current.'
             exit 0
           fi
-          git commit -m 'Add layered menu and battle sound effects'
+          git commit -m 'Enable layered menu and War sound effects'
           git push origin main
