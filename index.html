@@ -9127,15 +9127,16 @@ function suspendEntityLoopGif(el){
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
  const desiredImg=entitySpriteForState(el,desired);
- ensureEntityLoopGif(el,desired,desiredImg);
  if(previous===desired){
    if(desiredImg){
+     if(ENTITY_LOOP_STATES.has(desired)&&!desiredImg.hasAttribute('src'))ensureEntityLoopGif(el,desired,desiredImg);
      if(desiredImg.style.display!=='block')desiredImg.style.display='block';
      if(desiredImg.style.opacity!=='1')desiredImg.style.opacity='1';
      if(!desiredImg.classList.contains('active-sprite'))desiredImg.classList.add('active-sprite');
    }
    return false;
  }
+ ensureEntityLoopGif(el,desired,desiredImg);
  const sprites=el._spriteEntries||(el._spriteEntries=[
    [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
    [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
