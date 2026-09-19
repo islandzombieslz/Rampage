@@ -3673,7 +3673,10 @@ let ISIS_SPECIAL_DURATION=6000;
 let ISIS_POWER_DURATION=4000;
 const ISIS_SPECIAL_DELAY_MS=2000;
 const ISIS_HEAL_TICK_MS=1000;
-const ISIS_HEAL_AMOUNT=35;
+const ISIS_HEAL_AMOUNT=40;
+const ISIS_SECOND_HEAL_AMOUNT=15;
+const ISIS_BLESSING_IMMUNITY_MS=1000;
+const ISIS_POWER_REPEAT_COUNT=2;
 const ISIS_SELF_HEAL_AMOUNT=5;
 const ISIS_MAX_ALLIES=2;
 const ISIS_HEAL_REUSE_LOCK_MS=5000;
@@ -3684,7 +3687,7 @@ const ISIS_SPRITE_OFFSET_X=26;
 const ISIS_SPRITE_OFFSET_Y=-6;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
-const ISIS_RUNTIME_REVISION='isis-single-heal-v3-20260918';
+const ISIS_RUNTIME_REVISION='isis-double-heal-v4-20260919';
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
@@ -4193,6 +4196,7 @@ function serializeWarEntityForNetwork(e,now){
    hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
    shakeSerial:Number(e.shakeSerial)||0,shakePower:Number(e.shakePower)||0,
    deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
+   isisDamageImmuneRemainingMs:Math.max(0,(Number(e.isisDamageImmuneUntil)||0)-now),
    variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null
  };
 
@@ -4277,7 +4281,13 @@ function serializeWarEntityForNetwork(e,now){
        pending.hit1RemainingMs=p.hit1At?Math.max(0,Number(p.hit1At)-now):0;pending.hit2RemainingMs=p.hit2At?Math.max(0,Number(p.hit2At)-now):0;pending.hit1Done=!!p.hit1Done;pending.hit2Done=!!p.hit2Done;
      }else{
        pending.activationRemainingMs=Math.max(0,Number(p.activationAt)-now);pending.activated=!!p.activated;
-       pending.blessings=(p.blessings||[]).filter(b=>!b.expired).map(b=>({targetId:b.targetId,serial:Number(b.serial)||0,duration:Number(b.duration)||ISIS_POWER_DURATION,remainingMs:Math.max(0,Number(b.endAt)-now)}));
+       pending.blessings=(p.blessings||[]).filter(b=>!b.expired).map(b=>({
+         targetId:b.targetId,serial:Number(b.serial)||0,duration:Number(b.duration)||ISIS_POWER_DURATION,
+         remainingMs:Math.max(0,Number(b.endAt)-now),
+         cycleDuration:Number(b.cycleDuration)||Math.max(250,(Number(b.duration)||ISIS_POWER_DURATION)/ISIS_POWER_REPEAT_COUNT),
+         secondHealRemainingMs:b.secondHealDone?0:Math.max(0,Number(b.secondHealAt)-now),
+         secondHealDone:!!b.secondHealDone
+       }));
      }
      out.pendingIsisAttack=pending;
    }
@@ -4464,6 +4474,9 @@ function applyRemoteGame(game){
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
      const netHistory=appendRemotePositionSample(old,toX,toY,remoteNow);
      const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,netHistory,target:null,controlled:e.ownerId===NetworkAdapter.localPlayerId};
+     const isisImmuneRemaining=Math.max(0,Number(out.isisDamageImmuneRemainingMs)||0);
+     out.isisDamageImmuneUntil=localNow+isisImmuneRemaining;
+     delete out.isisDamageImmuneRemainingMs;
      if(out.pendingMageAttack?.remainingMs!=null){
        const p=out.pendingMageAttack;
        const duration=p.duration||(p.kind==='special'?MAGE_SPECIAL_DURATION:MAGE_NORMAL_DURATION);
@@ -4680,7 +4693,16 @@ function applyRemoteGame(game){
        }else{
          out.pendingIsisAttack={...p,serial,duration,startedAt:localNow-Math.max(0,duration-remaining),
            activationAt:p.activated?localNow:localNow+Math.max(0,Number(p.activationRemainingMs)||0),activated:!!p.activated,endAt:localNow+remaining,
-           blessings:(p.blessings||[]).map(b=>{const bd=Number(b.duration)||ISIS_POWER_DURATION,br=Math.max(0,Number(b.remainingMs)||0);return {...b,duration:bd,startedAt:localNow-Math.max(0,bd-br),endAt:localNow+br}})};
+           blessings:(p.blessings||[]).map(b=>{
+             const bd=Number(b.duration)||ISIS_POWER_DURATION,br=Math.max(0,Number(b.remainingMs)||0);
+             const cycle=Number(b.cycleDuration)||Math.max(250,bd/ISIS_POWER_REPEAT_COUNT);
+             const oldBlessing=sameSerial?(oldPending?.blessings||[]).find(x=>x.targetId===b.targetId&&Number(x.serial)===Number(b.serial)):null;
+             const secondHealDone=!!(oldBlessing?.secondHealDone||b.secondHealDone);
+             const rebuiltStart=Number(oldBlessing?.startedAt)||localNow-Math.max(0,bd-br);
+             const rebuiltEnd=Number(oldBlessing?.endAt)?Math.min(Number(oldBlessing.endAt),localNow+br):localNow+br;
+             const rebuiltSecond=secondHealDone?localNow:(Number(oldBlessing?.secondHealAt)||localNow+Math.max(0,Number(b.secondHealRemainingMs)||0));
+             return {...b,duration:bd,cycleDuration:cycle,startedAt:rebuiltStart,endAt:rebuiltEnd,secondHealAt:rebuiltSecond,secondHealDone};
+           })};
        }
      }
      if(!out.pendingIsisAttack)out.isisAttackKind=null;
@@ -5677,14 +5699,29 @@ function isisSpecialProtected(e,now=performance.now()){
  // Durante TODO o GIF especial a Isis fica invulnerável, sem dano e sem knockback.
  return isisSpecialActive(e,now);
 }
+function isisBlessingProtected(target,now=performance.now()){
+ // A primeira passagem do poder da Isis protege o aliado por 1 segundo.
+ return !!target?.alive&&Number(target.isisDamageImmuneUntil||0)>now;
+}
 function isAirborneCombatTarget(target,now=performance.now()){
  return !!target&&((target.type==='dragon'&&target.dragonFlightState==='flying')||isisSpecialActive(target,now));
 }
-function unitCannotHitFlying(attacker){
- return !!attacker&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='isis');
+function unitCannotHitFlying(attacker,target=null){
+ if(!attacker)return false;
+ if(attacker.type==='isis'&&target?.type==='dragon')return false;
+ return attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='isis';
 }
+
 function registerIsisAllyShieldBreak(target){
  if(!target?.team||!(Number(target.maxShield)>0))return;
+
+ // Se o escudo da própria Isis quebrar, o próximo ciclo dela vira especial.
+ if(target.type==='isis'){
+   target.isisShieldBreakCount=Math.max(ISIS_SHIELD_BREAK_TRIGGER_COUNT,Number(target.isisShieldBreakCount)||0);
+   if(!target.pendingIsisAttack)target.attackCooldown=0;
+ }
+
+ // Para cada outra Isis do mesmo time, conta aliados DISTINTOS que tiveram o escudo quebrado.
  for(const isis of state.entities){
    if(!isis?.alive||isis.type!=='isis'||isis.team!==target.team||isis===target)continue;
    const ids=Array.isArray(isis.isisBrokenShieldIds)?isis.isisBrokenShieldIds:(isis.isisBrokenShieldIds=[]);
@@ -5729,7 +5766,8 @@ function applyCombatHit(target,attacker,amount,options={}){
  // Rei e Mago Guerreiro ignoram dano e empurrão nos 2 primeiros segundos do especial.
  if(warSpecialOpeningInvulnerable(target))return;
  if(isisSpecialProtected(target))return;
- if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker))return;
+ if(isisBlessingProtected(target))return;
+ if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker,target))return;
  const beforeShield=Math.max(0,Number(target.shield)||0);
  const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);
 
@@ -6147,7 +6185,7 @@ function isRealCombatTarget(t){
 function canEngageTarget(attacker,target){
  if(!isRealCombatTarget(target)||!attacker)return false;
  if(najaIsUnderground(target))return false;
- if(isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker))return false;
+ if(isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker,target))return false;
  return true;
 }
 
@@ -6652,17 +6690,19 @@ function updateIsisAttackState(e,now){
    if(!p.activated&&now>=Number(p.activationAt||Infinity)){
      p.activated=true;e.knockTime=0;e.knockVX=0;e.knockVY=0;
      const remainingSpecial=Math.max(0,Number(p.endAt)-now);
-     const powerDuration=Math.max(0,Math.min(ISIS_POWER_DURATION,remainingSpecial));
+     const powerCycleDuration=Math.max(250,Math.min(ISIS_POWER_DURATION,remainingSpecial/ISIS_POWER_REPEAT_COUNT));
+     const powerDuration=Math.max(0,Math.min(remainingSpecial,powerCycleDuration*ISIS_POWER_REPEAT_COUNT));
      p.nextSelfHealAt=now+ISIS_HEAL_TICK_MS;
      const blessingEndAt=now+powerDuration;
      const selectedAllies=selectIsisSpecialAllies(e,now,blessingEndAt);
      p.blessings=selectedAllies.map((ally,i)=>({
        targetId:ally.id,serial:(Number(p.serial)||0)*10+i+1,startedAt:now,duration:powerDuration,
+       cycleDuration:powerCycleDuration,secondHealAt:now+powerCycleDuration,secondHealDone:false,
        endAt:blessingEndAt
      }));
-     // A cura dos aliados acontece UMA ÚNICA VEZ no instante em que o especial ativa.
-     // O GIF/poder continua durante a duração normal, mas não há mais cura periódica.
+     // 1ª passagem: +40 HP e 1 segundo de imunidade a dano/knockback.
      for(const ally of selectedAllies){
+       ally.isisDamageImmuneUntil=Math.max(Number(ally.isisDamageImmuneUntil)||0,now+ISIS_BLESSING_IMMUNITY_MS);
        const beforeHp=Number(ally.hp)||0;
        ally.hp=Math.min(Number(ally.maxHp)||0,beforeHp+ISIS_HEAL_AMOUNT);
        if(ally.hp>beforeHp){
@@ -6685,12 +6725,30 @@ function updateIsisAttackState(e,now){
      for(const blessing of p.blessings||[]){
        if(blessing.expired)continue;
        const ally=warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);
-       const invalidTarget=!ally?.alive||ally.team!==e.team||now>=Number(blessing.endAt||0);
+       const invalidTarget=!ally?.alive||ally.team!==e.team;
        const lostReservation=!!ally&&(ally.isisHealOwnerId!==e.id||Number(ally.isisHealOwnerUntil||0)<=now);
        const forbiddenIsis=!!ally&&ally.type==='isis'&&isisTeamHasNonIsisAlly(e);
        if(invalidTarget||lostReservation||forbiddenIsis){
          blessing.expired=true;
          if(ally&&ally.isisHealOwnerId===e.id){ally.isisHealOwnerId=null;ally.isisHealOwnerUntil=0}
+         continue;
+       }
+
+       // 2ª passagem: reinicia o mesmo GIF e aplica somente +15 HP, sem imunidade nova.
+       if(!blessing.secondHealDone&&now>=Number(blessing.secondHealAt||Infinity)){
+         blessing.secondHealDone=true;
+         const beforeHp=Number(ally.hp)||0;
+         ally.hp=Math.min(Number(ally.maxHp)||0,beforeHp+ISIS_SECOND_HEAL_AMOUNT);
+         if(ally.hp>beforeHp){
+           ally.regenSerial=(Number(ally.regenSerial)||0)+1;
+           ally.isisLastHealedAt=now;
+           ally.isisLastHealedBy=e.id;
+         }
+       }
+
+       if(now>=Number(blessing.endAt||0)){
+         blessing.expired=true;
+         if(ally.isisHealOwnerId===e.id){ally.isisHealOwnerId=null;ally.isisHealOwnerUntil=0}
        }
      }
    }
@@ -8851,13 +8909,20 @@ function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
        layer.appendChild(img);
        isisPowerNodes.set(key,img);
      }else if(img.parentElement!==layer)layer.appendChild(img);
-     const serial=String(blessing.serial||p.serial||0);
-     if(img.dataset.serial!==serial||!img.hasAttribute('src')){
-       img.dataset.serial=serial;
+
+     const started=Number(blessing.startedAt)||now,end=Number(blessing.endAt)||now;
+     const cycleDuration=Number(blessing.cycleDuration)||Math.max(250,(end-started)/ISIS_POWER_REPEAT_COUNT);
+     const secondStart=Math.min(end,started+cycleDuration);
+     const pass=now>=secondStart?2:1;
+     const passStart=pass===2?secondStart:started;
+     const passEnd=pass===2?end:secondStart;
+     const serial=(blessing.serial||p.serial||0)+':'+pass;
+     if(img.dataset.serial!==String(serial)||!img.hasAttribute('src')){
+       img.dataset.serial=String(serial);
        restartGif(img,'isisPower',serial);
      }
-     const started=Number(blessing.startedAt)||now,end=Number(blessing.endAt)||now;
-     const fadeIn=clamp((now-started)/260,0,1),fadeOut=clamp((end-now)/360,0,1),alpha=Math.min(fadeIn,fadeOut);
+
+     const fadeIn=clamp((now-passStart)/220,0,1),fadeOut=clamp((passEnd-now)/280,0,1),alpha=Math.min(fadeIn,fadeOut);
      const sx=(ally.x-left)*zoom,sy=(ally.y-top)*zoom;
      img.style.left=sx+'px';
      img.style.top=(sy-8*zoom)+'px';
@@ -8874,6 +8939,7 @@ function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
    releaseGifObjectUrl(img);img.remove();isisPowerNodes.delete(key)
  }
 }
+
 function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
  for(const e of renderBrownEffectEntities){
