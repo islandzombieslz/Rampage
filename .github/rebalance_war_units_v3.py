@@ -94,7 +94,14 @@ required=[
     "entityBars.dataset.unitName=entityUiDisplayName(e);",
     "setSelectedEntityUi(entityId);",
     "--entity-ui-inverse-scale",
-    "--entity-ui-outline-local-neg",
+    "filter:url(#entityWhiteAlphaOutline);",
+    "<filter id=\"entityWhiteAlphaOutline\"",
+    "<feMorphology in=\"SourceAlpha\" operator=\"dilate\" radius=\"1.15\"",
+    "<feComposite in=\"outlineDilated\" in2=\"SourceAlpha\" operator=\"out\"",
+    "<feMergeNode in=\"whiteOutline\"/>",
+    "width:68px !important;",
+    "font-size:11px;",
+    "-webkit-text-stroke:.9px #000;",
     "el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));",
     "selectedEntityUiId=null;",
 ]
@@ -132,6 +139,10 @@ forbidden=[
     "assets/egypt/isis/special.webp",
     "assets/egypt/isis/power-special.webp",
     "drop-shadow(1.35px 0 0 var(--team-outline))",
+    "--entity-ui-outline-local-neg",
+    "drop-shadow(var(--entity-ui-outline-local,1px) 0 0 rgba(255,255,255,.96))",
+    "width:42px !important;",
+    "font-size:8px;",
 ]
 stale=[x for x in forbidden if x in t]
 if stale:
