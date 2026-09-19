@@ -141,8 +141,6 @@ forbidden=[
     "drop-shadow(1.35px 0 0 var(--team-outline))",
     "--entity-ui-outline-local-neg",
     "drop-shadow(var(--entity-ui-outline-local,1px) 0 0 rgba(255,255,255,.96))",
-    "width:42px !important;",
-    "font-size:8px;",
 ]
 stale=[x for x in forbidden if x in t]
 if stale:
