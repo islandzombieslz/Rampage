@@ -7098,9 +7098,9 @@ function warArenaBounds(radius=0){
 }
 function constrainWarEntityToArena(e){
  if(state.mode!=='war'||!e?.alive)return;
- const b=warArenaBounds(e.r||0);
- e.x=clamp(e.x,b.left,b.right);
- e.y=clamp(e.y,b.top,b.bottom);
+ const r=Math.max(0,Number(e.r)||0);
+ e.x=clamp(e.x,WAR_ARENA_INSET.left+r,state.world.w-WAR_ARENA_INSET.right-r);
+ e.y=clamp(e.y,WAR_ARENA_INSET.top+r,state.world.h-WAR_ARENA_INSET.bottom-r);
 }
 function constrainWarEntitiesToArena(){
  if(state.mode!=='war')return;
