@@ -1313,14 +1313,14 @@ html,body{
 .entity-anubis-melee,.entity-anubis-ranged{opacity:0}
 
 /* ===== ISIS DO EGITO ===== */
-.entity-visual.isis-visual{width:102px;height:130px}
-.entity-visual.isis-visual .entity-facing{width:102px;height:122px}
-.entity-visual.isis-visual .entity-body{left:-9px;top:-12px;width:120px;height:140px;object-fit:contain}
-.entity-visual.isis-visual .entity-bars{left:14px;top:-5px;width:74px}
-.entity-visual.isis-visual .hp-bg,.entity-visual.isis-visual .shield-bg{width:74px}
+.entity-visual.isis-visual{width:116px;height:148px}
+.entity-visual.isis-visual .entity-facing{width:116px;height:140px}
+.entity-visual.isis-visual .entity-body{left:2px;top:-18px;width:138px;height:162px;object-fit:contain}
+.entity-visual.isis-visual .entity-bars{left:21px;top:-8px;width:78px}
+.entity-visual.isis-visual .hp-bg,.entity-visual.isis-visual .shield-bg{width:78px}
 .entity-visual.isis-visual .entity-weapon-facing{display:none !important}
 .entity-isis-attack,.entity-isis-special{opacity:0}
-.isis-special-power{position:absolute;object-fit:contain;pointer-events:none;transform-origin:center;will-change:auto;opacity:0;transition:none}
+.isis-special-power{position:absolute;display:block;object-fit:contain;pointer-events:none;transform-origin:center;will-change:auto;opacity:0;visibility:hidden;transition:none}
 
 /* ===== GUERREIRA MARROM ===== */
 .entity-visual.brown-warrior-visual{width:96px;height:116px}
@@ -3560,8 +3560,12 @@ let ISIS_SPECIAL_DURATION=6000;
 let ISIS_POWER_DURATION=4000;
 const ISIS_SPECIAL_DELAY_MS=2000;
 const ISIS_HEAL_TICK_MS=1000;
-const ISIS_HEAL_AMOUNT=15;
+const ISIS_HEAL_AMOUNT=20;
+const ISIS_SELF_HEAL_AMOUNT=5;
 const ISIS_MAX_ALLIES=3;
+const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
+const ISIS_FLIGHT_LIFT=52;
+const ISIS_LANDING_DURATION_MS=700;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const gifRuntime=new Map();
@@ -4144,6 +4148,8 @@ function serializeWarEntityForNetwork(e,now){
    }
  }else if(e.type==='isis'){
    out.isisAttackKind=e.isisAttackKind??null;out.isisAttackSerial=Number(e.isisAttackSerial)||0;out.isisNormalCount=Number(e.isisNormalCount)||0;
+   out.isisShieldBreakCount=Number(e.isisShieldBreakCount)||0;
+   out.isisBrokenShieldIds=Array.isArray(e.isisBrokenShieldIds)?e.isisBrokenShieldIds.slice(0,32):[];
    if(e.pendingIsisAttack){
      const p=e.pendingIsisAttack;
      const pending={kind:p.kind,serial:Number(p.serial)||Number(e.isisAttackSerial)||0,targetId:p.targetId??null,duration:Number(p.duration)||(p.kind==='special'?ISIS_SPECIAL_DURATION:ISIS_NORMAL_DURATION),remainingMs:Math.max(0,Number(p.endAt)-now)};
@@ -5493,7 +5499,7 @@ function spawnIsis(x,y,team,color){
  const e=entityBase('isis',x,y,team,color);e.clan='egypt';
  e.hp=e.maxHp=265;e.shield=e.maxShield=165;e.damage=ISIS_NORMAL_DAMAGE_1;e.r=34;
  e.speed=state.mode==='war'?102*WAR_TROOP_SPEED_MULTIPLIER:102;
- e.attackCooldown=0;e.isisAttackSerial=0;e.isisNormalCount=0;e.pendingIsisAttack=null;
+ e.attackCooldown=0;e.isisAttackSerial=0;e.isisNormalCount=0;e.isisShieldBreakCount=0;e.isisBrokenShieldIds=[];e.pendingIsisAttack=null;
  state.entities.push(e);return e;
 }
 
@@ -5534,11 +5540,30 @@ function entityHasActiveSpecial(e,now=performance.now()){
  return false;
 }
 
-function isisSpecialProtected(e,now=performance.now()){
+function isisSpecialActive(e,now=performance.now()){
  const p=e?.pendingIsisAttack;
- // A proteção só começa após os 2 s de preparação: cada impacto vira exatamente
- // 5 de dano e nenhum empurrão é aplicado até o fim do GIF especial.
- return !!e?.alive&&e.type==='isis'&&p?.kind==='special'&&!!p.activated&&now>=Number(p.activationAt||0)&&now<Number(p.endAt||0);
+ return !!e?.alive&&e.type==='isis'&&p?.kind==='special'&&now>=Number(p.startedAt||0)&&now<Number(p.endAt||0);
+}
+function isisSpecialProtected(e,now=performance.now()){
+ // Durante TODO o GIF especial a Isis fica invulnerável, sem dano e sem knockback.
+ return isisSpecialActive(e,now);
+}
+function isAirborneCombatTarget(target,now=performance.now()){
+ return !!target&&((target.type==='dragon'&&target.dragonFlightState==='flying')||isisSpecialActive(target,now));
+}
+function unitCannotHitFlying(attacker){
+ return !!attacker&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='isis');
+}
+function registerIsisAllyShieldBreak(target){
+ if(!target?.team||!(Number(target.maxShield)>0))return;
+ for(const isis of state.entities){
+   if(!isis?.alive||isis.type!=='isis'||isis.team!==target.team||isis===target)continue;
+   const ids=Array.isArray(isis.isisBrokenShieldIds)?isis.isisBrokenShieldIds:(isis.isisBrokenShieldIds=[]);
+   if(ids.includes(target.id))continue;
+   ids.push(target.id);
+   isis.isisShieldBreakCount=ids.length;
+   if(ids.length>=ISIS_SHIELD_BREAK_TRIGGER_COUNT&&!isis.pendingIsisAttack)isis.attackCooldown=0;
+ }
 }
 
 function warSpecialOpeningInvulnerable(e,now=performance.now()){
@@ -5574,9 +5599,8 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(target.type==='naja'&&najaIsInvulnerable(target))return;
  // Rei e Mago Guerreiro ignoram dano e empurrão nos 2 primeiros segundos do especial.
  if(warSpecialOpeningInvulnerable(target))return;
- const isisProtected=isisSpecialProtected(target);
- if(isisProtected)amount=5;
- if(!options.allowFlying&&target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='king'||attacker.type==='isis'))return;
+ if(isisSpecialProtected(target))return;
+ if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker))return;
  const beforeShield=Math.max(0,Number(target.shield)||0);
  const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);
 
@@ -5589,6 +5613,7 @@ function applyCombatHit(target,attacker,amount,options={}){
  }
  if(remaining>0)target.hp-=remaining;
  // O primeiro rompimento do escudo da Naja arma exatamente um especial extra.
+ if(beforeShield>0&&target.shield<=0)registerIsisAllyShieldBreak(target);
  if(target.type==='naja'&&!target.najaShieldSpecialUsed&&beforeShield>0&&target.shield<=0){
    target.najaShieldSpecialUsed=true;
    target.najaShieldSpecialPending=true;
@@ -5619,7 +5644,7 @@ function applyCombatHit(target,attacker,amount,options={}){
 
  let knockForce=options.knockForce??430;
  let knockTime=options.knockTime??.28;
- let applyKnockback=!isisProtected;
+ let applyKnockback=true;
  // Durante TODO o especial da Naja, inclusive ao emergir, ela nunca sofre empurrão.
  if(target.type==='naja'&&najaSpecialPhase(target))applyKnockback=false;
  const golemVsWarriorMage=target.type==='golem' && (attacker.type==='warrior' || attacker.type==='brownWarrior' || attacker.type==='king' || attacker.type==='mage' || attacker.type==='isis');
@@ -5777,9 +5802,9 @@ function separateLivingEntities(){
      for(const j of bucket){
        if(j<=i)continue;
        const b=living[j];
-       const aFlyingDragon=a.type==='dragon'&&a.dragonFlightState==='flying';
-       const bFlyingDragon=b.type==='dragon'&&b.dragonFlightState==='flying';
-       // Dragões voando atravessam tropas terrestres, mas colidem entre si para não se amontoarem.
+       const aFlyingDragon=isAirborneCombatTarget(a);
+       const bFlyingDragon=isAirborneCombatTarget(b);
+       // Unidades no ar atravessam tropas terrestres, mas continuam se separando entre si.
        if((aFlyingDragon||bFlyingDragon)&&!(aFlyingDragon&&bFlyingDragon))continue;
      let dx=b.x-a.x,dy=b.y-a.y;
      let d=Math.hypot(dx,dy);
@@ -5993,7 +6018,7 @@ function isRealCombatTarget(t){
 function canEngageTarget(attacker,target){
  if(!isRealCombatTarget(target)||!attacker)return false;
  if(najaIsUnderground(target))return false;
- if(target.type==='dragon'&&target.dragonFlightState==='flying'&&(attacker.type==='warrior'||attacker.type==='brownWarrior'||attacker.type==='king'||attacker.type==='isis'))return false;
+ if(isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker))return false;
  return true;
 }
 
@@ -6415,10 +6440,12 @@ function startIsisAttack(e,kind,target=null){
    const duration=Math.max(ISIS_SPECIAL_DELAY_MS+250,ISIS_SPECIAL_DURATION);
    e.moving=false;e.target=null;e.lastAttackAt=now;e.lastCombatAt=now;
    e.isisAttackKind='special';e.isisAttackSerial=(Number(e.isisAttackSerial)||0)+1;
+   e.isisShieldBreakCount=0;e.isisBrokenShieldIds=[];
+   e.knockTime=0;e.knockVX=0;e.knockVY=0;
    e.attackCooldown=duration/1000+.12;
    e.pendingIsisAttack={
      kind:'special',serial:e.isisAttackSerial,targetId:null,duration,startedAt:now,
-     activationAt:now+ISIS_SPECIAL_DELAY_MS,activated:false,blessings:[],endAt:now+duration
+     activationAt:now+ISIS_SPECIAL_DELAY_MS,activated:false,blessings:[],nextSelfHealAt:0,endAt:now+duration
    };
    addWarGoalProgress(e.team,'specials');
    return true;
@@ -6448,6 +6475,7 @@ function updateIsisAttackState(e,now){
      p.activated=true;e.knockTime=0;e.knockVX=0;e.knockVY=0;
      const remainingSpecial=Math.max(0,Number(p.endAt)-now);
      const powerDuration=Math.max(0,Math.min(ISIS_POWER_DURATION,remainingSpecial));
+     p.nextSelfHealAt=now+ISIS_HEAL_TICK_MS;
      p.blessings=selectIsisSpecialAllies(e).map((ally,i)=>({
        targetId:ally.id,serial:(Number(p.serial)||0)*10+i+1,startedAt:now,duration:powerDuration,
        endAt:now+powerDuration,nextHealAt:now+ISIS_HEAL_TICK_MS
@@ -6455,13 +6483,23 @@ function updateIsisAttackState(e,now){
    }
    if(p.activated){
      e.knockTime=0;e.knockVX=0;e.knockVY=0;
+     let selfGuard=0;
+     while(now>=Number(p.nextSelfHealAt||Infinity)&&Number(p.nextSelfHealAt)<=Number(p.endAt)&&selfGuard<6){
+       const beforeSelf=Number(e.hp)||0;
+       e.hp=Math.min(Number(e.maxHp)||0,beforeSelf+ISIS_SELF_HEAL_AMOUNT);
+       if(e.hp>beforeSelf)e.regenSerial=(Number(e.regenSerial)||0)+1;
+       p.nextSelfHealAt+=ISIS_HEAL_TICK_MS;selfGuard++;
+     }
      for(const blessing of p.blessings||[]){
        if(blessing.expired)continue;
        const ally=warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);
        if(!ally?.alive||ally.team!==e.team||now>=Number(blessing.endAt||0)){blessing.expired=true;continue}
        let guard=0;
        while(now>=Number(blessing.nextHealAt||Infinity)&&Number(blessing.nextHealAt)<=Number(blessing.endAt)&&guard<6){
-         ally.hp=Math.min(Number(ally.maxHp)||0,(Number(ally.hp)||0)+ISIS_HEAL_AMOUNT);blessing.nextHealAt+=ISIS_HEAL_TICK_MS;guard++;
+         const beforeHp=Number(ally.hp)||0;
+         ally.hp=Math.min(Number(ally.maxHp)||0,beforeHp+ISIS_HEAL_AMOUNT);
+         if(ally.hp>beforeHp)ally.regenSerial=(Number(ally.regenSerial)||0)+1;
+         blessing.nextHealAt+=ISIS_HEAL_TICK_MS;guard++;
        }
      }
    }
@@ -7718,7 +7756,8 @@ function aiFightBrownWarrior(e,dt,forcedTeam,preparedCandidates=null){
 function aiFightIsis(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive){e.moving=false;return}
  if(e.pendingIsisAttack){e.moving=false;return}
- if((Number(e.isisNormalCount)||0)>=4){
+ const specialDue=(Number(e.isisNormalCount)||0)>=4||(Number(e.isisShieldBreakCount)||0)>=ISIS_SHIELD_BREAK_TRIGGER_COUNT;
+ if(specialDue){
    if(startIsisAttack(e,'special'))return;
    e.moving=false;return;
  }
@@ -8390,21 +8429,53 @@ function recycleDragonProjectileNode(img){
 function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const layer=entityCameraLayer,active=isisPowerActiveIds;active.clear();const now=performance.now();
  for(const isis of state.entities){
-   const p=isis.pendingIsisAttack;if(!isis.alive||isis.type!=='isis'||p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
+   const p=isis.pendingIsisAttack;
+   if(!isis.alive||isis.type!=='isis'||p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
    for(const blessing of p.blessings||[]){
      if(blessing.expired||Number(blessing.endAt||0)<=now)continue;
-     const ally=renderPresentMap.get(blessing.targetId)||warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);if(!ally?.alive||ally.team!==isis.team)continue;
-     const key=isis.id+':'+ally.id,cx=(ally.x-cullLeft)*cullZoom,cy=(ally.y-cullTop)*cullZoom,pad=150*cullZoom;
-     if(!(cx+pad>=-40&&cx-pad<=screenW+40&&cy+pad>=-40&&cy-pad<=screenH+40)){const old=isisPowerNodes.get(key);if(old){active.add(key);old.style.visibility='hidden'}continue}
-     active.add(key);let img=isisPowerNodes.get(key);
-     if(!img){img=document.createElement('img');img.className='isis-special-power';img.draggable=false;img.dataset.serial='-1';layer.appendChild(img);isisPowerNodes.set(key,img)}
-     const serial=String(blessing.serial||p.serial||0);if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,'isisPower',serial)}
-     const started=Number(blessing.startedAt)||now,end=Number(blessing.endAt)||now,alpha=Math.min(clamp((now-started)/350,0,1),clamp((end-now)/420,0,1));
+     const ally=renderPresentMap.get(blessing.targetId)||warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);
+     if(!ally?.alive||ally.team!==isis.team)continue;
+     const key=isis.id+':'+ally.id;
+     const cx=(ally.x-cullLeft)*cullZoom,cy=(ally.y-cullTop)*cullZoom,pad=190*cullZoom;
+     if(!(cx+pad>=-40&&cx-pad<=screenW+40&&cy+pad>=-40&&cy-pad<=screenH+40)){
+       const old=isisPowerNodes.get(key);
+       if(old){active.add(key);old.style.visibility='hidden';old.style.opacity='0'}
+       continue;
+     }
+     active.add(key);
+     let img=isisPowerNodes.get(key);
+     if(!img){
+       img=document.createElement('img');
+       img.className='isis-special-power';
+       img.draggable=false;
+       img.decoding='async';
+       img.dataset.serial='-1';
+       img.style.display='block';
+       layer.appendChild(img);
+       isisPowerNodes.set(key,img);
+     }else if(img.parentElement!==layer)layer.appendChild(img);
+     const serial=String(blessing.serial||p.serial||0);
+     if(img.dataset.serial!==serial||!img.hasAttribute('src')){
+       img.dataset.serial=serial;
+       restartGif(img,'isisPower',serial);
+     }
+     const started=Number(blessing.startedAt)||now,end=Number(blessing.endAt)||now;
+     const fadeIn=clamp((now-started)/260,0,1),fadeOut=clamp((end-now)/360,0,1),alpha=Math.min(fadeIn,fadeOut);
      const sx=(ally.x-left)*zoom,sy=(ally.y-top)*zoom;
-     img.style.left=sx+'px';img.style.top=(sy-5*zoom)+'px';img.style.width=(124*zoom)+'px';img.style.height=(160*zoom)+'px';img.style.opacity=String(alpha);img.style.visibility=alpha>.01?'visible':'hidden';img.style.transform='translate(-50%,-58%)';img.style.zIndex=String(Math.max(1,55+Math.round(sy)));
+     img.style.left=sx+'px';
+     img.style.top=(sy-8*zoom)+'px';
+     img.style.width=(178*zoom)+'px';
+     img.style.height=(210*zoom)+'px';
+     img.style.opacity=String(alpha);
+     img.style.visibility=alpha>.005?'visible':'hidden';
+     img.style.transform='translate(-50%,-58%)';
+     // A entidade usa 100+Y; 42+Y mantém o poder claramente atrás dela sem sumir.
+     img.style.zIndex=String(Math.max(1,42+Math.round(sy)));
    }
  }
- for(const [key,img] of isisPowerNodes)if(!active.has(key)){releaseGifObjectUrl(img);img.remove();isisPowerNodes.delete(key)}
+ for(const [key,img] of isisPowerNodes)if(!active.has(key)){
+   releaseGifObjectUrl(img);img.remove();isisPowerNodes.delete(key)
+ }
 }
 function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=performance.now();
@@ -9093,31 +9164,43 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    // O scale geral aplica a câmera; o flip fica só no miolo do personagem.
    // Durante a decolagem o Dragão sobe visualmente e mantém altitude enquanto voa.
    // A posição lógica no mapa não muda: é apenas altura visual, preservando alcance e sincronização.
-   let dragonLift=0;
+   let flightLift=0;
    if(e.type==='dragon'){
      if(e.dragonFlightState==='takeoff'){
        const start=Number(e.dragonTakeoffStartedAt)||localNow;
        const end=Math.max(start+1,Number(e.dragonTakeoffEndAt)||start+DRAGON_TAKEOFF_DURATION);
        const progress=clamp((localNow-start)/(end-start),0,1);
-       dragonLift=36*(1-Math.pow(1-progress,2));
-     }else if(e.dragonFlightState==='flying')dragonLift=36;
+       flightLift=36*(1-Math.pow(1-progress,2));
+     }else if(e.dragonFlightState==='flying')flightLift=36;
+   }else if(e.type==='isis'&&isisSpecialActive(e,localNow)){
+     const p=e.pendingIsisAttack;
+     const start=Number(p.startedAt)||localNow;
+     const activation=Math.max(start+1,Number(p.activationAt)||start+ISIS_SPECIAL_DELAY_MS);
+     const end=Math.max(activation+1,Number(p.endAt)||activation+1);
+     const landingStart=Math.max(activation,end-ISIS_LANDING_DURATION_MS);
+     if(localNow<activation){
+       const progress=clamp((localNow-start)/(activation-start),0,1);
+       flightLift=ISIS_FLIGHT_LIFT*(1-Math.pow(1-progress,2));
+     }else if(localNow>=landingStart){
+       flightLift=ISIS_FLIGHT_LIFT*clamp((end-localNow)/Math.max(1,end-landingStart),0,1);
+     }else flightLift=ISIS_FLIGHT_LIFT;
    }
-   // Naja e Annubis usam offset no CONTAINER REAL do render.
+   // Naja, Annubis e Isis usam offset no CONTAINER REAL do render.
    // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
    // ao espelhar, a compensacao tambem precisa espelhar.
    const anubisFace=(e.facing||1)>=0?1:-1;
-   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:e.type==='isis'?sx+14*zoom:sx;
    const renderY=e.type==='naja'?sy+16*zoom:(e.type==='anubis'||e.type==='isis')?sy+18*zoom:sy;
-   const visualTop=renderY-dragonLift*zoom;
+   const visualTop=renderY-flightLift*zoom;
    if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
-   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.34:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.44:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
    if(el._visualScale!==visualScale){
      el._visualScale=visualScale;
      el.style.transform=`translate(-50%,-58%) scale(${visualScale})`;
    }
-   const visualZ=(e.type==='dragon'&&e.dragonFlightState==='flying'?900:100)+Math.round(sy);
+   const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
 
    const face=e.facing||1;
