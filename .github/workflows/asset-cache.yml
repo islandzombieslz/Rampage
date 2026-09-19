@@ -67,11 +67,6 @@ jobs:
             "navigator.serviceWorker.register('./sw.js'",
             'NetworkAdapter.ensureAuth().catch(()=>{});',
             "setBootTitle('VERIFICANDO ARQUIVOS')",
-            "BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q'",
-            'function startBootIntro(){',
-            'const bootIntroDone=new Promise',
-            'await bootIntroDone;',
-            'startBootIntro();',
             'ROOM LIFECYCLE 2026-09-09',
             'BROWN WARRIOR SYSTEM 2026-09-12'
           ]
@@ -79,8 +74,8 @@ jobs:
           assert not missing, 'Missing cache/preserved markers: '+repr(missing)
           assert 'BOOT_ASSET_URLS' not in t, 'Old always-download loader remains'
           assert 'await Promise.race([NetworkAdapter.ensureAuth()' not in t, 'Firebase still blocks boot loader'
-          assert t.count("BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q'")==1, 'Alpha intro controller missing/duplicated'
-          assert t.count('function startBootIntro(){')==1, 'startBootIntro missing/duplicated'
+          assert 'youtube-nocookie.com' not in t, 'Removed YouTube boot intro returned'
+          assert 'BOOT_INTRO_VIDEO_ID' not in t, 'Removed boot intro controller returned'
           assert 'const CACHE_NAME="rampage-assets-v3";' in sw
           assert "url.searchParams.has('rampageRev')" in sw
           assert "await self.clients.claim();" in sw
