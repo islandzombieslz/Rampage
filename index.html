@@ -2273,39 +2273,18 @@ body.booting #landscapeRoot{visibility:hidden}
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
-#bootIntro{
-  position:fixed;
-  left:50%;
-  top:50%;
-  width:100vw;
-  height:100vh;
-  z-index:2;
-  background:#000;
-  overflow:hidden;
-  opacity:1;
-  transform:translate(-50%,-50%);
-  transform-origin:center center;
-  transition:opacity .55s ease;
-  pointer-events:auto;
+@media (orientation:portrait) and (max-width:900px){
+  body.booting #bootLoader{
+    width:100vh;
+    height:100vw;
+    left:100vw;
+    top:0;
+    right:auto;
+    bottom:auto;
+    transform-origin:top left;
+    transform:rotate(90deg);
+  }
 }
-#bootIntro.fade-out{opacity:0;pointer-events:none}
-/* Intro sempre horizontal: em portrait a camada inteira é girada,
-   sem alterar a viewport do jogo. */
-#bootIntro iframe{
-  position:absolute;
-  left:50%;
-  top:50%;
-  width:177.78vh;
-  height:100vh;
-  min-width:100vw;
-  min-height:56.25vw;
-  transform:translate(-50%,-50%);
-  border:0;
-  pointer-events:none;
-  background:#000;
-}
-
-
 /* EGYPT CLAN SYSTEM 2026-09-13 */
 #clanScreen>.card > .clan-options-grid{
   position:absolute !important;
@@ -2741,7 +2720,6 @@ window.dispatchEvent(new Event('firebase-ready'));
   </defs>
 </svg>
 <div id="bootLoader" role="status" aria-live="polite" aria-label="Carregando jogo">
-  <div id="bootIntro" aria-hidden="true"></div>
   <div id="bootLoaderBox">
     <div id="bootLoaderTitle">CARREGANDO</div>
     <div id="bootLoaderPercent">0%</div>
@@ -3337,136 +3315,6 @@ function setBootProgress(value){
 }
 function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');if(el)el.textContent=text}
 
-/* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */
-const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
-const BOOT_INTRO_PLAY_MS=12400;
-const BOOT_INTRO_RESHOW_AFTER_MS=6*60*60*1000;
-const BOOT_INTRO_STATE_KEY='rampageBootIntroStateV2';
-const BOOT_PRESENCE_KEY='rampageLastPresenceV1';
-function readBootIntroState(){
- try{return JSON.parse(localStorage.getItem(BOOT_INTRO_STATE_KEY)||'null')}catch(_){return null}
-}
-function readBootPresence(){
- try{return Number(localStorage.getItem(BOOT_PRESENCE_KEY))||0}catch(_){return 0}
-}
-function writeBootPresence(){
- try{localStorage.setItem(BOOT_PRESENCE_KEY,String(Date.now()))}catch(_){}
-}
-function shouldPlayBootIntro(){
- const saved=readBootIntroState(),lastPresence=readBootPresence(),now=Date.now();
- if(!saved||saved.videoId!==BOOT_INTRO_VIDEO_ID)return true;
- return !lastPresence||now-lastPresence>=BOOT_INTRO_RESHOW_AFTER_MS;
-}
-const BOOT_INTRO_SHOULD_PLAY=shouldPlayBootIntro();
-function rememberBootIntroVideo(){
- try{localStorage.setItem(BOOT_INTRO_STATE_KEY,JSON.stringify({videoId:BOOT_INTRO_VIDEO_ID,shownAt:Date.now()}))}catch(_){}
-}
-writeBootPresence();
-const bootPresenceTimer=setInterval(writeBootPresence,60000);
-document.addEventListener('visibilitychange',writeBootPresence,{passive:true});
-window.addEventListener('pagehide',()=>{writeBootPresence();clearInterval(bootPresenceTimer)},{passive:true});
-
-let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
-let bootIntroViewportCleanup=()=>{};
-let resolveBootIntroDone=()=>{};
-const bootIntroDone=new Promise(resolve=>{resolveBootIntroDone=resolve});
-
-function syncBootIntroLandscape(){
- const intro=document.getElementById('bootIntro');
- if(!intro)return;
- const rawW=Math.max(1,window.innerWidth||document.documentElement.clientWidth||1);
- const rawH=Math.max(1,window.innerHeight||document.documentElement.clientHeight||1);
- const portrait=rawH>rawW;
- const viewW=portrait?rawH:rawW;
- const viewH=portrait?rawW:rawH;
- intro.style.left='50%';
- intro.style.top='50%';
- intro.style.width=viewW+'px';
- intro.style.height=viewH+'px';
- intro.style.transform='translate(-50%,-50%) rotate('+(portrait?'90deg':'0deg')+')';
- const frame=intro.querySelector('iframe');
- if(frame){
-   const coverW=Math.max(viewW,viewH*(16/9));
-   const coverH=coverW*(9/16);
-   frame.style.left='50%';
-   frame.style.top='50%';
-   frame.style.width=coverW+'px';
-   frame.style.height=coverH+'px';
-   frame.style.transform='translate(-50%,-50%)';
- }
-}
-function bindBootIntroLandscape(){
- const sync=()=>requestAnimationFrame(syncBootIntroLandscape);
- window.addEventListener('resize',sync,{passive:true});
- window.addEventListener('orientationchange',sync,{passive:true});
- window.screen.orientation?.addEventListener?.('change',sync);
- bootIntroViewportCleanup=()=>{
-   window.removeEventListener('resize',sync);
-   window.removeEventListener('orientationchange',sync);
-   window.screen.orientation?.removeEventListener?.('change',sync);
- };
- syncBootIntroLandscape();
- setTimeout(syncBootIntroLandscape,80);
- setTimeout(syncBootIntroLandscape,350);
-}
-
-function bootIntroCommand(frame,func,args=[]){
- try{
-   frame?.contentWindow?.postMessage(JSON.stringify({event:'command',func,args}),'*');
- }catch(_){}
-}
-function finishBootIntro({immediate=false}={}){
- if(bootIntroFinished)return;
- bootIntroFinished=true;
- clearTimeout(bootIntroTimer);
- clearTimeout(bootIntroFallbackTimer);
- const intro=document.getElementById('bootIntro');
- if(!intro){bootIntroViewportCleanup();resolveBootIntroDone();return}
- if(immediate){
-   bootIntroViewportCleanup();
-   intro.remove();
-   resolveBootIntroDone();
-   return;
- }
- intro.classList.add('fade-out');
- setTimeout(()=>{
-   bootIntroViewportCleanup();
-   intro.remove();
-   resolveBootIntroDone();
- },560);
-}
-function startBootIntro(){
- if(!BOOT_INTRO_SHOULD_PLAY){finishBootIntro({immediate:true});return}
- rememberBootIntroVideo();
- const intro=document.getElementById('bootIntro');
- if(!intro){finishBootIntro();return}
- bindBootIntroLandscape();
- const frame=document.createElement('iframe');
- frame.id='bootIntroFrame';
- frame.title='Introdução - Alpha (Mestre da Guerra)';
- frame.tabIndex=-1;
- frame.setAttribute('allow','autoplay; encrypted-media');
- frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
- frame.setAttribute('aria-hidden','true');
- frame.addEventListener('load',()=>{
-   const kick=()=>{
-     bootIntroCommand(frame,'unMute');
-     bootIntroCommand(frame,'setVolume',[100]);
-     bootIntroCommand(frame,'playVideo');
-   };
-   kick();setTimeout(kick,260);setTimeout(kick,900);
-   clearTimeout(bootIntroTimer);
-   bootIntroTimer=setTimeout(finishBootIntro,BOOT_INTRO_PLAY_MS);
- },{once:true});
- const origin=encodeURIComponent(location.origin);
- frame.src='https://www.youtube-nocookie.com/embed/'+BOOT_INTRO_VIDEO_ID+
-   '?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1&origin='+origin;
- intro.appendChild(frame);
- syncBootIntroLandscape();
- try{requestGameFullscreenLandscape().catch(()=>{})}catch(_){}
- bootIntroFallbackTimer=setTimeout(finishBootIntro,16000);
-}
-
 function bootReadSavedManifest(){
  try{return JSON.parse(localStorage.getItem(BOOT_MANIFEST_KEY)||'{}')||{}}catch(_){return {}}
 }
@@ -3564,8 +3412,6 @@ async function runBootLoader(){
    assetWarning.textContent=`${failed} recurso(s) não puderam ser atualizados.`;
    assetWarning.classList.add('show');
  }
- // O carregamento nunca pausa: apenas seguramos a SAÍDA visual até a intro terminar.
- await bootIntroDone;
  await new Promise(resolve=>setTimeout(resolve,220));
  document.body.classList.remove('booting');
  const loader=document.getElementById('bootLoader');
@@ -5480,6 +5326,7 @@ function resize(){
   canvas.style.height=h+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.imageSmoothingEnabled=true;
+  if(state.mode==='war')clampWarCamera();
 }
 addEventListener('resize',resize);
 window.visualViewport?.addEventListener('resize',resize);
@@ -8120,7 +7967,14 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
 
 
 /* ==================== CÂMERA MESTRE DA GUERRA ==================== */
+function warCameraMinZoom(){
+ const {w,h}=gameViewport();
+ if(isMobileLike())return .55;
+ return Math.max(.55,w/state.world.w,h/state.world.h);
+}
 function clampWarCamera(){
+ const minZoom=warCameraMinZoom();
+ if(state.camera.zoom<minZoom)state.camera.zoom=minZoom;
  const z=state.camera.zoom;
  const {w,h}=gameViewport();
  const viewW=w/z,viewH=h/z;
@@ -8137,7 +7991,7 @@ function setWarZoom(newZoom,screenX=null,screenY=null){
  if(screenX===null)screenX=w/2;
  if(screenY===null)screenY=h/2;
  const old=c.zoom;
- newZoom=clamp(newZoom,.55,2.15);
+ newZoom=clamp(newZoom,warCameraMinZoom(),2.15);
  const worldX=c.x+screenX/old,worldY=c.y+screenY/old;
  c.zoom=newZoom;
  c.x=worldX-screenX/newZoom;
@@ -8152,8 +8006,8 @@ function beginWarCameraIntro(){
  c.introStart=performance.now()+350;
  c.introDuration=3000;
 
- // Primeiro enquadramento: centro do mapa.
- c.zoom=.72;
+ // Primeiro enquadramento: centro do mapa, sem revelar área fora do cenário no PC.
+ c.zoom=Math.max(.72,warCameraMinZoom());
  const {w,h}=gameViewport();
  const viewW=w/c.zoom,viewH=h/c.zoom;
  c.x=clamp(state.world.w/2-viewW/2,0,Math.max(0,state.world.w-viewW));
@@ -8434,10 +8288,8 @@ function loop(now){
  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-startBootIntro();
-runBootLoader().catch(async err=>{
+runBootLoader().catch(err=>{
  console.error(err);
- await bootIntroDone.catch(()=>{});
  document.body.classList.remove('booting');
  document.getElementById('bootLoader')?.remove();
  playDesiredMusic({restart:true});
