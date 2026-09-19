@@ -5921,6 +5921,7 @@ function acquireGolemRockNode(){
  if(!rock){rock=document.createElement('img');rock.className='golem-rock-fragment';rock.src=ASSETS.golemRocks}
  if(!rock.hasAttribute('src'))rock.src=ASSETS.golemRocks;
  if(rock.parentElement!==golemRockLayer)golemRockLayer?.appendChild(rock);
+ rock.style.left='0px';rock.style.top='0px';
  if(rock._rockVisible!==true){rock._rockVisible=true;rock.style.visibility='visible'}
  return rock;
 }
@@ -6044,10 +6045,8 @@ function updateGolemRockEffects(now){
      el.style.width=pxSize+'px';
      el.style.height=pxSize+'px';
    }
-   el.style.left=sx+'px';
-   el.style.top=sy+'px';
    el.style.opacity=String(Math.max(0,opacity));
-   el.style.transform=`translate(-50%,-50%) scale(${scale}) rotate(${rot}deg)`;
+   el.style.transform=`translate3d(${sx}px,${sy}px,0) translate(-50%,-50%) scale(${scale}) rotate(${rot}deg)`;
  }
 }
 
@@ -8528,6 +8527,7 @@ function acquireDragonProjectileNode(layer,assetKey='dragonFireball'){
  if(img.dataset.assetKey!==assetKey){stopGif(img);img.dataset.assetKey=assetKey}
  if(!img.hasAttribute('src'))img.src=ASSETS[assetKey];
  if(img.parentElement!==layer)layer.appendChild(img);
+ img.style.left='0px';img.style.top='0px';
  img.style.display='block';
  img.style.visibility='visible';
  return img;
@@ -8787,7 +8787,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
                img._projectileZoom=zoom;
                const size=48*zoom;img.style.width=size+'px';img.style.height=size+'px';
              }
-             img.style.left=sx+'px';img.style.top=sy+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle-Math.PI/2}rad) scaleY(-1)`;img.style.visibility='visible';
+             img.style.transform=`translate3d(${sx}px,${sy}px,0) translate(-50%,-50%) rotate(${angle-Math.PI/2}rad) scaleY(-1)`;img.style.visibility='visible';
            }
            for(const [id,img] of dragonProjectileNodes)if(!active.has(id)){recycleDragonProjectileNode(img);dragonProjectileNodes.delete(id)}
           }
@@ -8814,6 +8814,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
           function makeEntityNode(e){
  const el=document.createElement('div');
  el.className='entity-visual';
+ el.style.left='0px';el.style.top='0px';
 
  if(e.type==='brownWarrior'){
    el.classList.add('brown-warrior-visual');
@@ -9320,13 +9321,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
    const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-flightLift*zoom;
-   if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
-   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
    const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.44:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
-   if(el._visualScale!==visualScale){
-     el._visualScale=visualScale;
-     el.style.transform=`translate(-50%,-58%) scale(${visualScale})`;
+   if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
+     el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
+     el.style.transform=`translate3d(${renderX}px,${visualTop}px,0) translate(-50%,-58%) scale(${visualScale})`;
    }
    const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
