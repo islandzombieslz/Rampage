@@ -4074,8 +4074,7 @@ function serializeWarEntityForNetwork(e,now){
    hitSerial:Number(e.hitSerial)||0,hitDirX:Number(e.hitDirX)||0,hitDirY:Number(e.hitDirY)||0,hitTilt:Number(e.hitTilt)||13,
    shakeSerial:Number(e.shakeSerial)||0,shakePower:Number(e.shakePower)||0,
    deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
-   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null,
-   isisLastHealedAt:Number(e.isisLastHealedAt)||0,isisLastHealedBy:e.isisLastHealedBy??null
+   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null
  };
 
  if(e.type==='golem'){
