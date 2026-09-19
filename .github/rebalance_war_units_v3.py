@@ -39,6 +39,8 @@ required=[
     "const BOOT_INTRO_SHOULD_PLAY=shouldPlayBootIntro();",
     "if(!BOOT_INTRO_SHOULD_PLAY){finishBootIntro({immediate:true});return}",
     "const warSeparationLiving=[];",
+    "const r=Math.max(0,Number(e.r)||0);",
+    "e.x=clamp(e.x,WAR_ARENA_INSET.left+r,state.world.w-WAR_ARENA_INSET.right-r);",
     "function warGridKey(x,y){return (x<<16)^(y&0xffff)}",
     "const renderIsisEffectEntities=[];",
     "const sprites=el._spriteEntries||",
