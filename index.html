@@ -2674,7 +2674,7 @@ body.booting #landscapeRoot{visibility:hidden}
   bottom:21px;
   transform:translateX(-50%);
   color:#fff;
-  font-size:16px;
+  font-size:20px;
   line-height:1;
   font-weight:900;
   letter-spacing:.08px;
@@ -3822,7 +3822,7 @@ const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScr
 
 /* ==================== TRILHA SONORA ==================== */
 const menuMusicEl=$('#menuMusic'),battleMusicEl=$('#battleMusic');
-const MUSIC_VOLUME={menu:.30,battle:.38};
+const MUSIC_VOLUME={menu:.18,battle:.22};
 const MUSIC_SWITCH_FADE_MS=850,MUSIC_LOOP_FADE_MS=1800,MUSIC_LOOP_FADE_SECONDS=2;
 const musicFadeTokens=new WeakMap(),musicTailFading=new WeakSet();
 let desiredMusicMode='menu',activeMusicEl=null;
@@ -4102,10 +4102,11 @@ document.addEventListener('pointerdown',ev=>{
  warmLayeredSfx();
  const button=ev.target.closest?.('button');
  if(!button||button.disabled||button.id==='attackBtn')return;
- if(button.classList.contains('plus')||button.classList.contains('minus')||button.id==='shopButton'){
-   playLayeredSfx('click2',.55,0,25);
+ if(button.classList.contains('plus')||button.classList.contains('minus'))return;
+ if(button.id==='shopButton'){
+   playLayeredSfx('click2',.62,0,25);
  }else{
-   playLayeredSfx('click',.50,0,20);
+   playLayeredSfx('click',.68,0,20);
  }
 },{capture:true,passive:true});
 document.addEventListener('keydown',warmLayeredSfx,{capture:true});
@@ -4934,13 +4935,16 @@ $$('.option-group button').forEach(b=>b.onclick=()=>{
 });
 function applyStepperButton(b){
   const dir=b.classList.contains('plus')?1:-1;
+  const beforeRounds=state.rounds;
+  const beforeGems=state.gems;
+  const beforeNpcCount=state.players.filter(p=>!p.human).length;
 
   if(b.dataset.target==='rounds') state.rounds=clamp(state.rounds+dir,2,10);
   if(b.dataset.target==='gems') state.gems=normalizeWarStartingGems((Number(state.gems)||300)+dir*100);
   if((b.dataset.target==='rounds'||b.dataset.target==='gems')&&b.closest('#warLobbySettings'))scheduleWarLobbySettingsSync();
 
   if(b.dataset.target==='npcs'){
-    if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
+    if(NetworkAdapter.online&&!NetworkAdapter.isHost)return false;
     const npcCount=state.players.filter(p=>!p.human).length;
 
     const maxPlayers=state.mode==='pve'?10:3;
@@ -4966,9 +4970,11 @@ function applyStepperButton(b){
 
   $('#roundsVal').textContent=$('#roundsVal2').textContent=state.rounds;
   $('#gemsVal').textContent=state.gems;
+  const afterNpcCount=state.players.filter(p=>!p.human).length;
+  return state.rounds!==beforeRounds||state.gems!==beforeGems||afterNpcCount!==beforeNpcCount;
 }
 
-$$('.plus,.minus').forEach(b=>{
+$('.plus,.minus').forEach(b=>{
   let holdDelay=null,holdInterval=null,didRepeat=false;
 
   const stopHold=()=>{
@@ -4977,14 +4983,18 @@ $$('.plus,.minus').forEach(b=>{
     holdDelay=holdInterval=null;
   };
 
+  const stepOnce=()=>{
+    if(applyStepperButton(b))playLayeredSfx('click2',.62,0,25);
+  };
+
   b.addEventListener('pointerdown',e=>{
     e.preventDefault();
     didRepeat=false;
-    applyStepperButton(b);
+    stepOnce();
     try{ b.setPointerCapture?.(e.pointerId); }catch(_){}
     holdDelay=setTimeout(()=>{
       didRepeat=true;
-      holdInterval=setInterval(()=>applyStepperButton(b),110);
+      holdInterval=setInterval(stepOnce,110);
     },380);
   });
 
