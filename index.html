@@ -1315,7 +1315,7 @@ html,body{
 /* ===== ISIS DO EGITO ===== */
 .entity-visual.isis-visual{width:116px;height:148px}
 .entity-visual.isis-visual .entity-facing{width:116px;height:140px}
-.entity-visual.isis-visual .entity-body{left:2px;top:-18px;width:138px;height:162px;object-fit:contain}
+.entity-visual.isis-visual .entity-body{left:38px;top:26px;width:142px;height:166px;object-fit:contain}
 .entity-visual.isis-visual .entity-bars{left:21px;top:-8px;width:78px}
 .entity-visual.isis-visual .hp-bg,.entity-visual.isis-visual .shield-bg{width:78px}
 .entity-visual.isis-visual .entity-weapon-facing{display:none !important}
@@ -3563,6 +3563,7 @@ const ISIS_HEAL_TICK_MS=1000;
 const ISIS_HEAL_AMOUNT=20;
 const ISIS_SELF_HEAL_AMOUNT=5;
 const ISIS_MAX_ALLIES=3;
+const ISIS_HEAL_REUSE_LOCK_MS=5000;
 const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
 const ISIS_FLIGHT_LIFT=52;
 const ISIS_LANDING_DURATION_MS=700;
@@ -6420,9 +6421,36 @@ function updateBrownWarriorAttackState(e,now){
  }
 }
 
-function selectIsisSpecialAllies(e){
+function selectIsisSpecialAllies(e,now=performance.now()){
+ const teamAllies=[];
+ for(const ally of state.entities){
+   if(ally?.alive&&ally!==e&&ally.team===e.team&&isRealCombatTarget(ally))teamAllies.push(ally);
+ }
+ // Isis só pode receber cura de outra Isis quando não existir nenhuma outra
+ // classe viva no exército. A autocura de 5/s continua independente disso.
+ const hasNonIsisAlly=teamAllies.some(ally=>ally.type!=='isis');
+
+ // Reserva global por equipe: duas Isis nunca escolhem o mesmo aliado durante
+ // janelas de cura sobrepostas, mesmo que ativem o especial no mesmo instante.
+ const reserved=new Set();
+ for(const source of state.entities){
+   if(!source?.alive||source===e||source.type!=='isis'||source.team!==e.team)continue;
+   const p=source.pendingIsisAttack;
+   if(p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
+   for(const blessing of p.blessings||[]){
+     if(!blessing.expired&&Number(blessing.endAt||0)>now&&blessing.targetId!=null)reserved.add(blessing.targetId);
+   }
+ }
+
  const allies=[];
- for(const ally of state.entities)if(ally?.alive&&ally!==e&&ally.team===e.team&&isRealCombatTarget(ally))allies.push(ally);
+ for(const ally of teamAllies){
+   if(hasNonIsisAlly&&ally.type==='isis')continue;
+   if(reserved.has(ally.id))continue;
+   const lastHealAt=Number(ally.isisLastHealedAt)||0;
+   const lastHealer=ally.isisLastHealedBy??null;
+   if(lastHealAt>0&&lastHealer!==e.id&&now-lastHealAt<ISIS_HEAL_REUSE_LOCK_MS)continue;
+   allies.push(ally);
+ }
  allies.sort((a,b)=>{
    const ar=Math.max(0,Number(a.hp)||0)/Math.max(1,Number(a.maxHp)||1),br=Math.max(0,Number(b.hp)||0)/Math.max(1,Number(b.maxHp)||1);
    if(Math.abs(ar-br)>.0001)return ar-br;
@@ -6476,7 +6504,7 @@ function updateIsisAttackState(e,now){
      const remainingSpecial=Math.max(0,Number(p.endAt)-now);
      const powerDuration=Math.max(0,Math.min(ISIS_POWER_DURATION,remainingSpecial));
      p.nextSelfHealAt=now+ISIS_HEAL_TICK_MS;
-     p.blessings=selectIsisSpecialAllies(e).map((ally,i)=>({
+     p.blessings=selectIsisSpecialAllies(e,now).map((ally,i)=>({
        targetId:ally.id,serial:(Number(p.serial)||0)*10+i+1,startedAt:now,duration:powerDuration,
        endAt:now+powerDuration,nextHealAt:now+ISIS_HEAL_TICK_MS
      }));
@@ -6496,9 +6524,14 @@ function updateIsisAttackState(e,now){
        if(!ally?.alive||ally.team!==e.team||now>=Number(blessing.endAt||0)){blessing.expired=true;continue}
        let guard=0;
        while(now>=Number(blessing.nextHealAt||Infinity)&&Number(blessing.nextHealAt)<=Number(blessing.endAt)&&guard<6){
+         const healAt=Number(blessing.nextHealAt)||now;
          const beforeHp=Number(ally.hp)||0;
          ally.hp=Math.min(Number(ally.maxHp)||0,beforeHp+ISIS_HEAL_AMOUNT);
-         if(ally.hp>beforeHp)ally.regenSerial=(Number(ally.regenSerial)||0)+1;
+         if(ally.hp>beforeHp){
+           ally.regenSerial=(Number(ally.regenSerial)||0)+1;
+           ally.isisLastHealedAt=healAt;
+           ally.isisLastHealedBy=e.id;
+         }
          blessing.nextHealAt+=ISIS_HEAL_TICK_MS;guard++;
        }
      }
@@ -9189,8 +9222,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
    // ao espelhar, a compensacao tambem precisa espelhar.
    const anubisFace=(e.facing||1)>=0?1:-1;
-   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:e.type==='isis'?sx+14*zoom:sx;
-   const renderY=e.type==='naja'?sy+16*zoom:(e.type==='anubis'||e.type==='isis')?sy+18*zoom:sy;
+   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-flightLift*zoom;
    if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
    if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
