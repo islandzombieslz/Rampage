@@ -640,6 +640,8 @@ html,body{
   inset:0;
   width:100vw;
   height:100vh;
+  width:100dvw;
+  height:100dvh;
   overflow:hidden;
   background:var(--bg);
 }
@@ -651,6 +653,9 @@ html,body{
     width:100vh;
     height:100vw;
     left:100vw;
+    width:100dvh;
+    height:100dvw;
+    left:100dvw;
     top:0;
     right:auto;
     bottom:auto;
@@ -861,6 +866,8 @@ html,body{
 #landscapeRoot{
   width:100vw;
   height:100vh;
+  width:100dvw;
+  height:100dvh;
 }
 
 #shopButton{
@@ -2267,6 +2274,9 @@ body.booting #landscapeRoot{visibility:hidden}
     width:100vh;
     height:100vw;
     left:100vw;
+    width:100dvh;
+    height:100dvw;
+    left:100dvw;
     top:0;
     right:auto;
     bottom:auto;
@@ -3403,6 +3413,7 @@ async function runBootLoader(){
  }
  await new Promise(resolve=>setTimeout(resolve,220));
  document.body.classList.remove('booting');
+ try{normalizeMobileViewport()}catch(_){}
  const loader=document.getElementById('bootLoader');
  if(loader){loader.classList.add('done');setTimeout(()=>loader.remove(),120)}
  playDesiredMusic({restart:true});
@@ -4735,30 +4746,90 @@ function clearMobileRootOverrides(root){
 }
 
 function refreshMobileViewportLayout(){
-  const rawW=Math.max(1,innerWidth||document.documentElement.clientWidth||1);
-  const rawH=Math.max(1,innerHeight||document.documentElement.clientHeight||1);
+  const vv=window.visualViewport;
+  const rawW=Math.max(1,Math.round(vv?.width||innerWidth||document.documentElement.clientWidth||1));
+  const rawH=Math.max(1,Math.round(vv?.height||innerHeight||document.documentElement.clientHeight||1));
+  const viewLeft=Math.round(vv?.offsetLeft||0);
+  const viewTop=Math.round(vv?.offsetTop||0);
   const root=document.getElementById('landscapeRoot');
+  const loader=document.getElementById('bootLoader');
   const mobile=isMobileLike()&&Math.min(rawW,rawH)<=900;
-  const portrait=mobile&&rawH>=rawW&&rawW<=900;
+  const portrait=mobile&&rawH>=rawW;
 
   if(!mobile||!root){
     if(root)clearMobileRootOverrides(root);
-    mobileViewportLayout={active:false,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0};
+    if(loader){
+      for(const prop of ['width','height','left','top','right','bottom','transform','transformOrigin'])loader.style[prop]='';
+    }
+    mobileViewportLayout={active:false,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0,rawW,rawH};
     return mobileViewportLayout;
   }
 
   if(portrait){
-    clearMobileRootOverrides(root);
-    const logical={w:rawH,h:rawW};
-    mobileViewportLayout={active:true,portrait:true,w:logical.w,h:logical.h,scale:1,offsetX:0,offsetY:0};
-    try{sessionStorage.setItem('rampagePortraitViewport',JSON.stringify(logical))}catch(_){}
+    // Mantém a mesma viewport lógica horizontal durante toda a sessão.
+    // Ao voltar para a aba, apenas a escala/posição física é recalculada.
+    let logical=readPortraitViewportSnapshot();
+    if(!logical){
+      logical={w:rawH,h:rawW};
+      try{sessionStorage.setItem('rampagePortraitViewport',JSON.stringify(logical))}catch(_){}
+    }
+    const scale=Math.min(rawH/logical.w,rawW/logical.h);
+    const centerX=viewLeft+rawW/2;
+    const centerY=viewTop+rawH/2;
+
+    root.style.width=logical.w+'px';
+    root.style.height=logical.h+'px';
+    root.style.left=centerX+'px';
+    root.style.top=centerY+'px';
+    root.style.right='auto';
+    root.style.bottom='auto';
+    root.style.transformOrigin='center center';
+    root.style.transform=`translate(-50%,-50%) rotate(90deg) scale(${scale})`;
+
+    if(loader&&document.body.classList.contains('booting')){
+      loader.style.width=logical.w+'px';
+      loader.style.height=logical.h+'px';
+      loader.style.left=centerX+'px';
+      loader.style.top=centerY+'px';
+      loader.style.right='auto';
+      loader.style.bottom='auto';
+      loader.style.transformOrigin='center center';
+      loader.style.transform=`translate(-50%,-50%) rotate(90deg) scale(${scale})`;
+    }
+
+    mobileViewportLayout={
+      active:true,portrait:true,w:logical.w,h:logical.h,scale,
+      offsetX:viewLeft,offsetY:viewTop,centerX,centerY,rawW,rawH
+    };
     return mobileViewportLayout;
   }
 
-  // Landscape físico deve ocupar 100% da viewport real.
-  // Mantemos o mesmo dimensionamento visual via CSS/vmin, sem letterbox nem corte.
-  clearMobileRootOverrides(root);
-  mobileViewportLayout={active:true,portrait:false,w:rawW,h:rawH,scale:1,offsetX:0,offsetY:0};
+  // No landscape físico/fullscreen, preserva exatamente o comportamento atual:
+  // ocupa a viewport real inteira, sem escala extra.
+  root.style.width=rawW+'px';
+  root.style.height=rawH+'px';
+  root.style.left=viewLeft+'px';
+  root.style.top=viewTop+'px';
+  root.style.right='auto';
+  root.style.bottom='auto';
+  root.style.transformOrigin='top left';
+  root.style.transform='none';
+
+  if(loader&&document.body.classList.contains('booting')){
+    loader.style.width=rawW+'px';
+    loader.style.height=rawH+'px';
+    loader.style.left=viewLeft+'px';
+    loader.style.top=viewTop+'px';
+    loader.style.right='auto';
+    loader.style.bottom='auto';
+    loader.style.transformOrigin='top left';
+    loader.style.transform='none';
+  }
+
+  mobileViewportLayout={
+    active:true,portrait:false,w:rawW,h:rawH,scale:1,
+    offsetX:viewLeft,offsetY:viewTop,rawW,rawH
+  };
   return mobileViewportLayout;
 }
 
@@ -5239,11 +5310,23 @@ document.addEventListener('click',forceFullscreenFromGesture,{capture:true});
 
 // Se o usuário/sistema sair do fullscreen, tenta voltar imediatamente.
 // Se o navegador exigir gesto, o próximo toque recupera sem precisar de botão específico.
+let mobileViewportRaf=0,mobileViewportSettleTimer=0;
 function normalizeMobileViewport(){
   if(!isMobileLike())return;
-  applyLandscapeFallback();
-  requestAnimationFrame(()=>resize());
-  setTimeout(resize,120);
+  if(mobileViewportRaf)cancelAnimationFrame(mobileViewportRaf);
+  clearTimeout(mobileViewportSettleTimer);
+  resize();
+  mobileViewportRaf=requestAnimationFrame(()=>{
+    mobileViewportRaf=0;
+    resize();
+  });
+  mobileViewportSettleTimer=setTimeout(resize,220);
+  try{
+    if(!isGameFullscreen()&&window.screen.orientation?.lock){
+      const p=window.screen.orientation.lock('landscape');
+      p?.catch?.(()=>{});
+    }
+  }catch(_){}
 }
 document.addEventListener('fullscreenchange',()=>{
   if(mobileStartHint)mobileStartHint.style.display=isGameFullscreen()?'none':'flex';
@@ -5260,15 +5343,15 @@ window.addEventListener('focus',normalizeMobileViewport);
 window.addEventListener('pageshow',normalizeMobileViewport);
 
 function applyLandscapeFallback(){
-  // O CSS faz a rotação visual quando o telefone continua fisicamente em portrait.
   landscapeRoot.classList.add('force-landscape');
-  resize();
+  normalizeMobileViewport();
 }
 window.addEventListener('orientationchange',applyLandscapeFallback);
 window.screen.orientation?.addEventListener?.('change',applyLandscapeFallback);
 applyLandscapeFallback();
 
 function isPortraitFallback(){
+  if(mobileViewportLayout.active)return mobileViewportLayout.portrait;
   const rawW=Math.max(1,innerWidth||document.documentElement.clientWidth||1);
   const rawH=Math.max(1,innerHeight||document.documentElement.clientHeight||1);
   return isMobileLike()&&rawH>=rawW&&rawW<=900;
@@ -5279,19 +5362,19 @@ function gameViewport(){
   return {w:innerWidth,h:innerHeight};
 }
 function screenPointToGame(x,y){
-  // Portrait continua usando a rotação CSS original, exatamente como antes.
-  if(isPortraitFallback()){
-    const rawW=innerWidth;
-    return {x:y,y:rawW-x};
-  }
-  // No landscape físico, desfaz o scale/centralização do viewport lógico salvo no portrait.
   const l=mobileViewportLayout;
+  if(l.active&&l.portrait){
+    return {
+      x:(y-l.centerY)/l.scale+l.w/2,
+      y:-(x-l.centerX)/l.scale+l.h/2
+    };
+  }
   if(l.active&&!l.portrait)return {x:(x-l.offsetX)/l.scale,y:(y-l.offsetY)/l.scale};
   return {x,y};
 }
 function screenDeltaToGame(dx,dy){
-  if(isPortraitFallback())return {x:dy,y:-dx};
   const l=mobileViewportLayout;
+  if(l.active&&l.portrait)return {x:dy/l.scale,y:-dx/l.scale};
   if(l.active&&!l.portrait)return {x:dx/l.scale,y:dy/l.scale};
   return {x:dx,y:dy};
 }
@@ -5307,7 +5390,9 @@ function resize(){
   ctx.imageSmoothingEnabled=true;
   if(state.mode==='war')clampWarCamera();
 }
-addEventListener('resize',resize);
+addEventListener('resize',normalizeMobileViewport);
+window.visualViewport?.addEventListener('resize',normalizeMobileViewport,{passive:true});
+window.visualViewport?.addEventListener('scroll',normalizeMobileViewport,{passive:true});
 resize();
 
 const keys={};
@@ -8269,6 +8354,7 @@ requestAnimationFrame(loop);
 runBootLoader().catch(err=>{
  console.error(err);
  document.body.classList.remove('booting');
+ try{normalizeMobileViewport()}catch(_){}
  document.getElementById('bootLoader')?.remove();
  playDesiredMusic({restart:true});
 });
@@ -8598,14 +8684,15 @@ function entityUiLocalPoint(img,clientX,clientY){
  const rect=img.getBoundingClientRect();
  if(rect.width<=0||rect.height<=0)return null;
  let u,v;
- if(isPortraitFallback()){
-   // O root é girado 90° no fallback portrait. Desfazemos essa rotação
-   // antes de calcular a posição dentro do sprite.
-   const logicalX=clientY,logicalY=innerWidth-clientX;
-   const logicalLeft=rect.top,logicalTop=innerWidth-rect.right;
-   const logicalW=rect.height,logicalH=rect.width;
-   u=(logicalX-logicalLeft)/Math.max(1,logicalW);
-   v=(logicalY-logicalTop)/Math.max(1,logicalH);
+ if(isPortraitFallback()&&mobileViewportLayout.active){
+   // Fallback para navegadores sem getBoxQuads: usa a mesma transformação do root.
+   const l=mobileViewportLayout;
+   const logical=screenPointToGame(clientX,clientY);
+   const logicalLeft=(rect.top-l.centerY)/l.scale+l.w/2;
+   const logicalTop=-(rect.right-l.centerX)/l.scale+l.h/2;
+   const logicalW=rect.height/l.scale,logicalH=rect.width/l.scale;
+   u=(logical.x-logicalLeft)/Math.max(1,logicalW);
+   v=(logical.y-logicalTop)/Math.max(1,logicalH);
  }else{
    u=(clientX-rect.left)/rect.width;
    v=(clientY-rect.top)/rect.height;
