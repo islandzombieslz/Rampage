@@ -1315,7 +1315,7 @@ html,body{
 /* ===== ISIS DO EGITO ===== */
 .entity-visual.isis-visual{width:116px;height:148px}
 .entity-visual.isis-visual .entity-facing{width:116px;height:140px}
-.entity-visual.isis-visual .entity-body{left:-13px;top:-13px;width:142px;height:166px;object-fit:contain}
+.entity-visual.isis-visual .entity-body{left:-13px;top:-18px;width:142px;height:166px;object-fit:contain}
 .entity-visual.isis-visual .entity-bars{left:21px;top:-8px;width:78px}
 .entity-visual.isis-visual .hp-bg,.entity-visual.isis-visual .shield-bg{width:78px}
 .entity-visual.isis-visual .entity-weapon-facing{display:none !important}
@@ -3605,7 +3605,7 @@ const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
 const ISIS_FLIGHT_LIFT=52;
 const ISIS_LANDING_DURATION_MS=700;
 const ISIS_SPRITE_OFFSET_X=26;
-const ISIS_SPRITE_OFFSET_Y=12;
+const ISIS_SPRITE_OFFSET_Y=-18;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const ISIS_RUNTIME_REVISION='isis-heal-runtime-v2-20260918';
@@ -9327,7 +9327,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
    const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-flightLift*zoom;
-   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.44:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
+   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.32:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.88:1;
    const visualScale=zoom*typeScale;
    if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
      el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
