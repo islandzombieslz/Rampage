@@ -646,7 +646,7 @@ html,body{
 
 /* Caso o navegador não permita travar a orientação,
    simulamos landscape girando o jogo inteiro. */
-@media (orientation:portrait) and (max-width:900px){
+@media (max-width:900px) and (max-aspect-ratio:1/1){
   #landscapeRoot.force-landscape{
     width:100vh;
     height:100vw;
@@ -950,17 +950,6 @@ html,body{
     min-height:38px;
   }
 }
-
-/* No fallback portrait, a cena continua usando a viewport inteira
-   e é apenas girada para landscape. */
-@media (orientation:portrait) and (max-width:900px){
-  #landscapeRoot.force-landscape{
-    width:100vh;
-    height:100vw;
-    left:100vw;
-  }
-}
-
 
 /* ===== HUD PVE MINIMALISTA ===== */
 #gameScreen.pve-mode .hud-top{
@@ -2273,7 +2262,7 @@ body.booting #landscapeRoot{visibility:hidden}
 #bootLoaderPercent{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;margin-bottom:12px}
 #bootLoaderTrack{height:8px;border:1px solid #555;background:#111;overflow:hidden;border-radius:999px}
 #bootLoaderBar{height:100%;width:0%;background:#fff;transition:width .12s linear}
-@media (orientation:portrait) and (max-width:900px){
+@media (max-width:900px) and (max-aspect-ratio:1/1){
   body.booting #bootLoader{
     width:100vh;
     height:100vw;
@@ -4750,7 +4739,7 @@ function refreshMobileViewportLayout(){
   const rawH=Math.max(1,innerHeight||document.documentElement.clientHeight||1);
   const root=document.getElementById('landscapeRoot');
   const mobile=isMobileLike()&&Math.min(rawW,rawH)<=900;
-  const portrait=mobile&&matchMedia('(orientation:portrait)').matches&&innerWidth<=900;
+  const portrait=mobile&&rawH>=rawW&&rawW<=900;
 
   if(!mobile||!root){
     if(root)clearMobileRootOverrides(root);
@@ -5175,7 +5164,6 @@ function isMobileLike(){
   return matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-let fullscreenRetryTimer=null;
 let fullscreenRequestBusy=false;
 
 function isGameFullscreen(){
@@ -5237,14 +5225,6 @@ async function requestGameFullscreenLandscape(){
   }
 }
 
-function scheduleFullscreenRecovery(delay=60){
-  if(!isMobileLike() || document.hidden || isGameFullscreen())return;
-  clearTimeout(fullscreenRetryTimer);
-  fullscreenRetryTimer=setTimeout(()=>{
-    requestGameFullscreenLandscape().catch(()=>{});
-  },delay);
-}
-
 // Primeiro toque entra em fullscreen.
 function forceFullscreenFromGesture(){
   if(!isMobileLike())return;
@@ -5259,40 +5239,39 @@ document.addEventListener('click',forceFullscreenFromGesture,{capture:true});
 
 // Se o usuário/sistema sair do fullscreen, tenta voltar imediatamente.
 // Se o navegador exigir gesto, o próximo toque recupera sem precisar de botão específico.
+function normalizeMobileViewport(){
+  if(!isMobileLike())return;
+  applyLandscapeFallback();
+  requestAnimationFrame(()=>resize());
+  setTimeout(resize,120);
+}
 document.addEventListener('fullscreenchange',()=>{
-  if(!isGameFullscreen()){
-    if(mobileStartHint)mobileStartHint.style.display='flex';
-    scheduleFullscreenRecovery(40);
-  }else{
-    if(mobileStartHint)mobileStartHint.style.display='none';
-    requestGameFullscreenLandscape().catch(()=>{});
-  }
+  if(mobileStartHint)mobileStartHint.style.display=isGameFullscreen()?'none':'flex';
+  normalizeMobileViewport();
 });
-document.addEventListener('webkitfullscreenchange',()=>{
-  if(!isGameFullscreen())scheduleFullscreenRecovery(40);
-});
+document.addEventListener('webkitfullscreenchange',normalizeMobileViewport);
 
-// Recupera também ao voltar para a aba/app e ao receber foco.
+// Ao voltar para a aba/app, estabiliza somente o layout.
+// Fullscreen/orientation lock continuam sendo acionados pelo próximo gesto real.
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden){
-    scheduleFullscreenRecovery(80);
-    setTimeout(()=>requestGameFullscreenLandscape().catch(()=>{}),180);
-  }
+  if(!document.hidden)normalizeMobileViewport();
 });
-window.addEventListener('focus',()=>scheduleFullscreenRecovery(60));
-window.addEventListener('pageshow',()=>scheduleFullscreenRecovery(80));
+window.addEventListener('focus',normalizeMobileViewport);
+window.addEventListener('pageshow',normalizeMobileViewport);
 
 function applyLandscapeFallback(){
   // O CSS faz a rotação visual quando o telefone continua fisicamente em portrait.
   landscapeRoot.classList.add('force-landscape');
-  setTimeout(resize,50);
+  resize();
 }
 window.addEventListener('orientationchange',applyLandscapeFallback);
 window.screen.orientation?.addEventListener?.('change',applyLandscapeFallback);
 applyLandscapeFallback();
 
 function isPortraitFallback(){
-  return isMobileLike() && matchMedia('(orientation:portrait)').matches && innerWidth<=900;
+  const rawW=Math.max(1,innerWidth||document.documentElement.clientWidth||1);
+  const rawH=Math.max(1,innerHeight||document.documentElement.clientHeight||1);
+  return isMobileLike()&&rawH>=rawW&&rawW<=900;
 }
 function gameViewport(){
   const l=mobileViewportLayout;
@@ -5329,7 +5308,6 @@ function resize(){
   if(state.mode==='war')clampWarCamera();
 }
 addEventListener('resize',resize);
-window.visualViewport?.addEventListener('resize',resize);
 resize();
 
 const keys={};
