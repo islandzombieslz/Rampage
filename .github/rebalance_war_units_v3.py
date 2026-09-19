@@ -86,6 +86,17 @@ required=[
     "e.type==='king'?0.88",
     "e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE",
     "e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=DRAGON_FIREBALL_DAMAGE",
+    "content:attr(data-unit-name);",
+    ".entity-visual:not(.dying):hover .entity-bars,",
+    ".entity-visual:not(.dying).entity-ui-selected .entity-bars{",
+    "function entityUiDisplayName(e){",
+    "function setSelectedEntityUi(entityId=null){",
+    "entityBars.dataset.unitName=entityUiDisplayName(e);",
+    "setSelectedEntityUi(entityId);",
+    "--entity-ui-inverse-scale",
+    "--entity-ui-outline-local-neg",
+    "el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));",
+    "selectedEntityUiId=null;",
 ]
 missing=[x for x in required if x not in t]
 if missing:
@@ -120,6 +131,7 @@ forbidden=[
     "assets/egypt/isis/attack-normal.webp",
     "assets/egypt/isis/special.webp",
     "assets/egypt/isis/power-special.webp",
+    "drop-shadow(1.35px 0 0 var(--team-outline))",
 ]
 stale=[x for x in forbidden if x in t]
 if stale:
