@@ -21,7 +21,7 @@ required=[
     "now-lastHealAt<ISIS_HEAL_REUSE_LOCK_MS",
     "ally.isisLastHealedAt=healAt;",
     "ally.isisLastHealedBy=e.id;",
-    ".entity-visual.isis-visual .entity-body{left:24px;top:10px;width:142px;height:166px;object-fit:contain}",
+    ".entity-visual.isis-visual .entity-body{left:38px;top:26px;width:142px;height:166px;object-fit:contain}",
     "e.speed=state.mode==='war'?102*WAR_TROOP_SPEED_MULTIPLIER:102;",
     "if(isisSpecialProtected(target))return;",
     "function isAirborneCombatTarget(",
