@@ -2651,14 +2651,14 @@ body.booting #landscapeRoot{visibility:hidden}
    e do zoom. O destaque branco segue o alpha/silhueta do sprite visível. */
 .entity-visual{
   pointer-events:auto;
-  cursor:pointer;
+  cursor:default;
   touch-action:none;
 }
 .entity-visual .entity-bars{
   left:50% !important;
-  top:-27px !important;
-  width:68px !important;
-  height:15px !important;
+  top:-8px !important;
+  width:80px !important;
+  height:18px !important;
   transform:translateX(-50%) scale(var(--entity-ui-inverse-scale,1));
   transform-origin:50% 100%;
   opacity:0;
@@ -2671,40 +2671,40 @@ body.booting #landscapeRoot{visibility:hidden}
   content:attr(data-unit-name);
   position:absolute;
   left:50%;
-  bottom:18px;
+  bottom:21px;
   transform:translateX(-50%);
   color:#fff;
-  font-size:11px;
+  font-size:14px;
   line-height:1;
   font-weight:900;
   letter-spacing:.08px;
   white-space:nowrap;
-  -webkit-text-stroke:.9px #000;
+  -webkit-text-stroke:1px #000;
   text-shadow:0 1px 0 #000,1px 0 0 #000,-1px 0 0 #000,0 -1px 0 #000;
 }
 .entity-visual .hp-bg,
 .entity-visual .shield-bg{
   left:0 !important;
-  width:68px !important;
+  width:80px !important;
   background:rgba(0,0,0,.82);
   border-radius:2px;
   overflow:hidden;
 }
-.entity-visual .hp-bg{top:0 !important;height:7px !important}
-.entity-visual .shield-bg{top:10px !important;height:5px !important}
-.entity-visual:not(.dying):hover .entity-bars,
+.entity-visual .hp-bg{top:0 !important;height:8px !important}
+.entity-visual .shield-bg{top:12px !important;height:6px !important}
+.entity-visual:not(.dying).entity-ui-hovered .entity-bars,
 .entity-visual:not(.dying).entity-ui-selected .entity-bars{
   opacity:1;
   visibility:visible;
   transition:opacity .08s linear;
 }
-.entity-visual:not(.dying):hover .entity-facing,
+.entity-visual:not(.dying).entity-ui-hovered .entity-facing,
 .entity-visual:not(.dying).entity-ui-selected .entity-facing,
-.entity-visual:not(.dying):hover .entity-weapon-facing,
+.entity-visual:not(.dying).entity-ui-hovered .entity-weapon-facing,
 .entity-visual:not(.dying).entity-ui-selected .entity-weapon-facing{
   /* Contorno real por alpha: dilata a silhueta e remove a área original,
      criando uma borda fechada ao redor do sprite em vez de sombra deslocada. */
-  filter:url(#entityWhiteAlphaOutline);
+  filter:url(#entityWhiteAlphaOutline) !important;
 }
 .entity-visual.dying .entity-bars{
   opacity:0 !important;
@@ -8091,14 +8091,20 @@ function updateWarCameraInertia(dt){
 }
 
 let rightDragging=false,lastMouseX=0,lastMouseY=0,lastMouseMoveAt=0;
-canvas.addEventListener('contextmenu',e=>{if(state.mode==='war')e.preventDefault()});
-canvas.addEventListener('mousedown',e=>{
- if(state.mode!=='war'||e.button!==2)return;
+const warCameraSurface=$('#gameScreen');
+function warCameraInputBlocked(target){
+ return !!target?.closest?.('button,input,select,textarea,a,#shop,#touchControls,#attackBtn');
+}
+// Bloqueia o menu do botão direito dentro da partida (inclusive sobre sprites),
+// mas mantém o botão direito livre para arrastar a câmera.
+warCameraSurface.addEventListener('contextmenu',e=>{if(state.mode==='war')e.preventDefault()});
+warCameraSurface.addEventListener('mousedown',e=>{
+ if(state.mode!=='war'||e.button!==2||warCameraInputBlocked(e.target))return;
  e.preventDefault();
  if(!takeCameraControl())return;
  stopWarCameraInertia();
  rightDragging=true;lastMouseX=e.clientX;lastMouseY=e.clientY;lastMouseMoveAt=performance.now();
- canvas.style.cursor='grabbing';
+ warCameraSurface.style.cursor='grabbing';
 });
 addEventListener('mousemove',e=>{
  if(!rightDragging||state.mode!=='war'||state.camera.intro)return;
@@ -8114,10 +8120,10 @@ addEventListener('mousemove',e=>{
  clampWarCamera();
 });
 addEventListener('mouseup',e=>{
- if(e.button===2){rightDragging=false;canvas.style.cursor='default'}
+ if(e.button===2){rightDragging=false;warCameraSurface.style.cursor='default'}
 });
-canvas.addEventListener('wheel',e=>{
- if(state.mode!=='war')return;
+warCameraSurface.addEventListener('wheel',e=>{
+ if(state.mode!=='war'||warCameraInputBlocked(e.target))return;
  e.preventDefault();
  if(!takeCameraControl())return;
  stopWarCameraInertia();
@@ -8127,19 +8133,20 @@ canvas.addEventListener('wheel',e=>{
 },{passive:false});
 
 // Mobile: 1 dedo arrasta; 2 dedos pinçam para aproximar/afastar.
+// O listener fica na superfície inteira, então um sprite nunca bloqueia o gesto.
 const touches=new Map();
 let touchLastCenter=null,touchLastDist=0;
-canvas.addEventListener('pointerdown',e=>{
- if(state.mode!=='war'||e.pointerType!=='touch')return;
+warCameraSurface.addEventListener('pointerdown',e=>{
+ if(state.mode!=='war'||e.pointerType!=='touch'||warCameraInputBlocked(e.target))return;
  e.preventDefault();
  if(!takeCameraControl())return;
  stopWarCameraInertia();
- canvas.setPointerCapture?.(e.pointerId);
+ warCameraSurface.setPointerCapture?.(e.pointerId);
  const gp=screenPointToGame(e.clientX,e.clientY);
  touches.set(e.pointerId,{x:gp.x,y:gp.y,t:performance.now()});
  resetTouchGesture();
 });
-canvas.addEventListener('pointermove',e=>{
+warCameraSurface.addEventListener('pointermove',e=>{
  if(state.mode!=='war'||state.camera.intro||e.pointerType!=='touch'||!touches.has(e.pointerId))return;
  e.preventDefault();
  const prev=touches.get(e.pointerId);
@@ -8156,16 +8163,13 @@ canvas.addEventListener('pointermove',e=>{
    state.camera.velY=camDY/moveDt;
    clampWarCamera();
  }else if(pts.length>=2){
-   // Pinça controla zoom/arrasto diretamente; não mantém inércia residual.
    stopWarCameraInertia();
    const a=pts[0],b=pts[1];
    const center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
    const d=Math.hypot(a.x-b.x,a.y-b.y);
    if(touchLastCenter&&touchLastDist>0){
-     // Move pelo deslocamento médio dos dois dedos.
      state.camera.x-=(center.x-touchLastCenter.x)/state.camera.zoom;
      state.camera.y-=(center.y-touchLastCenter.y)/state.camera.zoom;
-     // Zoom mantendo o ponto entre os dedos como âncora.
      setWarZoom(state.camera.zoom*(d/touchLastDist),center.x,center.y);
    }
    touchLastCenter=center;touchLastDist=d;
@@ -8183,8 +8187,8 @@ function endTouch(e){
  if(e.pointerType!=='touch')return;
  touches.delete(e.pointerId);resetTouchGesture();
 }
-canvas.addEventListener('pointerup',endTouch);
-canvas.addEventListener('pointercancel',endTouch);
+warCameraSurface.addEventListener('pointerup',endTouch);
+warCameraSurface.addEventListener('pointercancel',endTouch);
 
 /* ==================== RENDER ==================== */
 let last=performance.now(), messageUntil=0;
@@ -8569,6 +8573,11 @@ function prepareCameraComposite(left,top,zoom){
 }
 const entityNodes=new Map();
 let selectedEntityUiId=null;
+let hoveredEntityUiNode=null;
+const entityUiPointerPresses=new Map();
+const entityUiAlphaCanvas=document.createElement('canvas');
+entityUiAlphaCanvas.width=1;entityUiAlphaCanvas.height=1;
+const entityUiAlphaCtx=entityUiAlphaCanvas.getContext('2d',{willReadFrequently:true});
 
 function entityUiDisplayName(e){
  if(!e)return 'Unidade';
@@ -8598,11 +8607,136 @@ function setSelectedEntityUi(entityId=null){
    node.classList.toggle('entity-ui-selected',selectedEntityUiId!==null&&String(id)===selectedEntityUiId);
  }
 }
-document.addEventListener('pointerdown',ev=>{
- const target=ev.target;
- if(target?.closest?.('.entity-visual'))return;
- if(selectedEntityUiId!==null)setSelectedEntityUi(null);
+
+function setHoveredEntityUi(node=null){
+ if(hoveredEntityUiNode===node)return;
+ hoveredEntityUiNode?.classList.remove('entity-ui-hovered');
+ hoveredEntityUiNode=node||null;
+ hoveredEntityUiNode?.classList.add('entity-ui-hovered');
+}
+
+function entityUiIsControlTarget(target){
+ return !!target?.closest?.('button,input,select,textarea,a,#shop,#touchControls,#attackBtn');
+}
+
+function entityUiLocalPoint(img,clientX,clientY){
+ // getBoxQuads preserva rotação/flip do jogo (inclusive fallback landscape).
+ const quad=img.getBoxQuads?.()?.[0];
+ if(quad){
+   const ax=quad.p2.x-quad.p1.x,ay=quad.p2.y-quad.p1.y;
+   const bx=quad.p4.x-quad.p1.x,by=quad.p4.y-quad.p1.y;
+   const px=clientX-quad.p1.x,py=clientY-quad.p1.y;
+   const det=ax*by-ay*bx;
+   if(Math.abs(det)>1e-6){
+     const u=(px*by-py*bx)/det;
+     const v=(ax*py-ay*px)/det;
+     return {u,v};
+   }
+ }
+ const rect=img.getBoundingClientRect();
+ if(rect.width<=0||rect.height<=0)return null;
+ let u=(clientX-rect.left)/rect.width,v=(clientY-rect.top)/rect.height;
+ const facing=img.closest('.entity-facing,.entity-weapon-facing');
+ const tr=facing?getComputedStyle(facing).transform:'none';
+ if(tr&&tr!=='none'){
+   try{
+     const m=new DOMMatrixReadOnly(tr);
+     if(m.a*m.d-m.b*m.c<0)u=1-u;
+   }catch(_){}
+ }
+ return {u,v};
+}
+
+function entityUiImageAlphaHit(img,clientX,clientY){
+ if(!img||!img.isConnected||!img.naturalWidth||!img.naturalHeight)return false;
+ const style=getComputedStyle(img);
+ if(style.display==='none'||style.visibility==='hidden'||Number(style.opacity)<=.04)return false;
+ const point=entityUiLocalPoint(img,clientX,clientY);
+ if(!point)return false;
+ let {u,v}=point;
+ if(u<0||u>1||v<0||v>1)return false;
+
+ const boxW=Math.max(1,img.offsetWidth||img.clientWidth||1);
+ const boxH=Math.max(1,img.offsetHeight||img.clientHeight||1);
+ const naturalRatio=img.naturalWidth/img.naturalHeight;
+ const boxRatio=boxW/boxH;
+ if(style.objectFit==='contain'){
+   if(naturalRatio>boxRatio){
+     const contentH=boxRatio/naturalRatio;
+     const top=(1-contentH)/2;
+     if(v<top||v>top+contentH)return false;
+     v=(v-top)/contentH;
+   }else{
+     const contentW=naturalRatio/boxRatio;
+     const left=(1-contentW)/2;
+     if(u<left||u>left+contentW)return false;
+     u=(u-left)/contentW;
+   }
+ }
+ const sx=Math.max(0,Math.min(img.naturalWidth-1,Math.floor(u*img.naturalWidth)));
+ const sy=Math.max(0,Math.min(img.naturalHeight-1,Math.floor(v*img.naturalHeight)));
+ try{
+   entityUiAlphaCtx.clearRect(0,0,1,1);
+   entityUiAlphaCtx.drawImage(img,sx,sy,1,1,0,0,1,1);
+   return entityUiAlphaCtx.getImageData(0,0,1,1).data[3]>=20;
+ }catch(_){
+   // Assets locais não devem falhar; em fallback, não inventa clique fora do sprite.
+   return false;
+ }
+}
+
+function entityUiVisiblePixelHit(el,clientX,clientY){
+ if(!el||el.classList.contains('dying')||el.style.visibility==='hidden')return false;
+ const images=el.querySelectorAll('.entity-body.active-sprite,.entity-sword,.mage-staff,.mage-hand');
+ for(const img of images)if(entityUiImageAlphaHit(img,clientX,clientY))return true;
+ return false;
+}
+
+function entityUiElementAtVisiblePixel(clientX,clientY){
+ const top=document.elementFromPoint(clientX,clientY);
+ if(entityUiIsControlTarget(top))return null;
+ const seen=new Set();
+ for(const node of document.elementsFromPoint(clientX,clientY)){
+   const el=node?.closest?.('.entity-visual');
+   if(!el||seen.has(el)){continue}
+   seen.add(el);
+   if(entityUiVisiblePixelHit(el,clientX,clientY))return el;
+ }
+ return null;
+}
+
+let entityUiHoverRaf=0,entityUiHoverX=0,entityUiHoverY=0;
+document.addEventListener('pointermove',ev=>{
+ if(ev.pointerType==='touch')return;
+ entityUiHoverX=ev.clientX;entityUiHoverY=ev.clientY;
+ if(entityUiHoverRaf)return;
+ entityUiHoverRaf=requestAnimationFrame(()=>{
+   entityUiHoverRaf=0;
+   setHoveredEntityUi(entityUiElementAtVisiblePixel(entityUiHoverX,entityUiHoverY));
+ });
+ const press=entityUiPointerPresses.get(ev.pointerId);
+ if(press&&Math.hypot(ev.clientX-press.x,ev.clientY-press.y)>8)press.moved=true;
 },{passive:true});
+
+document.addEventListener('pointerdown',ev=>{
+ if(ev.button!=null&&ev.button!==0)return;
+ if(!ev.target?.closest?.('#gameScreen')||entityUiIsControlTarget(ev.target))return;
+ entityUiPointerPresses.set(ev.pointerId,{
+   x:ev.clientX,y:ev.clientY,moved:false,
+   node:entityUiElementAtVisiblePixel(ev.clientX,ev.clientY)
+ });
+},{capture:true,passive:true});
+
+document.addEventListener('pointerup',ev=>{
+ const press=entityUiPointerPresses.get(ev.pointerId);
+ if(!press)return;
+ entityUiPointerPresses.delete(ev.pointerId);
+ if(press.moved)return;
+ const hit=entityUiElementAtVisiblePixel(ev.clientX,ev.clientY);
+ if(hit&&hit===press.node)setSelectedEntityUi(hit.dataset.entityId);
+ else if(!hit)setSelectedEntityUi(null);
+},{capture:true,passive:true});
+document.addEventListener('pointercancel',ev=>entityUiPointerPresses.delete(ev.pointerId),{capture:true,passive:true});
 const magePowerNodes=new Map();
 const brownPowerNodes=new Map();
 const kingPowerNodes=new Map();
@@ -9067,14 +9201,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  if(e.type==='warrior' && e.variant==='female')el.classList.add('female-warrior');
 
  const entityId=String(e.id);
+ el.dataset.entityId=entityId;
  const entityBars=el.querySelector('.entity-bars');
  if(entityBars)entityBars.dataset.unitName=entityUiDisplayName(e);
  if(selectedEntityUiId===entityId)el.classList.add('entity-ui-selected');
- el.addEventListener('pointerdown',ev=>{
-   if(ev.button!=null&&ev.button!==0)return;
-   ev.stopPropagation();
-   setSelectedEntityUi(entityId);
- },{passive:true});
 
   el._facing=el.querySelector('.entity-facing');
  el._weaponFacing=el.querySelector('.entity-weapon-facing');
@@ -9726,6 +9856,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        el.querySelectorAll('img').forEach(releaseGifObjectUrl);
        el.remove();
        entityNodes.delete(id);
+       if(hoveredEntityUiNode===el)hoveredEntityUiNode=null;
        if(selectedEntityUiId!==null&&String(id)===selectedEntityUiId)selectedEntityUiId=null;
      }
    }
@@ -9762,6 +9893,8 @@ function clearEntityVisuals(){
  golemRockPool.length=0;
  entityNodes.clear();
  selectedEntityUiId=null;
+ hoveredEntityUiNode=null;
+ entityUiPointerPresses.clear();
 }
 
 function updateHUD(){
