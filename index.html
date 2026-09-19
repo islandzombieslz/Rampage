@@ -844,11 +844,7 @@ html,body{
    Usa o próprio alpha/transparência do GIF para desenhar um contorno fino
    na cor de cada player/NPC/inimigo. Não cria círculo sob os pés. */
 .entity-visual.pve-silhouette .entity-body.active-sprite{
-  filter:
-    drop-shadow(1.35px 0 0 var(--team-outline))
-    drop-shadow(-1.35px 0 0 var(--team-outline))
-    drop-shadow(0 1.35px 0 var(--team-outline))
-    drop-shadow(0 -1.35px 0 var(--team-outline));
+  filter:none;
 }
 
 
@@ -2647,6 +2643,74 @@ body.booting #landscapeRoot{visibility:hidden}
   #lobbyScreen.war-lobby .war-time-setting .option-group button{height:21px !important;min-height:21px !important;font-size:8px !important}
   #lobbyScreen.war-lobby #warLobbySettings .counter button{height:22px !important;min-height:22px !important}
   #lobbyScreen.war-lobby .lobby-npc-row{min-height:27px !important}
+}
+
+
+/* ===== ENTITY HOVER / TAP INFO UI 2026-09-18 =====
+   Barras e nome usam um tamanho global pequeno, independente do tamanho da unidade
+   e do zoom. O destaque branco segue o alpha/silhueta do sprite visível. */
+.entity-visual{
+  pointer-events:auto;
+  cursor:pointer;
+  touch-action:none;
+}
+.entity-visual .entity-bars{
+  left:50% !important;
+  top:-18px !important;
+  width:42px !important;
+  height:9px !important;
+  transform:translateX(-50%) scale(var(--entity-ui-inverse-scale,1));
+  transform-origin:50% 100%;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .10s linear,visibility 0s linear .10s;
+  pointer-events:none;
+  z-index:40;
+}
+.entity-visual .entity-bars::before{
+  content:attr(data-unit-name);
+  position:absolute;
+  left:50%;
+  bottom:11px;
+  transform:translateX(-50%);
+  color:#fff;
+  font-size:8px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:.05px;
+  white-space:nowrap;
+  -webkit-text-stroke:.65px #000;
+  text-shadow:0 1px 1px #000,1px 0 0 #000,-1px 0 0 #000;
+}
+.entity-visual .hp-bg,
+.entity-visual .shield-bg{
+  left:0 !important;
+  width:42px !important;
+  background:rgba(0,0,0,.78);
+  border-radius:2px;
+  overflow:hidden;
+}
+.entity-visual .hp-bg{top:0 !important;height:4px !important}
+.entity-visual .shield-bg{top:6px !important;height:3px !important}
+.entity-visual:not(.dying):hover .entity-bars,
+.entity-visual:not(.dying).entity-ui-selected .entity-bars{
+  opacity:1;
+  visibility:visible;
+  transition:opacity .08s linear;
+}
+.entity-visual:not(.dying):hover .entity-facing,
+.entity-visual:not(.dying).entity-ui-selected .entity-facing,
+.entity-visual:not(.dying):hover .entity-weapon-facing,
+.entity-visual:not(.dying).entity-ui-selected .entity-weapon-facing{
+  filter:
+    drop-shadow(var(--entity-ui-outline-local,1px) 0 0 rgba(255,255,255,.96))
+    drop-shadow(var(--entity-ui-outline-local-neg,-1px) 0 0 rgba(255,255,255,.96))
+    drop-shadow(0 var(--entity-ui-outline-local,1px) 0 rgba(255,255,255,.96))
+    drop-shadow(0 var(--entity-ui-outline-local-neg,-1px) 0 rgba(255,255,255,.96));
+}
+.entity-visual.dying .entity-bars{
+  opacity:0 !important;
+  visibility:hidden !important;
 }
 
 </style>
@@ -8492,6 +8556,41 @@ function prepareCameraComposite(left,top,zoom){
  return {left,top,zoom};
 }
 const entityNodes=new Map();
+let selectedEntityUiId=null;
+
+function entityUiDisplayName(e){
+ if(!e)return 'Unidade';
+ if(e.type==='warrior'){
+   const female=e.variant==='female';
+   if(e.clan==='egypt')return female?'Guerreira do Egito':'Guerreiro do Egito';
+   return female?'Guerreira':'Guerreiro';
+ }
+ if(e.type==='brownWarrior')return 'Guerreira Marrom';
+ if(e.type==='king')return 'Rei Guerreiro';
+ if(e.type==='golem')return 'Golem Guerreiro';
+ if(e.type==='mage'){
+   const female=e.variant==='female';
+   if(e.clan==='egypt')return female?'Maga do Egito':'Mago do Egito';
+   return female?'Maga Guerreira':'Mago Guerreiro';
+ }
+ if(e.type==='dragon')return 'Dragão Guerreiro';
+ if(e.type==='naja')return 'Naja do Egito';
+ if(e.type==='anubis')return 'Annubis do Egito';
+ if(e.type==='isis')return 'Isis do Egito';
+ return 'Unidade';
+}
+
+function setSelectedEntityUi(entityId=null){
+ selectedEntityUiId=entityId==null?null:String(entityId);
+ for(const [id,node] of entityNodes){
+   node.classList.toggle('entity-ui-selected',selectedEntityUiId!==null&&String(id)===selectedEntityUiId);
+ }
+}
+document.addEventListener('pointerdown',ev=>{
+ const target=ev.target;
+ if(target?.closest?.('.entity-visual'))return;
+ if(selectedEntityUiId!==null)setSelectedEntityUi(null);
+},{passive:true});
 const magePowerNodes=new Map();
 const brownPowerNodes=new Map();
 const kingPowerNodes=new Map();
@@ -8955,6 +9054,16 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  }
  if(e.type==='warrior' && e.variant==='female')el.classList.add('female-warrior');
 
+ const entityId=String(e.id);
+ const entityBars=el.querySelector('.entity-bars');
+ if(entityBars)entityBars.dataset.unitName=entityUiDisplayName(e);
+ if(selectedEntityUiId===entityId)el.classList.add('entity-ui-selected');
+ el.addEventListener('pointerdown',ev=>{
+   if(ev.button!=null&&ev.button!==0)return;
+   ev.stopPropagation();
+   setSelectedEntityUi(entityId);
+ },{passive:true});
+
   el._facing=el.querySelector('.entity-facing');
  el._weaponFacing=el.querySelector('.entity-weapon-facing');
  el._idle=el.querySelector('.entity-idle');
@@ -8981,6 +9090,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._dragonTakeoff=el.querySelector('.entity-dragon-takeoff');
  el._dragonFly=el.querySelector('.entity-dragon-fly');
  el._dragonAttack=el.querySelector('.entity-dragon-attack');
+ el._bars=entityBars;
  el._hp=el.querySelector('.hp-fill');
  el._shieldBg=el.querySelector('.shield-bg');
  el._shield=el.querySelector('.shield-fill');
@@ -9331,6 +9441,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
      el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
      el.style.transform=`translate3d(${renderX}px,${visualTop}px,0) translate(-50%,-58%) scale(${visualScale})`;
+     const uiInverseScale=1/Math.max(.001,visualScale);
+     el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));
+     const outlineLocal=1.05*uiInverseScale;
+     el.style.setProperty('--entity-ui-outline-local',outlineLocal+'px');
+     el.style.setProperty('--entity-ui-outline-local-neg',(-outlineLocal)+'px');
    }
    const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
@@ -9602,6 +9717,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
        el.querySelectorAll('img').forEach(releaseGifObjectUrl);
        el.remove();
        entityNodes.delete(id);
+       if(selectedEntityUiId!==null&&String(id)===selectedEntityUiId)selectedEntityUiId=null;
      }
    }
  }
@@ -9636,6 +9752,7 @@ function clearEntityVisuals(){
  dragonProjectilePool.length=0;
  golemRockPool.length=0;
  entityNodes.clear();
+ selectedEntityUiId=null;
 }
 
 function updateHUD(){
