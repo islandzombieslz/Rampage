@@ -118,7 +118,7 @@ required=[
     "el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));",
     "selectedEntityUiId=null;",
     "function entityUiImageAlphaHit(img,clientX,clientY){",
-    "if(isPortraitFallback()){",
+    "if(isPortraitFallback()&&mobileViewportLayout.active){",
     "const logical=screenPointToGame(clientX,clientY);",
     "function entityUiVisiblePixelHit(el,clientX,clientY){",
     "function entityUiElementAtVisiblePixel(clientX,clientY){",
