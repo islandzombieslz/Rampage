@@ -1315,7 +1315,7 @@ html,body{
 /* ===== ISIS DO EGITO ===== */
 .entity-visual.isis-visual{width:116px;height:148px}
 .entity-visual.isis-visual .entity-facing{width:116px;height:140px}
-.entity-visual.isis-visual .entity-body{left:38px;top:26px;width:142px;height:166px;object-fit:contain}
+.entity-visual.isis-visual .entity-body{left:-13px;top:-13px;width:142px;height:166px;object-fit:contain}
 .entity-visual.isis-visual .entity-bars{left:21px;top:-8px;width:78px}
 .entity-visual.isis-visual .hp-bg,.entity-visual.isis-visual .shield-bg{width:78px}
 .entity-visual.isis-visual .entity-weapon-facing{display:none !important}
@@ -2460,7 +2460,7 @@ body.booting #landscapeRoot{visibility:hidden}
 }
 
 /* Egito: apenas escala visual. Hitbox, alcance, velocidade e atributos não mudam. */
-.entity-visual.egypt-unit:not(.mage-visual) .entity-body{
+.entity-visual.egypt-unit:not(.mage-visual):not(.isis-visual) .entity-body{
   width:104px;
   height:123px;
   left:-13px;
@@ -3567,8 +3567,11 @@ const ISIS_HEAL_REUSE_LOCK_MS=5000;
 const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
 const ISIS_FLIGHT_LIFT=52;
 const ISIS_LANDING_DURATION_MS=700;
+const ISIS_SPRITE_OFFSET_X=26;
+const ISIS_SPRITE_OFFSET_Y=24;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
+const ISIS_RUNTIME_REVISION='isis-heal-runtime-v2-20260918';
 const gifRuntime=new Map();
 let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
@@ -5736,6 +5739,9 @@ function startEntityDeath(e,dx=0,dy=0){
  e.brownAttackKind=null;
  e.pendingAnubisAttack=null;
  e.anubisAttackKind=null;
+ if(e.type==='isis')releaseIsisHealingReservations(e);
+ e.pendingIsisAttack=null;
+ e.isisAttackKind=null;
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
@@ -6421,35 +6427,40 @@ function updateBrownWarriorAttackState(e,now){
  }
 }
 
-function selectIsisSpecialAllies(e,now=performance.now()){
- const teamAllies=[];
+function isisTeamHasNonIsisAlly(e){
  for(const ally of state.entities){
-   if(ally?.alive&&ally!==e&&ally.team===e.team&&isRealCombatTarget(ally))teamAllies.push(ally);
+   if(ally?.alive&&ally!==e&&ally.team===e.team&&isRealCombatTarget(ally)&&ally.type!=='isis')return true;
  }
- // Isis só pode receber cura de outra Isis quando não existir nenhuma outra
- // classe viva no exército. A autocura de 5/s continua independente disso.
- const hasNonIsisAlly=teamAllies.some(ally=>ally.type!=='isis');
-
- // Reserva global por equipe: duas Isis nunca escolhem o mesmo aliado durante
- // janelas de cura sobrepostas, mesmo que ativem o especial no mesmo instante.
- const reserved=new Set();
+ return false;
+}
+function isisAllyReservedByOther(e,ally,now=performance.now()){
+ if(!ally)return false;
+ if(ally.isisHealOwnerId!=null&&ally.isisHealOwnerId!==e.id&&Number(ally.isisHealOwnerUntil||0)>now)return true;
+ // Defesa extra para partidas/snapshots iniciados antes da reserva explícita:
+ // qualquer blessing ativo de outra Isis também bloqueia o mesmo alvo.
  for(const source of state.entities){
    if(!source?.alive||source===e||source.type!=='isis'||source.team!==e.team)continue;
    const p=source.pendingIsisAttack;
    if(p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
    for(const blessing of p.blessings||[]){
-     if(!blessing.expired&&Number(blessing.endAt||0)>now&&blessing.targetId!=null)reserved.add(blessing.targetId);
+     if(!blessing.expired&&blessing.targetId===ally.id&&Number(blessing.endAt||0)>now)return true;
    }
  }
-
+ return false;
+}
+function canIsisBlessAlly(e,ally,now=performance.now(),hasNonIsisAlly=isisTeamHasNonIsisAlly(e)){
+ if(!ally?.alive||ally===e||ally.team!==e.team||!isRealCombatTarget(ally))return false;
+ if(hasNonIsisAlly&&ally.type==='isis')return false;
+ if(isisAllyReservedByOther(e,ally,now))return false;
+ const blockedUntil=Number(ally.isisHealBlockedUntil)||0;
+ if(blockedUntil>now&&ally.isisLastHealedBy!=null&&ally.isisLastHealedBy!==e.id)return false;
+ return true;
+}
+function selectIsisSpecialAllies(e,now=performance.now(),reserveUntil=now+ISIS_POWER_DURATION){
+ const hasNonIsisAlly=isisTeamHasNonIsisAlly(e);
  const allies=[];
- for(const ally of teamAllies){
-   if(hasNonIsisAlly&&ally.type==='isis')continue;
-   if(reserved.has(ally.id))continue;
-   const lastHealAt=Number(ally.isisLastHealedAt)||0;
-   const lastHealer=ally.isisLastHealedBy??null;
-   if(lastHealAt>0&&lastHealer!==e.id&&now-lastHealAt<ISIS_HEAL_REUSE_LOCK_MS)continue;
-   allies.push(ally);
+ for(const ally of state.entities){
+   if(canIsisBlessAlly(e,ally,now,hasNonIsisAlly))allies.push(ally);
  }
  allies.sort((a,b)=>{
    const ar=Math.max(0,Number(a.hp)||0)/Math.max(1,Number(a.maxHp)||1),br=Math.max(0,Number(b.hp)||0)/Math.max(1,Number(b.maxHp)||1);
@@ -6457,7 +6468,24 @@ function selectIsisSpecialAllies(e,now=performance.now()){
    const hp=(Number(a.hp)||0)-(Number(b.hp)||0);if(hp)return hp;
    return ((a.x-e.x)**2+(a.y-e.y)**2)-((b.x-e.x)**2+(b.y-e.y)**2);
  });
- return allies.slice(0,ISIS_MAX_ALLIES);
+ const chosen=allies.slice(0,ISIS_MAX_ALLIES);
+ // A reserva é feita AGORA, antes de a próxima Isis do mesmo frame escolher.
+ for(const ally of chosen){
+   ally.isisHealOwnerId=e.id;
+   ally.isisHealOwnerUntil=reserveUntil;
+ }
+ return chosen;
+}
+function releaseIsisHealingReservations(e){
+ const p=e?.pendingIsisAttack;
+ if(!p||p.kind!=='special')return;
+ for(const blessing of p.blessings||[]){
+   const ally=warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);
+   if(ally&&ally.isisHealOwnerId===e.id){
+     ally.isisHealOwnerId=null;
+     ally.isisHealOwnerUntil=0;
+   }
+ }
 }
 function startIsisAttack(e,kind,target=null){
  if(!e?.alive||e.type!=='isis'||e.pendingIsisAttack||e.attackCooldown>0||e.knockTime>0)return false;
@@ -6504,9 +6532,10 @@ function updateIsisAttackState(e,now){
      const remainingSpecial=Math.max(0,Number(p.endAt)-now);
      const powerDuration=Math.max(0,Math.min(ISIS_POWER_DURATION,remainingSpecial));
      p.nextSelfHealAt=now+ISIS_HEAL_TICK_MS;
-     p.blessings=selectIsisSpecialAllies(e,now).map((ally,i)=>({
+     const blessingEndAt=now+powerDuration;
+     p.blessings=selectIsisSpecialAllies(e,now,blessingEndAt).map((ally,i)=>({
        targetId:ally.id,serial:(Number(p.serial)||0)*10+i+1,startedAt:now,duration:powerDuration,
-       endAt:now+powerDuration,nextHealAt:now+ISIS_HEAL_TICK_MS
+       endAt:blessingEndAt,nextHealAt:now+ISIS_HEAL_TICK_MS
      }));
    }
    if(p.activated){
@@ -6521,7 +6550,14 @@ function updateIsisAttackState(e,now){
      for(const blessing of p.blessings||[]){
        if(blessing.expired)continue;
        const ally=warEntityById.get(blessing.targetId)||state.entities.find(x=>x.id===blessing.targetId);
-       if(!ally?.alive||ally.team!==e.team||now>=Number(blessing.endAt||0)){blessing.expired=true;continue}
+       const invalidTarget=!ally?.alive||ally.team!==e.team||now>=Number(blessing.endAt||0);
+       const lostReservation=!!ally&&(ally.isisHealOwnerId!==e.id||Number(ally.isisHealOwnerUntil||0)<=now);
+       const forbiddenIsis=!!ally&&ally.type==='isis'&&isisTeamHasNonIsisAlly(e);
+       if(invalidTarget||lostReservation||forbiddenIsis){
+         blessing.expired=true;
+         if(ally&&ally.isisHealOwnerId===e.id){ally.isisHealOwnerId=null;ally.isisHealOwnerUntil=0}
+         continue;
+       }
        let guard=0;
        while(now>=Number(blessing.nextHealAt||Infinity)&&Number(blessing.nextHealAt)<=Number(blessing.endAt)&&guard<6){
          const healAt=Number(blessing.nextHealAt)||now;
@@ -6531,6 +6567,7 @@ function updateIsisAttackState(e,now){
            ally.regenSerial=(Number(ally.regenSerial)||0)+1;
            ally.isisLastHealedAt=healAt;
            ally.isisLastHealedBy=e.id;
+           ally.isisHealBlockedUntil=healAt+ISIS_HEAL_REUSE_LOCK_MS;
          }
          blessing.nextHealAt+=ISIS_HEAL_TICK_MS;guard++;
        }
@@ -6538,7 +6575,8 @@ function updateIsisAttackState(e,now){
    }
  }
  if(now>=Number(p.endAt||0)){
-   if(p.kind==='normal')e.isisNormalCount=Math.min(4,(Number(e.isisNormalCount)||0)+1);else e.isisNormalCount=0;
+   if(p.kind==='normal')e.isisNormalCount=Math.min(4,(Number(e.isisNormalCount)||0)+1);
+   else{e.isisNormalCount=0;releaseIsisHealingReservations(e)}
    e.pendingIsisAttack=null;e.isisAttackKind=null;e.target=null;
  }
 }
@@ -9237,6 +9275,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
 
    const face=e.facing||1;
+   if(e.type==='isis'){
+     const isisFacingX=(face>=0?ISIS_SPRITE_OFFSET_X:-ISIS_SPRITE_OFFSET_X);
+     if(el._isisFacingX!==isisFacingX){el._isisFacingX=isisFacingX;el._facing.style.left=isisFacingX+'px'}
+     if(el._isisFacingY!==ISIS_SPRITE_OFFSET_Y){el._isisFacingY=ISIS_SPRITE_OFFSET_Y;el._facing.style.top=ISIS_SPRITE_OFFSET_Y+'px'}
+   }
    if(el._face!==face){
      el._face=face;
      el._facing.style.setProperty('--face',String(face));
