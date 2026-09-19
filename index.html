@@ -4974,7 +4974,7 @@ function applyStepperButton(b){
   return state.rounds!==beforeRounds||state.gems!==beforeGems||afterNpcCount!==beforeNpcCount;
 }
 
-$('.plus,.minus').forEach(b=>{
+$$('.plus,.minus').forEach(b=>{
   let holdDelay=null,holdInterval=null,didRepeat=false;
 
   const stopHold=()=>{
