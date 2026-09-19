@@ -5562,6 +5562,7 @@ function registerIsisAllyShieldBreak(target){
    if(ids.includes(target.id))continue;
    ids.push(target.id);
    isis.isisShieldBreakCount=ids.length;
+   if(ids.length>=ISIS_SHIELD_BREAK_TRIGGER_COUNT&&!isis.pendingIsisAttack)isis.attackCooldown=0;
  }
 }
 
