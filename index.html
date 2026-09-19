@@ -2704,9 +2704,9 @@ body.booting #landscapeRoot{visibility:hidden}
 .entity-visual:not(.dying).entity-ui-selected .entity-weapon-facing{
   filter:
     drop-shadow(var(--entity-ui-outline-local,1px) 0 0 rgba(255,255,255,.96))
-    drop-shadow(calc(-1 * var(--entity-ui-outline-local,1px)) 0 0 rgba(255,255,255,.96))
+    drop-shadow(var(--entity-ui-outline-local-neg,-1px) 0 0 rgba(255,255,255,.96))
     drop-shadow(0 var(--entity-ui-outline-local,1px) 0 rgba(255,255,255,.96))
-    drop-shadow(0 calc(-1 * var(--entity-ui-outline-local,1px)) 0 rgba(255,255,255,.96));
+    drop-shadow(0 var(--entity-ui-outline-local-neg,-1px) 0 rgba(255,255,255,.96));
 }
 .entity-visual.dying .entity-bars{
   opacity:0 !important;
@@ -9443,7 +9443,9 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      el.style.transform=`translate3d(${renderX}px,${visualTop}px,0) translate(-50%,-58%) scale(${visualScale})`;
      const uiInverseScale=1/Math.max(.001,visualScale);
      el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));
-     el.style.setProperty('--entity-ui-outline-local',(1.05*uiInverseScale)+'px');
+     const outlineLocal=1.05*uiInverseScale;
+     el.style.setProperty('--entity-ui-outline-local',outlineLocal+'px');
+     el.style.setProperty('--entity-ui-outline-local-neg',(-outlineLocal)+'px');
    }
    const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
