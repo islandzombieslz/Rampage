@@ -8097,7 +8097,7 @@ function warCameraInputBlocked(target){
 }
 // Bloqueia o menu do botão direito dentro da partida (inclusive sobre sprites),
 // mas mantém o botão direito livre para arrastar a câmera.
-warCameraSurface.addEventListener('contextmenu',e=>{if(state.mode==='war')e.preventDefault()});
+warCameraSurface.addEventListener('contextmenu',e=>e.preventDefault());
 warCameraSurface.addEventListener('mousedown',e=>{
  if(state.mode!=='war'||e.button!==2||warCameraInputBlocked(e.target))return;
  e.preventDefault();
@@ -8707,6 +8707,8 @@ function entityUiElementAtVisiblePixel(clientX,clientY){
 
 let entityUiHoverRaf=0,entityUiHoverX=0,entityUiHoverY=0;
 document.addEventListener('pointermove',ev=>{
+ const press=entityUiPointerPresses.get(ev.pointerId);
+ if(press&&Math.hypot(ev.clientX-press.x,ev.clientY-press.y)>8)press.moved=true;
  if(ev.pointerType==='touch')return;
  entityUiHoverX=ev.clientX;entityUiHoverY=ev.clientY;
  if(entityUiHoverRaf)return;
@@ -8714,8 +8716,6 @@ document.addEventListener('pointermove',ev=>{
    entityUiHoverRaf=0;
    setHoveredEntityUi(entityUiElementAtVisiblePixel(entityUiHoverX,entityUiHoverY));
  });
- const press=entityUiPointerPresses.get(ev.pointerId);
- if(press&&Math.hypot(ev.clientX-press.x,ev.clientY-press.y)>8)press.moved=true;
 },{passive:true});
 
 document.addEventListener('pointerdown',ev=>{
