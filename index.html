@@ -3822,7 +3822,7 @@ const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScr
 
 /* ==================== TRILHA SONORA ==================== */
 const menuMusicEl=$('#menuMusic'),battleMusicEl=$('#battleMusic');
-const MUSIC_VOLUME={menu:.18,battle:.22};
+const MUSIC_VOLUME={menu:.14,battle:.17};
 const MUSIC_SWITCH_FADE_MS=850,MUSIC_LOOP_FADE_MS=1800,MUSIC_LOOP_FADE_SECONDS=2;
 const musicFadeTokens=new WeakMap(),musicTailFading=new WeakSet();
 let desiredMusicMode='menu',activeMusicEl=null;
@@ -3920,6 +3920,7 @@ const SFX_ASSETS=Object.freeze({
  burn:'assets/audio/sfx/burn.mp3',
  mage:'assets/audio/sfx/mage.mp3'
 });
+const SFX_MASTER_VOLUME=1.15;
 let layeredSfxContext=null;
 const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
  key,
@@ -3994,7 +3995,7 @@ async function playLayeredSfx(key,volume=1,pan=0,cooldownMs=0){
  const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
  if(!buffer||!ctx||ctx.state!=='running')return false;
  const src=ctx.createBufferSource(),gain=ctx.createGain();
- src.buffer=buffer;gain.gain.value=clamp(volume,0,1);
+ src.buffer=buffer;gain.gain.value=clamp(volume*SFX_MASTER_VOLUME,0,1);
  src.connect(gain);
  if(ctx.createStereoPanner){
    const panner=ctx.createStereoPanner();
@@ -4010,7 +4011,7 @@ function playWorldLayeredSfx(key,x,y,baseVolume=1,cooldownMs=0){
  return playLayeredSfx(key,baseVolume*mix.gain,mix.pan,cooldownMs);
 }
 async function setLayeredLoop(key,volume,pan=0){
- const target=clamp(volume,0,1);
+ const target=clamp(volume*SFX_MASTER_VOLUME,0,1);
  let channel=layeredSfxLoops.get(key);
  if(!channel&&target>.004){
    const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
@@ -4104,9 +4105,9 @@ document.addEventListener('pointerdown',ev=>{
  if(!button||button.disabled||button.id==='attackBtn')return;
  if(button.classList.contains('plus')||button.classList.contains('minus'))return;
  if(button.id==='shopButton'){
-   playLayeredSfx('click2',.62,0,25);
+   playLayeredSfx('click2',.75,0,25);
  }else{
-   playLayeredSfx('click',.68,0,20);
+   playLayeredSfx('click',1.00,0,20);
  }
 },{capture:true,passive:true});
 document.addEventListener('keydown',warmLayeredSfx,{capture:true});
@@ -4116,7 +4117,7 @@ function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- if(playTransitionSound)playLayeredSfx('transition',.75,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.80,0,260);
  screenTransitionBusy=true;fade.classList.add('show');
  setTimeout(()=>{
    screen(id);
@@ -4984,7 +4985,7 @@ $$('.plus,.minus').forEach(b=>{
   };
 
   const stepOnce=()=>{
-    if(applyStepperButton(b))playLayeredSfx('click2',.62,0,25);
+    if(applyStepperButton(b))playLayeredSfx('click2',.75,0,25);
   };
 
   b.addEventListener('pointerdown',e=>{
