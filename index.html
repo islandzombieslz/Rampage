@@ -4276,7 +4276,7 @@ function serializeWarEntityForNetwork(e,now){
    out.isisShieldBreakCount=Number(e.isisShieldBreakCount)||0;
    out.isisBrokenShieldIds=Array.isArray(e.isisBrokenShieldIds)?e.isisBrokenShieldIds.slice(0,32):[];
    out.isisShieldSpecialArmed=!!e.isisShieldSpecialArmed;
-   out.isisShieldSpecialReadyRemainingMs:e.isisShieldSpecialArmed?Math.max(0,(Number(e.isisShieldSpecialReadyAt)||0)-now):0;
+   out.isisShieldSpecialReadyRemainingMs=e.isisShieldSpecialArmed?Math.max(0,(Number(e.isisShieldSpecialReadyAt)||0)-now):0;
    if(e.pendingIsisAttack){
      const p=e.pendingIsisAttack;
      const pending={kind:p.kind,serial:Number(p.serial)||Number(e.isisAttackSerial)||0,targetId:p.targetId??null,duration:Number(p.duration)||(p.kind==='special'?ISIS_SPECIAL_DURATION:ISIS_NORMAL_DURATION),remainingMs:Math.max(0,Number(p.endAt)-now)};

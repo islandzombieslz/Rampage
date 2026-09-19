@@ -37,7 +37,7 @@ required=[
     "fullHpImmunityGranted:false",
     "if(!blessing.secondHealDone&&now>=Number(blessing.secondHealAt||Infinity)){",
     "if(!blessing.fullHpImmunityGranted&&maxHp>0&&Number(ally.hp)>=maxHp&&now<Number(blessing.endAt||0)){",
-    "ally.hp=Math.min(Number(ally.maxHp)||0,beforeHp+ISIS_SECOND_HEAL_AMOUNT);",
+    "ally.hp=Math.min(maxHp,beforeHp+ISIS_SECOND_HEAL_AMOUNT);",
     "function isisTeamHasNonIsisAlly(",
     "function isisAllyReservedByOther(",
     "function canIsisBlessAlly(",
