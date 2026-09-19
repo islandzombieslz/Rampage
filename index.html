@@ -5822,50 +5822,48 @@ function cleanupDeadEntities(now){
 /* Evita guerreiros vivos ocuparem exatamente o mesmo ponto.
    Mortos não participam da colisão, então nunca "grudam" no jogador. */
 function separateLivingEntities(){
- const living=state.entities.filter(e=>e.alive&&!najaIsUnderground(e));
- const cellSize=64;
- const grid=new Map();
+ const living=warSeparationLiving;living.length=0;
+ const airborne=warSeparationAirborne;airborne.length=0;
+ const grid=warSeparationGrid;grid.clear();
+ const cellSize=64,now=performance.now();
 
- // Grade espacial: só compara unidades da mesma célula ou das oito vizinhas.
- // O resultado visual/colisão é o mesmo, mas deixa de testar todos contra todos.
- for(let i=0;i<living.length;i++){
-   const e=living[i];
+ for(const e of state.entities){
+   if(!e.alive||najaIsUnderground(e))continue;
+   const i=living.length;living.push(e);airborne.push(isAirborneCombatTarget(e,now));
    const cx=Math.floor(e.x/cellSize),cy=Math.floor(e.y/cellSize);
-   const key=cx+','+cy;
+   const key=(cx<<16)|cy;
    let bucket=grid.get(key);
    if(!bucket){bucket=[];grid.set(key,bucket)}
    bucket.push(i);
  }
 
  for(let i=0;i<living.length;i++){
-   const a=living[i];
+   const a=living[i],aAirborne=airborne[i];
    const cx=Math.floor(a.x/cellSize),cy=Math.floor(a.y/cellSize);
    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++){
-     const bucket=grid.get((cx+ox)+','+(cy+oy));
+     const bucket=grid.get(((cx+ox)<<16)|(cy+oy));
      if(!bucket)continue;
      for(const j of bucket){
        if(j<=i)continue;
-       const b=living[j];
-       const aFlyingDragon=isAirborneCombatTarget(a);
-       const bFlyingDragon=isAirborneCombatTarget(b);
+       const b=living[j],bAirborne=airborne[j];
        // Unidades no ar atravessam tropas terrestres, mas continuam se separando entre si.
-       if((aFlyingDragon||bFlyingDragon)&&!(aFlyingDragon&&bFlyingDragon))continue;
-     let dx=b.x-a.x,dy=b.y-a.y;
-     let d=Math.hypot(dx,dy);
-     const minD=aFlyingDragon&&bFlyingDragon?76:Math.min(58,a.r+b.r);
-     if(d>=minD)continue;
-     if(d<.001){dx=1;dy=0;d=1}
-     const push=(minD-d)*.5;
-     dx/=d;dy/=d;
-     a.x-=dx*push;a.y-=dy*push;
-     b.x+=dx*push;b.y+=dy*push;
-     a.x=clamp(a.x,35,state.world.w-35);a.y=clamp(a.y,35,state.world.h-35);
-     b.x=clamp(b.x,35,state.world.w-35);b.y=clamp(b.y,35,state.world.h-35);
+       if((aAirborne||bAirborne)&&!(aAirborne&&bAirborne))continue;
+       let dx=b.x-a.x,dy=b.y-a.y;
+       const minD=aAirborne&&bAirborne?76:Math.min(58,a.r+b.r);
+       const dSq=dx*dx+dy*dy;
+       if(dSq>=minD*minD)continue;
+       let d=Math.sqrt(dSq);
+       if(d<.001){dx=1;dy=0;d=1}
+       const push=(minD-d)*.5;
+       dx/=d;dy/=d;
+       a.x-=dx*push;a.y-=dy*push;
+       b.x+=dx*push;b.y+=dy*push;
+       a.x=clamp(a.x,35,state.world.w-35);a.y=clamp(a.y,35,state.world.h-35);
+       b.x=clamp(b.x,35,state.world.w-35);b.y=clamp(b.y,35,state.world.h-35);
      }
    }
  }
 }
-
 
 function localWarTeamId(){
  return localPlayer()?.id || NetworkAdapter.localPlayerId || null;
@@ -7414,6 +7412,9 @@ const warCandidateCache=new Map();
 const warBurningEntities=new Set();
 const deadTargetIds=new Set();
 const warLivingScratch=[];
+const warSeparationLiving=[];
+const warSeparationAirborne=[];
+const warSeparationGrid=new Map();
 let warAIGridBuiltAt=0;
 let warSeparationAccumulator=0;
 function rebuildWarEntityIdMap(){
@@ -8342,6 +8343,7 @@ function draw(){
 
  // Tremor local quando uma tropa deste jogador recebe pancada do Golem.
  const shakeNow=performance.now();
+ renderFrameNow=shakeNow;
  if(state.mode==='war' && state.screenShake.until>shakeNow){
    const remaining=(state.screenShake.until-shakeNow)/1000;
    const fade=Math.min(1,remaining/.42);
@@ -8386,7 +8388,15 @@ function draw(){
  // Margem maior evita entra/sai do culling durante pan, tremor e limites da arena.
  const margin=170;
  const visible=renderVisibleEntities;visible.length=0;
+ renderPresentIds.clear();renderPresentMap.clear();
+ renderIsisEffectEntities.length=0;renderBrownEffectEntities.length=0;renderKingEffectEntities.length=0;renderMageEffectEntities.length=0;
  for(const e of state.entities){
+   renderPresentMap.set(e.id,e);
+   if(e.alive||e.deathStarted)renderPresentIds.add(e.id);
+   if(e.type==='isis'&&e.pendingIsisAttack)renderIsisEffectEntities.push(e);
+   if(e.type==='brownWarrior'&&e.pendingBrownAttack)renderBrownEffectEntities.push(e);
+   if(e.type==='king'&&e.pendingKingSpecial)renderKingEffectEntities.push(e);
+   if(e.type==='mage'&&e.pendingMageAttack)renderMageEffectEntities.push(e);
    if((e.alive||e.deathStarted)&&e.x>=left-margin&&e.x<=right+margin&&e.y>=top-margin&&e.y<=bottom+margin)visible.push(e);
  }
  for(let i=0;i<visible.length;i++)drawEntityMarker(visible[i]);
@@ -8491,6 +8501,11 @@ const renderVisibleEntities=[];
 const renderVisibleIds=new Set();
 const renderPresentIds=new Set();
 const renderPresentMap=new Map();
+const renderIsisEffectEntities=[];
+const renderBrownEffectEntities=[];
+const renderKingEffectEntities=[];
+const renderMageEffectEntities=[];
+let renderFrameNow=0;
 const magePowerActiveIds=new Set();
 const brownPowerActiveIds=new Set();
 const kingPowerActiveIds=new Set();
@@ -8536,8 +8551,8 @@ function recycleDragonProjectileNode(img){
 }
 
 function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=isisPowerActiveIds;active.clear();const now=performance.now();
- for(const isis of state.entities){
+ const layer=entityCameraLayer,active=isisPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const isis of renderIsisEffectEntities){
    const p=isis.pendingIsisAttack;
    if(!isis.alive||isis.type!=='isis'||p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
    for(const blessing of p.blessings||[]){
@@ -8587,8 +8602,8 @@ function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
  }
 }
 function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderBrownEffectEntities){
    const p=e.pendingBrownAttack;
    if(!e.alive||e.type!=='brownWarrior'||!p||p.kind!=='special'||Number(p.endAt||0)<=now)continue;
    const angle=Number(p.angle)||0,ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
@@ -8624,8 +8639,8 @@ function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=lef
 }
 
 function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderMageEffectEntities){
    const p=e.pendingMageAttack;if(!e.alive||!p)continue;
    if(p.kind==='special'){
      const powerVisualEnd=(Number(p.powerEndAt)||Number(p.endAt)||0)-45;
@@ -8699,8 +8714,8 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
 }
 
 function syncKingPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=kingPowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=entityCameraLayer,active=kingPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderKingEffectEntities){
    const p=e.pendingKingSpecial;
    if(!p||Number(p.endAt||0)<=now)continue;
    const duration=Number(p.duration)||KING_SPECIAL_DURATION;
@@ -8753,7 +8768,7 @@ function syncKingPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
 }
 
 function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
-           const layer=combatCameraLayer,active=dragonProjectileActiveIds;active.clear();const now=performance.now();
+           const layer=combatCameraLayer,active=dragonProjectileActiveIds;active.clear();const now=renderFrameNow||performance.now();
            for(const p of state.dragonProjectiles||[]){
              const cullSx=(p.x-cullLeft)*cullZoom,cullSy=(p.y-cullTop)*cullZoom,margin=120;
              if(cullSx<-margin||cullSx>screenW+margin||cullSy<-margin||cullSy>screenH+margin){
@@ -8953,6 +8968,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._isisAttack=el.querySelector('.entity-isis-attack');el._isisSpecial=el.querySelector('.entity-isis-special');
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
+ el._mageStaffKey=e.type==='mage'?(e.clan==='egypt'?'egyptMageStaff':'mageStaff'):null;
  el._mageHand=el.querySelector('.mage-hand');
  el._kingSpecial=el.querySelector('.entity-king-special');
  el._kingPower=el.querySelector('.king-special-power');
@@ -9095,29 +9111,39 @@ function suspendEntityLoopGif(el){
    img.style.display='none';
    stopGif(img);
  }
+ if(el._mageStaff&&el._mageStaff.hasAttribute('src')){
+   el._mageStaff.style.display='none';
+   stopGif(el._mageStaff);
+ }
+ if(el._dragonBurnLayer){
+   el._dragonBurnLayer.style.opacity='0';
+   el._dragonBurnLayer.style.backgroundImage='none';
+   el._dragonBurnLayer.dataset.serial='-1';
+   el._dragonBurnLayer.dataset.count='0';
+ }
 }
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
- const sprites=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
-   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
-   [el._kingSpecial,'special'],
-   [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
- ];
- const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
+ const desiredImg=entitySpriteForState(el,desired);
  ensureEntityLoopGif(el,desired,desiredImg);
  if(previous===desired){
-   if(desiredImg){desiredImg.style.display='block';desiredImg.style.opacity='1';desiredImg.classList.add('active-sprite')}
+   if(desiredImg){
+     if(desiredImg.style.display!=='block')desiredImg.style.display='block';
+     if(desiredImg.style.opacity!=='1')desiredImg.style.opacity='1';
+     if(!desiredImg.classList.contains('active-sprite'))desiredImg.classList.add('active-sprite');
+   }
    return false;
  }
+ const sprites=el._spriteEntries||(el._spriteEntries=[
+   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
+   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
+   [el._kingSpecial,'special'],[el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
+ ].filter(entry=>!!entry[0]));
  const token=(el._spriteSwitchToken||0)+1;
  el._spriteSwitchToken=token;
  el.dataset.anim=desired;
 
- // Mostra o novo imediatamente, mas mantém o estado anterior como rede de segurança
- // até o browser confirmar que a nova imagem está pronta.
  for(const [img,stateName] of sprites){
-   if(!img)continue;
    if(stateName===desired){
      img.style.display='block';
      img.style.opacity='1';
@@ -9132,27 +9158,18 @@ function setEntitySpriteState(el,desired){
  const finalize=()=>{
    if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
    for(const [img,stateName] of sprites){
-     if(!img)continue;
      const active=stateName===desired;
      img.style.display=active?'block':'none';
      img.style.opacity=active?'1':'0';
      img.classList.toggle('active-sprite',active);
    }
 
-   // O loop anterior fica pronto por pouco tempo para uma possível troca de volta.
-   // Se a unidade estabilizar no novo estado, aí sim o src antigo é removido.
-   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired) scheduleEntityLoopGifSuspend(el,previous);
-
-   // Ataques fechados continuam usando a lógica original de restart por serial.
+   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)scheduleEntityLoopGifSuspend(el,previous);
    if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack);stopGif(el._anubisMelee);stopGif(el._isisAttack)}
    if(previous==='anubisRanged'&&desired!=='anubisRanged')stopGif(el._anubisRanged);
    if(previous==='special'&&desired!=='special'){
-     stopGif(el._brownSpecial);
-     stopGif(el._golemSpecial);
-     stopGif(el._najaSpecial);stopGif(el._isisSpecial);
-     stopGif(el._mageSpecial);
-     stopGif(el._kingSpecial);
-     stopGif(el._kingPower);
+     stopGif(el._brownSpecial);stopGif(el._golemSpecial);stopGif(el._najaSpecial);stopGif(el._isisSpecial);
+     stopGif(el._mageSpecial);stopGif(el._kingSpecial);stopGif(el._kingPower);
    }
    if(previous==='emerge'&&desired!=='emerge')stopGif(el._najaSpecialFinal);
    if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
@@ -9160,11 +9177,9 @@ function setEntitySpriteState(el,desired){
  };
  const settle=()=>requestAnimationFrame(finalize);
 
- if(!desiredImg){
-   finalize();
- }else if(desiredImg.complete&&desiredImg.naturalWidth>0){
-   settle();
- }else{
+ if(!desiredImg)finalize();
+ else if(desiredImg.complete&&desiredImg.naturalWidth>0)settle();
+ else{
    desiredImg.addEventListener('load',settle,{once:true});
    desiredImg.addEventListener('error',settle,{once:true});
    setTimeout(settle,700);
@@ -9189,7 +9204,13 @@ function entityVisualMoving(el,e,now){
  return now<Number(el._visualMovingUntil||0);
 }
 function setEntityNodeVisible(el,visible){
- if(visible)clearEntityOffscreenSuspend(el);
+ if(visible){
+   clearEntityOffscreenSuspend(el);
+   if(el._mageStaff&&el._mageStaffKey&&!el._mageStaff.hasAttribute('src')){
+     el._mageStaff.src=ASSETS[el._mageStaffKey];
+     el._mageStaff.style.display='block';
+   }
+ }
  if(el._nodeVisible===visible)return;
  el._nodeVisible=visible;
  el.style.visibility=visible?'visible':'hidden';
@@ -9198,18 +9219,14 @@ function setEntityNodeVisible(el,visible){
 
 function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const visibleIds=renderVisibleIds;visibleIds.clear();
- const presentIds=renderPresentIds;presentIds.clear();
- const presentMap=renderPresentMap;presentMap.clear();
- for(const entity of state.entities){
-   presentMap.set(entity.id,entity);
-   if(entity.alive||entity.deathStarted)presentIds.add(entity.id);
- }
- const localNow=performance.now();
+ const presentIds=renderPresentIds;
+ const presentMap=renderPresentMap;
+ const localNow=renderFrameNow||performance.now();
 
  // Culling usa a câmera real; posicionamento usa a câmera-base do compositor.
 
  for(const e of visible){
-   let el=entityNodes.get(e.id)||makeEntityNode(e);
+   let el=entityNodes.get(e.id);
 
    const sx=(e.x-left)*zoom,sy=(e.y-top)*zoom;
    const cullSx=(e.x-cullLeft)*cullZoom,cullSy=(e.y-cullTop)*cullZoom;
@@ -9225,6 +9242,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      cullSy>=-entityPadY && cullSy<=screenH+entityPadY;
 
    if(!onScreen){
+     if(!el)continue;
      setEntityNodeVisible(el,false);
      // Se um ataque terminou fora da câmera, encerra também sua decodificação.
      if(e.type==='brownWarrior'&&!(e.pendingBrownAttack&&e.pendingBrownAttack.endAt>localNow)&&
@@ -9253,6 +9271,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      continue;
    }
 
+   if(!el)el=makeEntityNode(e);
    visibleIds.add(e.id);
    el._lastVisibleAt=localNow;
    setEntityNodeVisible(el,true);
@@ -9543,12 +9562,12 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
 
    syncDragonBurnOnEntity(el,e,localNow);
 
-   const hpWidth=(100*clamp(e.hp/e.maxHp,0,1))+'%';
-   if(el._hpWidth!==hpWidth){el._hpWidth=hpWidth;el._hp.style.width=hpWidth}
+   const hpPct=100*clamp(e.hp/e.maxHp,0,1);
+   if(el._hpPct!==hpPct){el._hpPct=hpPct;el._hp.style.width=hpPct+'%'}
    if(e.maxShield){
      if(el._shieldVisible!==true){el._shieldVisible=true;el._shieldBg.style.display='block'}
-     const shieldWidth=(100*clamp(e.shield/e.maxShield,0,1))+'%';
-     if(el._shieldWidth!==shieldWidth){el._shieldWidth=shieldWidth;el._shield.style.width=shieldWidth}
+     const shieldPct=100*clamp(e.shield/e.maxShield,0,1);
+     if(el._shieldPct!==shieldPct){el._shieldPct=shieldPct;el._shield.style.width=shieldPct+'%'}
    }else if(el._shieldVisible!==false){el._shieldVisible=false;el._shieldBg.style.display='none'}
 
    if(el.dataset.attackSerial!==String(e.attackSerial)){
