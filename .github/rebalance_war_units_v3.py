@@ -100,7 +100,7 @@ required=[
     "<feComposite in=\"outlineDilated\" in2=\"SourceAlpha\" operator=\"out\"",
     "<feMergeNode in=\"whiteOutline\"/>",
     "width:80px !important;",
-    "font-size:16px;",
+    "font-size:20px;",
     "-webkit-text-stroke:1px #000;",
     "el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));",
     "selectedEntityUiId=null;",
