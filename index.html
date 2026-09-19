@@ -3264,6 +3264,32 @@ function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');
 /* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */
 const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
 const BOOT_INTRO_PLAY_MS=12400;
+const BOOT_INTRO_RESHOW_AFTER_MS=6*60*60*1000;
+const BOOT_INTRO_STATE_KEY='rampageBootIntroStateV2';
+const BOOT_PRESENCE_KEY='rampageLastPresenceV1';
+function readBootIntroState(){
+ try{return JSON.parse(localStorage.getItem(BOOT_INTRO_STATE_KEY)||'null')}catch(_){return null}
+}
+function readBootPresence(){
+ try{return Number(localStorage.getItem(BOOT_PRESENCE_KEY))||0}catch(_){return 0}
+}
+function writeBootPresence(){
+ try{localStorage.setItem(BOOT_PRESENCE_KEY,String(Date.now()))}catch(_){}
+}
+function shouldPlayBootIntro(){
+ const saved=readBootIntroState(),lastPresence=readBootPresence(),now=Date.now();
+ if(!saved||saved.videoId!==BOOT_INTRO_VIDEO_ID)return true;
+ return !lastPresence||now-lastPresence>=BOOT_INTRO_RESHOW_AFTER_MS;
+}
+const BOOT_INTRO_SHOULD_PLAY=shouldPlayBootIntro();
+function rememberBootIntroVideo(){
+ try{localStorage.setItem(BOOT_INTRO_STATE_KEY,JSON.stringify({videoId:BOOT_INTRO_VIDEO_ID,shownAt:Date.now()}))}catch(_){}
+}
+writeBootPresence();
+const bootPresenceTimer=setInterval(writeBootPresence,60000);
+document.addEventListener('visibilitychange',writeBootPresence,{passive:true});
+window.addEventListener('pagehide',()=>{writeBootPresence();clearInterval(bootPresenceTimer)},{passive:true});
+
 let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
 let bootIntroViewportCleanup=()=>{};
 let resolveBootIntroDone=()=>{};
@@ -3313,13 +3339,19 @@ function bootIntroCommand(frame,func,args=[]){
    frame?.contentWindow?.postMessage(JSON.stringify({event:'command',func,args}),'*');
  }catch(_){}
 }
-function finishBootIntro(){
+function finishBootIntro({immediate=false}={}){
  if(bootIntroFinished)return;
  bootIntroFinished=true;
  clearTimeout(bootIntroTimer);
  clearTimeout(bootIntroFallbackTimer);
  const intro=document.getElementById('bootIntro');
  if(!intro){bootIntroViewportCleanup();resolveBootIntroDone();return}
+ if(immediate){
+   bootIntroViewportCleanup();
+   intro.remove();
+   resolveBootIntroDone();
+   return;
+ }
  intro.classList.add('fade-out');
  setTimeout(()=>{
    bootIntroViewportCleanup();
@@ -3328,6 +3360,8 @@ function finishBootIntro(){
  },560);
 }
 function startBootIntro(){
+ if(!BOOT_INTRO_SHOULD_PLAY){finishBootIntro({immediate:true});return}
+ rememberBootIntroVideo();
  const intro=document.getElementById('bootIntro');
  if(!intro){finishBootIntro();return}
  bindBootIntroLandscape();
@@ -3508,6 +3542,7 @@ let NAJA_SPECIAL_EMERGE_DURATION=1600;
 const NAJA_ATTACK_INTERVAL_SEC=2;
 const NAJA_UNDERGROUND_MS=5000;
 const NAJA_SPECIAL_RADIUS=220;
+const NAJA_NORMAL_DAMAGE=65;
 const NAJA_SPECIAL_DAMAGE=80;
 let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
@@ -3525,6 +3560,8 @@ let KING_SPECIAL_DURATION=3000;
 let KING_BODY_SPECIAL_DURATION=3000;
 let KING_POWER_DURATION=3000;
 const MAGE_FIRE_TICK=300;
+const MAGE_NORMAL_TICK_DAMAGE=5;
+const EGYPT_MAGE_NORMAL_TICK_DAMAGE=MAGE_NORMAL_TICK_DAMAGE+5;
 const MAGE_DAMAGE_DELAY=1000;
 const MAGE_SPECIAL_COOLDOWN=10;
 const MAGE_SPECIAL_RADIUS=215;
@@ -3560,15 +3597,15 @@ let ISIS_SPECIAL_DURATION=6000;
 let ISIS_POWER_DURATION=4000;
 const ISIS_SPECIAL_DELAY_MS=2000;
 const ISIS_HEAL_TICK_MS=1000;
-const ISIS_HEAL_AMOUNT=20;
+const ISIS_HEAL_AMOUNT=25;
 const ISIS_SELF_HEAL_AMOUNT=5;
-const ISIS_MAX_ALLIES=3;
+const ISIS_MAX_ALLIES=2;
 const ISIS_HEAL_REUSE_LOCK_MS=5000;
 const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
 const ISIS_FLIGHT_LIFT=52;
 const ISIS_LANDING_DURATION_MS=700;
 const ISIS_SPRITE_OFFSET_X=26;
-const ISIS_SPRITE_OFFSET_Y=24;
+const ISIS_SPRITE_OFFSET_Y=12;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const ISIS_RUNTIME_REVISION='isis-heal-runtime-v2-20260918';
@@ -4342,7 +4379,7 @@ function applyRemoteGame(game){
    for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
    const previous=remotePreviousEntities;
    state.entities=game.entities.map(e=>{
-     const old=previous.get(e.id),localNow=performance.now();
+     const old=previous.get(e.id),localNow=remoteNow;
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
@@ -5785,50 +5822,48 @@ function cleanupDeadEntities(now){
 /* Evita guerreiros vivos ocuparem exatamente o mesmo ponto.
    Mortos não participam da colisão, então nunca "grudam" no jogador. */
 function separateLivingEntities(){
- const living=state.entities.filter(e=>e.alive&&!najaIsUnderground(e));
- const cellSize=64;
- const grid=new Map();
+ const living=warSeparationLiving;living.length=0;
+ const airborne=warSeparationAirborne;airborne.length=0;
+ const grid=warSeparationGrid;grid.clear();
+ const cellSize=64,now=performance.now();
 
- // Grade espacial: só compara unidades da mesma célula ou das oito vizinhas.
- // O resultado visual/colisão é o mesmo, mas deixa de testar todos contra todos.
- for(let i=0;i<living.length;i++){
-   const e=living[i];
+ for(const e of state.entities){
+   if(!e.alive||najaIsUnderground(e))continue;
+   const i=living.length;living.push(e);airborne.push(isAirborneCombatTarget(e,now));
    const cx=Math.floor(e.x/cellSize),cy=Math.floor(e.y/cellSize);
-   const key=cx+','+cy;
+   const key=(cx<<16)|cy;
    let bucket=grid.get(key);
    if(!bucket){bucket=[];grid.set(key,bucket)}
    bucket.push(i);
  }
 
  for(let i=0;i<living.length;i++){
-   const a=living[i];
+   const a=living[i],aAirborne=airborne[i];
    const cx=Math.floor(a.x/cellSize),cy=Math.floor(a.y/cellSize);
    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++){
-     const bucket=grid.get((cx+ox)+','+(cy+oy));
+     const bucket=grid.get(((cx+ox)<<16)|(cy+oy));
      if(!bucket)continue;
      for(const j of bucket){
        if(j<=i)continue;
-       const b=living[j];
-       const aFlyingDragon=isAirborneCombatTarget(a);
-       const bFlyingDragon=isAirborneCombatTarget(b);
+       const b=living[j],bAirborne=airborne[j];
        // Unidades no ar atravessam tropas terrestres, mas continuam se separando entre si.
-       if((aFlyingDragon||bFlyingDragon)&&!(aFlyingDragon&&bFlyingDragon))continue;
-     let dx=b.x-a.x,dy=b.y-a.y;
-     let d=Math.hypot(dx,dy);
-     const minD=aFlyingDragon&&bFlyingDragon?76:Math.min(58,a.r+b.r);
-     if(d>=minD)continue;
-     if(d<.001){dx=1;dy=0;d=1}
-     const push=(minD-d)*.5;
-     dx/=d;dy/=d;
-     a.x-=dx*push;a.y-=dy*push;
-     b.x+=dx*push;b.y+=dy*push;
-     a.x=clamp(a.x,35,state.world.w-35);a.y=clamp(a.y,35,state.world.h-35);
-     b.x=clamp(b.x,35,state.world.w-35);b.y=clamp(b.y,35,state.world.h-35);
+       if((aAirborne||bAirborne)&&!(aAirborne&&bAirborne))continue;
+       let dx=b.x-a.x,dy=b.y-a.y;
+       const minD=aAirborne&&bAirborne?76:Math.min(58,a.r+b.r);
+       const dSq=dx*dx+dy*dy;
+       if(dSq>=minD*minD)continue;
+       let d=Math.sqrt(dSq);
+       if(d<.001){dx=1;dy=0;d=1}
+       const push=(minD-d)*.5;
+       dx/=d;dy/=d;
+       a.x-=dx*push;a.y-=dy*push;
+       b.x+=dx*push;b.y+=dy*push;
+       a.x=clamp(a.x,35,state.world.w-35);a.y=clamp(a.y,35,state.world.h-35);
+       b.x=clamp(b.x,35,state.world.w-35);b.y=clamp(b.y,35,state.world.h-35);
      }
    }
  }
 }
-
 
 function localWarTeamId(){
  return localPlayer()?.id || NetworkAdapter.localPlayerId || null;
@@ -5886,6 +5921,7 @@ function acquireGolemRockNode(){
  if(!rock){rock=document.createElement('img');rock.className='golem-rock-fragment';rock.src=ASSETS.golemRocks}
  if(!rock.hasAttribute('src'))rock.src=ASSETS.golemRocks;
  if(rock.parentElement!==golemRockLayer)golemRockLayer?.appendChild(rock);
+ rock.style.left='0px';rock.style.top='0px';
  if(rock._rockVisible!==true){rock._rockVisible=true;rock.style.visibility='visible'}
  return rock;
 }
@@ -6009,10 +6045,8 @@ function updateGolemRockEffects(now){
      el.style.width=pxSize+'px';
      el.style.height=pxSize+'px';
    }
-   el.style.left=sx+'px';
-   el.style.top=sy+'px';
    el.style.opacity=String(Math.max(0,opacity));
-   el.style.transform=`translate(-50%,-50%) scale(${scale}) rotate(${rot}deg)`;
+   el.style.transform=`translate3d(${sx}px,${sy}px,0) translate(-50%,-50%) scale(${scale}) rotate(${rot}deg)`;
  }
 }
 
@@ -6257,7 +6291,7 @@ function resolveNajaNormalImpact(e,p){
  if(!e.alive)return;
  const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
  if(target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118){
-   applyCombatHit(target,e,60,{knockForce:220,knockTime:.12,tilt:9});
+   applyCombatHit(target,e,NAJA_NORMAL_DAMAGE,{knockForce:220,knockTime:.12,tilt:9});
  }
 }
 
@@ -6813,7 +6847,8 @@ function updateMageAttackState(e,now){
      if(!t.alive||t===e||t.team===e.team)return;
      const targetBodyRadius=Math.min(16,(t.r||25)*0.5);
      if(distanceToSegment(t.x,t.y,ax,ay,bx,by)<=fireHalfWidth+targetBodyRadius){
-       applyCombatHit(t,e,5,{knockForce:90,knockTime:.06,tilt:5});
+       const normalDamage=e.clan==='egypt'?EGYPT_MAGE_NORMAL_TICK_DAMAGE:MAGE_NORMAL_TICK_DAMAGE;
+       applyCombatHit(t,e,normalDamage,{knockForce:90,knockTime:.06,tilt:5});
      }
    });
    p.nextTickAt=now+MAGE_FIRE_TICK;
@@ -7063,9 +7098,9 @@ function warArenaBounds(radius=0){
 }
 function constrainWarEntityToArena(e){
  if(state.mode!=='war'||!e?.alive)return;
- const b=warArenaBounds(e.r||0);
- e.x=clamp(e.x,b.left,b.right);
- e.y=clamp(e.y,b.top,b.bottom);
+ const r=Math.max(0,Number(e.r)||0);
+ e.x=clamp(e.x,WAR_ARENA_INSET.left+r,state.world.w-WAR_ARENA_INSET.right-r);
+ e.y=clamp(e.y,WAR_ARENA_INSET.top+r,state.world.h-WAR_ARENA_INSET.bottom-r);
 }
 function constrainWarEntitiesToArena(){
  if(state.mode!=='war')return;
@@ -7083,7 +7118,7 @@ function territoryFor(i,n){
 function setupWarRound(){
  state.world.w=1850;state.world.h=1542;
  state.entities=[];state.particles=[];state.dragonProjectiles=[];
- warCandidateCache.clear();warCombatGrid.clear();warBurningEntities.clear();deadTargetIds.clear();
+ warCandidateCache.clear();warCandidateLists.clear();warCombatGrid.clear();warBurningEntities.clear();deadTargetIds.clear();
  warAIGridBuiltAt=0;warSeparationAccumulator=0;
  clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
@@ -7373,11 +7408,16 @@ const warFrameEnemiesByTeam=new Map();
 const warEntityById=new Map();
 const warCombatGrid=new Map();
 const warCandidateCache=new Map();
+const warCandidateLists=new Map();
 const warBurningEntities=new Set();
 const deadTargetIds=new Set();
 const warLivingScratch=[];
+const warSeparationLiving=[];
+const warSeparationAirborne=[];
+const warSeparationGrid=new Map();
 let warAIGridBuiltAt=0;
 let warSeparationAccumulator=0;
+function warGridKey(x,y){return (x<<16)^(y&0xffff)}
 function rebuildWarEntityIdMap(){
  warEntityById.clear();
  for(const e of state.entities)warEntityById.set(e.id,e);
@@ -7403,7 +7443,7 @@ function rebuildWarFrameEnemyCache(living){
 function buildWarAIGrid(living){
  const cells=warCombatGrid;cells.clear();
  for(const e of living){
-   const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=cx+','+cy;
+   const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=warGridKey(cx,cy);
    let bucket=cells.get(key);if(!bucket){bucket=[];cells.set(key,bucket)}bucket.push(e);
  }
  return cells;
@@ -7421,7 +7461,7 @@ function forEachWarSpatialCandidate(minX,minY,maxX,maxY,visit){
  const startX=Math.floor(minX/cs)-1,endX=Math.floor(maxX/cs)+1;
  const startY=Math.floor(minY/cs)-1,endY=Math.floor(maxY/cs)+1;
  for(let x=startX;x<=endX;x++)for(let y=startY;y<=endY;y++){
-   const bucket=warCombatGrid.get(x+','+y);if(!bucket)continue;
+   const bucket=warCombatGrid.get(warGridKey(x,y));if(!bucket)continue;
    for(const t of bucket)visit(t);
  }
 }
@@ -7433,7 +7473,7 @@ function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  for(let r=0;r<=maxR;r++){
    for(let x=cx-r;x<=cx+r;x++)for(let y=cy-r;y<=cy+r;y++){
      if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
-     const bucket=grid.get(x+','+y);if(!bucket)continue;
+     const bucket=grid.get(warGridKey(x,y));if(!bucket)continue;
      for(const t of bucket){
        if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
        const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
@@ -7459,18 +7499,21 @@ function warCandidatesFor(e,grid,nonDragonOnly=false,now=performance.now()){
  const cs=WAR_AI_GRID_CELL,r=WAR_AI_LOCAL_RADIUS,r2=r*r;
  const minX=Math.floor((e.x-r)/cs),maxX=Math.floor((e.x+r)/cs);
  const minY=Math.floor((e.y-r)/cs),maxY=Math.floor((e.y+r)/cs);
- const local=[];
+ let local=warCandidateLists.get(e.id);
+ if(!local){local=[];warCandidateLists.set(e.id,local)}else local.length=0;
  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++){
-   const bucket=grid.get(x+','+y);if(!bucket)continue;
+   const bucket=grid.get(warGridKey(x,y));if(!bucket)continue;
    for(const t of bucket){
      if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
    }
  }
- const nearest=local.length?null:nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
- const result=local.length?local:(nearest?[nearest]:[]);
- warCandidateCache.set(e.id,{nonDragonOnly,until:now+WAR_AI_DECISION_INTERVAL_MS,items:result});
- return result;
+ if(!local.length){
+   const nearest=nearestEnemyFromWarGrid(e,grid,nonDragonOnly);
+   if(nearest)local.push(nearest);
+ }
+ warCandidateCache.set(e.id,{nonDragonOnly,until:now+WAR_AI_DECISION_INTERVAL_MS,items:local});
+ return local;
 }
 function updateWar(dt){
  if(state.phase==='prep'){
@@ -8304,6 +8347,7 @@ function draw(){
 
  // Tremor local quando uma tropa deste jogador recebe pancada do Golem.
  const shakeNow=performance.now();
+ renderFrameNow=shakeNow;
  if(state.mode==='war' && state.screenShake.until>shakeNow){
    const remaining=(state.screenShake.until-shakeNow)/1000;
    const fade=Math.min(1,remaining/.42);
@@ -8348,7 +8392,15 @@ function draw(){
  // Margem maior evita entra/sai do culling durante pan, tremor e limites da arena.
  const margin=170;
  const visible=renderVisibleEntities;visible.length=0;
+ renderPresentIds.clear();renderPresentMap.clear();
+ renderIsisEffectEntities.length=0;renderBrownEffectEntities.length=0;renderKingEffectEntities.length=0;renderMageEffectEntities.length=0;
  for(const e of state.entities){
+   renderPresentMap.set(e.id,e);
+   if(e.alive||e.deathStarted)renderPresentIds.add(e.id);
+   if(e.type==='isis'&&e.pendingIsisAttack)renderIsisEffectEntities.push(e);
+   if(e.type==='brownWarrior'&&e.pendingBrownAttack)renderBrownEffectEntities.push(e);
+   if(e.type==='king'&&e.pendingKingSpecial)renderKingEffectEntities.push(e);
+   if(e.type==='mage'&&e.pendingMageAttack)renderMageEffectEntities.push(e);
    if((e.alive||e.deathStarted)&&e.x>=left-margin&&e.x<=right+margin&&e.y>=top-margin&&e.y<=bottom+margin)visible.push(e);
  }
  for(let i=0;i<visible.length;i++)drawEntityMarker(visible[i]);
@@ -8453,6 +8505,11 @@ const renderVisibleEntities=[];
 const renderVisibleIds=new Set();
 const renderPresentIds=new Set();
 const renderPresentMap=new Map();
+const renderIsisEffectEntities=[];
+const renderBrownEffectEntities=[];
+const renderKingEffectEntities=[];
+const renderMageEffectEntities=[];
+let renderFrameNow=0;
 const magePowerActiveIds=new Set();
 const brownPowerActiveIds=new Set();
 const kingPowerActiveIds=new Set();
@@ -8475,6 +8532,7 @@ function acquireDragonProjectileNode(layer,assetKey='dragonFireball'){
  if(img.dataset.assetKey!==assetKey){stopGif(img);img.dataset.assetKey=assetKey}
  if(!img.hasAttribute('src'))img.src=ASSETS[assetKey];
  if(img.parentElement!==layer)layer.appendChild(img);
+ img.style.left='0px';img.style.top='0px';
  img.style.display='block';
  img.style.visibility='visible';
  return img;
@@ -8498,8 +8556,8 @@ function recycleDragonProjectileNode(img){
 }
 
 function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=isisPowerActiveIds;active.clear();const now=performance.now();
- for(const isis of state.entities){
+ const layer=entityCameraLayer,active=isisPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const isis of renderIsisEffectEntities){
    const p=isis.pendingIsisAttack;
    if(!isis.alive||isis.type!=='isis'||p?.kind!=='special'||!p.activated||Number(p.endAt||0)<=now)continue;
    for(const blessing of p.blessings||[]){
@@ -8549,8 +8607,8 @@ function syncIsisPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
  }
 }
 function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=entityCameraLayer,active=brownPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderBrownEffectEntities){
    const p=e.pendingBrownAttack;
    if(!e.alive||e.type!=='brownWarrior'||!p||p.kind!=='special'||Number(p.endAt||0)<=now)continue;
    const angle=Number(p.angle)||0,ox=Number(p.originX)||e.x,oy=Number(p.originY)||e.y;
@@ -8586,8 +8644,8 @@ function syncBrownWarriorPowerEffects(left,top,zoom,screenW,screenH,cullLeft=lef
 }
 
 function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=combatCameraLayer,active=magePowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderMageEffectEntities){
    const p=e.pendingMageAttack;if(!e.alive||!p)continue;
    if(p.kind==='special'){
      const powerVisualEnd=(Number(p.powerEndAt)||Number(p.endAt)||0)-45;
@@ -8661,8 +8719,8 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
 }
 
 function syncKingPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=kingPowerActiveIds;active.clear();const now=performance.now();
- for(const e of state.entities){
+ const layer=entityCameraLayer,active=kingPowerActiveIds;active.clear();const now=renderFrameNow||performance.now();
+ for(const e of renderKingEffectEntities){
    const p=e.pendingKingSpecial;
    if(!p||Number(p.endAt||0)<=now)continue;
    const duration=Number(p.duration)||KING_SPECIAL_DURATION;
@@ -8715,7 +8773,7 @@ function syncKingPowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
 }
 
 function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
-           const layer=combatCameraLayer,active=dragonProjectileActiveIds;active.clear();const now=performance.now();
+           const layer=combatCameraLayer,active=dragonProjectileActiveIds;active.clear();const now=renderFrameNow||performance.now();
            for(const p of state.dragonProjectiles||[]){
              const cullSx=(p.x-cullLeft)*cullZoom,cullSy=(p.y-cullTop)*cullZoom,margin=120;
              if(cullSx<-margin||cullSx>screenW+margin||cullSy<-margin||cullSy>screenH+margin){
@@ -8734,7 +8792,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
                img._projectileZoom=zoom;
                const size=48*zoom;img.style.width=size+'px';img.style.height=size+'px';
              }
-             img.style.left=sx+'px';img.style.top=sy+'px';img.style.transform=`translate(-50%,-50%) rotate(${angle-Math.PI/2}rad) scaleY(-1)`;img.style.visibility='visible';
+             img.style.transform=`translate3d(${sx}px,${sy}px,0) translate(-50%,-50%) rotate(${angle-Math.PI/2}rad) scaleY(-1)`;img.style.visibility='visible';
            }
            for(const [id,img] of dragonProjectileNodes)if(!active.has(id)){recycleDragonProjectileNode(img);dragonProjectileNodes.delete(id)}
           }
@@ -8761,13 +8819,14 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
           function makeEntityNode(e){
  const el=document.createElement('div');
  el.className='entity-visual';
+ el.style.left='0px';el.style.top='0px';
 
  if(e.type==='brownWarrior'){
    el.classList.add('brown-warrior-visual');
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="brownIdle" src="${ASSETS.brownIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="brownWalk" src="${ASSETS.brownWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="brownWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-brown-attack" data-asset-key="brownAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-brown-special" data-asset-key="brownSpecial" draggable="false" style="opacity:0">
      </div>
@@ -8781,7 +8840,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="golemIdle" src="${ASSETS.golemIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="golemWalk" src="${ASSETS.golemWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="golemWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-golem-attack" data-asset-key="golemAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-golem-special" data-asset-key="golemSpecial" draggable="false" style="opacity:0">
      </div>
@@ -8795,7 +8854,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="najaIdle" src="${ASSETS.najaIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="najaWalk" src="${ASSETS.najaWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="najaWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-naja-attack" data-asset-key="najaAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-naja-special" data-asset-key="najaSpecial" draggable="false" style="opacity:0">
        <img class="entity-body entity-naja-special-final" data-asset-key="najaSpecialFinal" draggable="false" style="opacity:0">
@@ -8810,7 +8869,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="anubisIdle" src="${ASSETS.anubisIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="anubisWalk" src="${ASSETS.anubisWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="anubisWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-anubis-melee" data-asset-key="anubisMeleeAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-anubis-ranged" data-asset-key="anubisRangedAttack" draggable="false" style="opacity:0">
      </div><div class="entity-weapon-facing"></div><div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
@@ -8819,7 +8878,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="isisIdle" src="${ASSETS.isisIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="isisWalk" src="${ASSETS.isisWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="isisWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-isis-attack" data-asset-key="isisAttack" draggable="false" style="opacity:0">
        <img class="entity-body entity-isis-special" data-asset-key="isisSpecial" draggable="false" style="opacity:0">
      </div><div class="entity-weapon-facing"></div><div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
@@ -8836,7 +8895,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-facing">
        <img class="mage-staff" src="${staff}" draggable="false">
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" src="${bodyWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" draggable="false" style="opacity:0">
        <img class="entity-body entity-mage-special" data-asset-key="${bodySpecialKey}" draggable="false" style="opacity:0">
        <img class="mage-hand" src="${hand}" draggable="false">
      </div>
@@ -8850,7 +8909,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
    el.innerHTML=`
      <div class="entity-facing">
        <img class="entity-body entity-idle active-sprite" data-asset-key="kingIdle" src="${ASSETS.kingIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" data-asset-key="kingWalk" src="${ASSETS.kingWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" data-asset-key="kingWalk" draggable="false" style="opacity:0">
        <img class="entity-body entity-king-special" data-asset-key="kingSpecial" draggable="false" style="opacity:0">
      </div>
      <div class="entity-weapon-facing">
@@ -8867,7 +8926,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-facing">
        <img class="entity-body entity-dragon-ground active-sprite" data-asset-key="dragonGround" src="${ASSETS.dragonGround}" draggable="false" style="opacity:1">
        <img class="entity-body entity-dragon-takeoff" data-asset-key="dragonTakeoff" draggable="false" style="opacity:0">
-       <img class="entity-body entity-dragon-fly" data-asset-key="dragonFly" src="${ASSETS.dragonFly}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-dragon-fly" data-asset-key="dragonFly" draggable="false" style="opacity:0">
        <img class="entity-body entity-dragon-attack" data-asset-key="dragonAttack" draggable="false" style="opacity:0">
      </div>
      <div class="entity-weapon-facing"></div>
@@ -8884,7 +8943,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-facing">
        <!-- Guerreiro/Guerreira compartilham toda a lógica; clã troca somente os sprites. -->
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
-       <img class="entity-body entity-walk" src="${bodyWalk}" draggable="false" style="opacity:0">
+       <img class="entity-body entity-walk" draggable="false" style="opacity:0">
      </div>
      <div class="entity-weapon-facing">
        <div class="entity-slash"></div>
@@ -8915,6 +8974,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._isisAttack=el.querySelector('.entity-isis-attack');el._isisSpecial=el.querySelector('.entity-isis-special');
  el._mageSpecial=el.querySelector('.entity-mage-special');
  el._mageStaff=el.querySelector('.mage-staff');
+ el._mageStaffKey=e.type==='mage'?(e.clan==='egypt'?'egyptMageStaff':'mageStaff'):null;
  el._mageHand=el.querySelector('.mage-hand');
  el._kingSpecial=el.querySelector('.entity-king-special');
  el._kingPower=el.querySelector('.king-special-power');
@@ -8990,7 +9050,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 }
 const ENTITY_LOOP_STATE_LIST=['idle','walk','ground','fly'];
 const ENTITY_LOOP_STATES=new Set(ENTITY_LOOP_STATE_LIST);
-const ENTITY_LOOP_GIF_GRACE_MS=1400;
+const ENTITY_LOOP_GIF_GRACE_MS=450;
 // GIF SWITCH STABILITY 2026-09-08
 // Idle/andar/voar não perdem mais o src imediatamente em toda troca. Esses GIFs
 // são grandes; remover e recolocar o src repetidamente força novo ciclo de
@@ -9057,29 +9117,40 @@ function suspendEntityLoopGif(el){
    img.style.display='none';
    stopGif(img);
  }
+ if(el._mageStaff&&el._mageStaff.hasAttribute('src')){
+   el._mageStaff.style.display='none';
+   stopGif(el._mageStaff);
+ }
+ if(el._dragonBurnLayer){
+   el._dragonBurnLayer.style.opacity='0';
+   el._dragonBurnLayer.style.backgroundImage='none';
+   el._dragonBurnLayer.dataset.serial='-1';
+   el._dragonBurnLayer.dataset.count='0';
+ }
 }
 function setEntitySpriteState(el,desired){
  const previous=el.dataset.anim||'';
- const sprites=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
-   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
-   [el._kingSpecial,'special'],
-   [el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
- ];
- const desiredImg=(sprites.find(([img,stateName])=>img&&stateName===desired)||[])[0]||null;
- ensureEntityLoopGif(el,desired,desiredImg);
+ const desiredImg=entitySpriteForState(el,desired);
  if(previous===desired){
-   if(desiredImg){desiredImg.style.display='block';desiredImg.style.opacity='1';desiredImg.classList.add('active-sprite')}
+   if(desiredImg){
+     if(ENTITY_LOOP_STATES.has(desired)&&!desiredImg.hasAttribute('src'))ensureEntityLoopGif(el,desired,desiredImg);
+     if(desiredImg.style.display!=='block')desiredImg.style.display='block';
+     if(desiredImg.style.opacity!=='1')desiredImg.style.opacity='1';
+     if(!desiredImg.classList.contains('active-sprite'))desiredImg.classList.add('active-sprite');
+   }
    return false;
  }
+ ensureEntityLoopGif(el,desired,desiredImg);
+ const sprites=el._spriteEntries||(el._spriteEntries=[
+   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
+   [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
+   [el._kingSpecial,'special'],[el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
+ ].filter(entry=>!!entry[0]));
  const token=(el._spriteSwitchToken||0)+1;
  el._spriteSwitchToken=token;
  el.dataset.anim=desired;
 
- // Mostra o novo imediatamente, mas mantém o estado anterior como rede de segurança
- // até o browser confirmar que a nova imagem está pronta.
  for(const [img,stateName] of sprites){
-   if(!img)continue;
    if(stateName===desired){
      img.style.display='block';
      img.style.opacity='1';
@@ -9094,27 +9165,18 @@ function setEntitySpriteState(el,desired){
  const finalize=()=>{
    if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
    for(const [img,stateName] of sprites){
-     if(!img)continue;
      const active=stateName===desired;
      img.style.display=active?'block':'none';
      img.style.opacity=active?'1':'0';
      img.classList.toggle('active-sprite',active);
    }
 
-   // O loop anterior fica pronto por pouco tempo para uma possível troca de volta.
-   // Se a unidade estabilizar no novo estado, aí sim o src antigo é removido.
-   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired) scheduleEntityLoopGifSuspend(el,previous);
-
-   // Ataques fechados continuam usando a lógica original de restart por serial.
+   if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)scheduleEntityLoopGifSuspend(el,previous);
    if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack);stopGif(el._anubisMelee);stopGif(el._isisAttack)}
    if(previous==='anubisRanged'&&desired!=='anubisRanged')stopGif(el._anubisRanged);
    if(previous==='special'&&desired!=='special'){
-     stopGif(el._brownSpecial);
-     stopGif(el._golemSpecial);
-     stopGif(el._najaSpecial);stopGif(el._isisSpecial);
-     stopGif(el._mageSpecial);
-     stopGif(el._kingSpecial);
-     stopGif(el._kingPower);
+     stopGif(el._brownSpecial);stopGif(el._golemSpecial);stopGif(el._najaSpecial);stopGif(el._isisSpecial);
+     stopGif(el._mageSpecial);stopGif(el._kingSpecial);stopGif(el._kingPower);
    }
    if(previous==='emerge'&&desired!=='emerge')stopGif(el._najaSpecialFinal);
    if(previous==='takeoff'&&desired!=='takeoff')stopGif(el._dragonTakeoff);
@@ -9122,11 +9184,9 @@ function setEntitySpriteState(el,desired){
  };
  const settle=()=>requestAnimationFrame(finalize);
 
- if(!desiredImg){
-   finalize();
- }else if(desiredImg.complete&&desiredImg.naturalWidth>0){
-   settle();
- }else{
+ if(!desiredImg)finalize();
+ else if(desiredImg.complete&&desiredImg.naturalWidth>0)settle();
+ else{
    desiredImg.addEventListener('load',settle,{once:true});
    desiredImg.addEventListener('error',settle,{once:true});
    setTimeout(settle,700);
@@ -9151,7 +9211,13 @@ function entityVisualMoving(el,e,now){
  return now<Number(el._visualMovingUntil||0);
 }
 function setEntityNodeVisible(el,visible){
- if(visible)clearEntityOffscreenSuspend(el);
+ if(visible){
+   clearEntityOffscreenSuspend(el);
+   if(el._mageStaff&&el._mageStaffKey&&!el._mageStaff.hasAttribute('src')){
+     el._mageStaff.src=ASSETS[el._mageStaffKey];
+     el._mageStaff.style.display='block';
+   }
+ }
  if(el._nodeVisible===visible)return;
  el._nodeVisible=visible;
  el.style.visibility=visible?'visible':'hidden';
@@ -9160,18 +9226,14 @@ function setEntityNodeVisible(el,visible){
 
 function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  const visibleIds=renderVisibleIds;visibleIds.clear();
- const presentIds=renderPresentIds;presentIds.clear();
- const presentMap=renderPresentMap;presentMap.clear();
- for(const entity of state.entities){
-   presentMap.set(entity.id,entity);
-   if(entity.alive||entity.deathStarted)presentIds.add(entity.id);
- }
- const localNow=performance.now();
+ const presentIds=renderPresentIds;
+ const presentMap=renderPresentMap;
+ const localNow=renderFrameNow||performance.now();
 
  // Culling usa a câmera real; posicionamento usa a câmera-base do compositor.
 
  for(const e of visible){
-   let el=entityNodes.get(e.id)||makeEntityNode(e);
+   let el=entityNodes.get(e.id);
 
    const sx=(e.x-left)*zoom,sy=(e.y-top)*zoom;
    const cullSx=(e.x-cullLeft)*cullZoom,cullSy=(e.y-cullTop)*cullZoom;
@@ -9187,6 +9249,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      cullSy>=-entityPadY && cullSy<=screenH+entityPadY;
 
    if(!onScreen){
+     if(!el)continue;
      setEntityNodeVisible(el,false);
      // Se um ataque terminou fora da câmera, encerra também sua decodificação.
      if(e.type==='brownWarrior'&&!(e.pendingBrownAttack&&e.pendingBrownAttack.endAt>localNow)&&
@@ -9215,6 +9278,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      continue;
    }
 
+   if(!el)el=makeEntityNode(e);
    visibleIds.add(e.id);
    el._lastVisibleAt=localNow;
    setEntityNodeVisible(el,true);
@@ -9263,13 +9327,11 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
    const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-flightLift*zoom;
-   if(el._screenX!==renderX){el._screenX=renderX;el.style.left=renderX+'px'}
-   if(el._screenY!==visualTop){el._screenY=visualTop;el.style.top=visualTop+'px'}
    const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.44:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.96:1;
    const visualScale=zoom*typeScale;
-   if(el._visualScale!==visualScale){
-     el._visualScale=visualScale;
-     el.style.transform=`translate(-50%,-58%) scale(${visualScale})`;
+   if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
+     el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
+     el.style.transform=`translate3d(${renderX}px,${visualTop}px,0) translate(-50%,-58%) scale(${visualScale})`;
    }
    const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}
@@ -9505,12 +9567,12 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
 
    syncDragonBurnOnEntity(el,e,localNow);
 
-   const hpWidth=(100*clamp(e.hp/e.maxHp,0,1))+'%';
-   if(el._hpWidth!==hpWidth){el._hpWidth=hpWidth;el._hp.style.width=hpWidth}
+   const hpPct=100*clamp(e.hp/e.maxHp,0,1);
+   if(el._hpPct!==hpPct){el._hpPct=hpPct;el._hp.style.width=hpPct+'%'}
    if(e.maxShield){
      if(el._shieldVisible!==true){el._shieldVisible=true;el._shieldBg.style.display='block'}
-     const shieldWidth=(100*clamp(e.shield/e.maxShield,0,1))+'%';
-     if(el._shieldWidth!==shieldWidth){el._shieldWidth=shieldWidth;el._shield.style.width=shieldWidth}
+     const shieldPct=100*clamp(e.shield/e.maxShield,0,1);
+     if(el._shieldPct!==shieldPct){el._shieldPct=shieldPct;el._shield.style.width=shieldPct+'%'}
    }else if(el._shieldVisible!==false){el._shieldVisible=false;el._shieldBg.style.display='none'}
 
    if(el.dataset.attackSerial!==String(e.attackSerial)){
