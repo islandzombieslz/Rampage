@@ -2656,7 +2656,7 @@ body.booting #landscapeRoot{visibility:hidden}
 }
 .entity-visual .entity-bars{
   left:50% !important;
-  top:-8px !important;
+  top:-4px !important;
   width:80px !important;
   height:18px !important;
   transform:translateX(-50%) scale(var(--entity-ui-inverse-scale,1));
@@ -2674,7 +2674,7 @@ body.booting #landscapeRoot{visibility:hidden}
   bottom:21px;
   transform:translateX(-50%);
   color:#fff;
-  font-size:14px;
+  font-size:16px;
   line-height:1;
   font-weight:900;
   letter-spacing:.08px;
@@ -8635,7 +8635,19 @@ function entityUiLocalPoint(img,clientX,clientY){
  }
  const rect=img.getBoundingClientRect();
  if(rect.width<=0||rect.height<=0)return null;
- let u=(clientX-rect.left)/rect.width,v=(clientY-rect.top)/rect.height;
+ let u,v;
+ if(isPortraitFallback()){
+   // O root é girado 90° no fallback portrait. Desfazemos essa rotação
+   // antes de calcular a posição dentro do sprite.
+   const logicalX=clientY,logicalY=innerWidth-clientX;
+   const logicalLeft=rect.top,logicalTop=innerWidth-rect.right;
+   const logicalW=rect.height,logicalH=rect.width;
+   u=(logicalX-logicalLeft)/Math.max(1,logicalW);
+   v=(logicalY-logicalTop)/Math.max(1,logicalH);
+ }else{
+   u=(clientX-rect.left)/rect.width;
+   v=(clientY-rect.top)/rect.height;
+ }
  const facing=img.closest('.entity-facing,.entity-weapon-facing');
  const tr=facing?getComputedStyle(facing).transform:'none';
  if(tr&&tr!=='none'){
