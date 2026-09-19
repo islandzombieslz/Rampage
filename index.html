@@ -3264,6 +3264,32 @@ function setBootTitle(text){const el=document.getElementById('bootLoaderTitle');
 /* ===== ALPHA YOUTUBE BOOT INTRO 2026-09-18 ===== */
 const BOOT_INTRO_VIDEO_ID='j84JmKNz_5Q';
 const BOOT_INTRO_PLAY_MS=12400;
+const BOOT_INTRO_RESHOW_AFTER_MS=6*60*60*1000;
+const BOOT_INTRO_STATE_KEY='rampageBootIntroStateV2';
+const BOOT_PRESENCE_KEY='rampageLastPresenceV1';
+function readBootIntroState(){
+ try{return JSON.parse(localStorage.getItem(BOOT_INTRO_STATE_KEY)||'null')}catch(_){return null}
+}
+function readBootPresence(){
+ try{return Number(localStorage.getItem(BOOT_PRESENCE_KEY))||0}catch(_){return 0}
+}
+function writeBootPresence(){
+ try{localStorage.setItem(BOOT_PRESENCE_KEY,String(Date.now()))}catch(_){}
+}
+function shouldPlayBootIntro(){
+ const saved=readBootIntroState(),lastPresence=readBootPresence(),now=Date.now();
+ if(!saved||saved.videoId!==BOOT_INTRO_VIDEO_ID)return true;
+ return !lastPresence||now-lastPresence>=BOOT_INTRO_RESHOW_AFTER_MS;
+}
+const BOOT_INTRO_SHOULD_PLAY=shouldPlayBootIntro();
+function rememberBootIntroVideo(){
+ try{localStorage.setItem(BOOT_INTRO_STATE_KEY,JSON.stringify({videoId:BOOT_INTRO_VIDEO_ID,shownAt:Date.now()}))}catch(_){}
+}
+writeBootPresence();
+const bootPresenceTimer=setInterval(writeBootPresence,60000);
+document.addEventListener('visibilitychange',writeBootPresence,{passive:true});
+window.addEventListener('pagehide',()=>{writeBootPresence();clearInterval(bootPresenceTimer)},{passive:true});
+
 let bootIntroFinished=false,bootIntroTimer=null,bootIntroFallbackTimer=null;
 let bootIntroViewportCleanup=()=>{};
 let resolveBootIntroDone=()=>{};
@@ -3313,13 +3339,19 @@ function bootIntroCommand(frame,func,args=[]){
    frame?.contentWindow?.postMessage(JSON.stringify({event:'command',func,args}),'*');
  }catch(_){}
 }
-function finishBootIntro(){
+function finishBootIntro({immediate=false}={}){
  if(bootIntroFinished)return;
  bootIntroFinished=true;
  clearTimeout(bootIntroTimer);
  clearTimeout(bootIntroFallbackTimer);
  const intro=document.getElementById('bootIntro');
  if(!intro){bootIntroViewportCleanup();resolveBootIntroDone();return}
+ if(immediate){
+   bootIntroViewportCleanup();
+   intro.remove();
+   resolveBootIntroDone();
+   return;
+ }
  intro.classList.add('fade-out');
  setTimeout(()=>{
    bootIntroViewportCleanup();
@@ -3328,6 +3360,8 @@ function finishBootIntro(){
  },560);
 }
 function startBootIntro(){
+ if(!BOOT_INTRO_SHOULD_PLAY){finishBootIntro({immediate:true});return}
+ rememberBootIntroVideo();
  const intro=document.getElementById('bootIntro');
  if(!intro){finishBootIntro();return}
  bindBootIntroLandscape();
@@ -3508,6 +3542,7 @@ let NAJA_SPECIAL_EMERGE_DURATION=1600;
 const NAJA_ATTACK_INTERVAL_SEC=2;
 const NAJA_UNDERGROUND_MS=5000;
 const NAJA_SPECIAL_RADIUS=220;
+const NAJA_NORMAL_DAMAGE=65;
 const NAJA_SPECIAL_DAMAGE=80;
 let BROWN_NORMAL_DURATION=1800;
 let BROWN_SPECIAL_BODY_DURATION=2200;
@@ -3525,6 +3560,8 @@ let KING_SPECIAL_DURATION=3000;
 let KING_BODY_SPECIAL_DURATION=3000;
 let KING_POWER_DURATION=3000;
 const MAGE_FIRE_TICK=300;
+const MAGE_NORMAL_TICK_DAMAGE=5;
+const EGYPT_MAGE_NORMAL_TICK_DAMAGE=MAGE_NORMAL_TICK_DAMAGE+5;
 const MAGE_DAMAGE_DELAY=1000;
 const MAGE_SPECIAL_COOLDOWN=10;
 const MAGE_SPECIAL_RADIUS=215;
@@ -3560,15 +3597,15 @@ let ISIS_SPECIAL_DURATION=6000;
 let ISIS_POWER_DURATION=4000;
 const ISIS_SPECIAL_DELAY_MS=2000;
 const ISIS_HEAL_TICK_MS=1000;
-const ISIS_HEAL_AMOUNT=20;
+const ISIS_HEAL_AMOUNT=25;
 const ISIS_SELF_HEAL_AMOUNT=5;
-const ISIS_MAX_ALLIES=3;
+const ISIS_MAX_ALLIES=2;
 const ISIS_HEAL_REUSE_LOCK_MS=5000;
 const ISIS_SHIELD_BREAK_TRIGGER_COUNT=3;
 const ISIS_FLIGHT_LIFT=52;
 const ISIS_LANDING_DURATION_MS=700;
 const ISIS_SPRITE_OFFSET_X=26;
-const ISIS_SPRITE_OFFSET_Y=24;
+const ISIS_SPRITE_OFFSET_Y=12;
 const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const ISIS_RUNTIME_REVISION='isis-heal-runtime-v2-20260918';
@@ -6257,7 +6294,7 @@ function resolveNajaNormalImpact(e,p){
  if(!e.alive)return;
  const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
  if(target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118){
-   applyCombatHit(target,e,60,{knockForce:220,knockTime:.12,tilt:9});
+   applyCombatHit(target,e,NAJA_NORMAL_DAMAGE,{knockForce:220,knockTime:.12,tilt:9});
  }
 }
 
@@ -6813,7 +6850,8 @@ function updateMageAttackState(e,now){
      if(!t.alive||t===e||t.team===e.team)return;
      const targetBodyRadius=Math.min(16,(t.r||25)*0.5);
      if(distanceToSegment(t.x,t.y,ax,ay,bx,by)<=fireHalfWidth+targetBodyRadius){
-       applyCombatHit(t,e,5,{knockForce:90,knockTime:.06,tilt:5});
+       const normalDamage=e.clan==='egypt'?EGYPT_MAGE_NORMAL_TICK_DAMAGE:MAGE_NORMAL_TICK_DAMAGE;
+       applyCombatHit(t,e,normalDamage,{knockForce:90,knockTime:.06,tilt:5});
      }
    });
    p.nextTickAt=now+MAGE_FIRE_TICK;
