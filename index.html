@@ -4379,7 +4379,7 @@ function applyRemoteGame(game){
    for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
    const previous=remotePreviousEntities;
    state.entities=game.entities.map(e=>{
-     const old=previous.get(e.id),localNow=performance.now();
+     const old=previous.get(e.id),localNow=remoteNow;
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
@@ -7416,6 +7416,7 @@ const warSeparationAirborne=[];
 const warSeparationGrid=new Map();
 let warAIGridBuiltAt=0;
 let warSeparationAccumulator=0;
+function warGridKey(x,y){return (x<<16)^(y&0xffff)}
 function rebuildWarEntityIdMap(){
  warEntityById.clear();
  for(const e of state.entities)warEntityById.set(e.id,e);
@@ -7441,7 +7442,7 @@ function rebuildWarFrameEnemyCache(living){
 function buildWarAIGrid(living){
  const cells=warCombatGrid;cells.clear();
  for(const e of living){
-   const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=cx+','+cy;
+   const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=warGridKey(cx,cy);
    let bucket=cells.get(key);if(!bucket){bucket=[];cells.set(key,bucket)}bucket.push(e);
  }
  return cells;
@@ -7459,7 +7460,7 @@ function forEachWarSpatialCandidate(minX,minY,maxX,maxY,visit){
  const startX=Math.floor(minX/cs)-1,endX=Math.floor(maxX/cs)+1;
  const startY=Math.floor(minY/cs)-1,endY=Math.floor(maxY/cs)+1;
  for(let x=startX;x<=endX;x++)for(let y=startY;y<=endY;y++){
-   const bucket=warCombatGrid.get(x+','+y);if(!bucket)continue;
+   const bucket=warCombatGrid.get(warGridKey(x,y));if(!bucket)continue;
    for(const t of bucket)visit(t);
  }
 }
@@ -7471,7 +7472,7 @@ function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  for(let r=0;r<=maxR;r++){
    for(let x=cx-r;x<=cx+r;x++)for(let y=cy-r;y<=cy+r;y++){
      if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
-     const bucket=grid.get(x+','+y);if(!bucket)continue;
+     const bucket=grid.get(warGridKey(x,y));if(!bucket)continue;
      for(const t of bucket){
        if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
        const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
@@ -7499,7 +7500,7 @@ function warCandidatesFor(e,grid,nonDragonOnly=false,now=performance.now()){
  const minY=Math.floor((e.y-r)/cs),maxY=Math.floor((e.y+r)/cs);
  const local=[];
  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++){
-   const bucket=grid.get(x+','+y);if(!bucket)continue;
+   const bucket=grid.get(warGridKey(x,y));if(!bucket)continue;
    for(const t of bucket){
      if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
      const dx=t.x-e.x,dy=t.y-e.y;if(dx*dx+dy*dy<=r2)local.push(t);
