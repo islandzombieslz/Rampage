@@ -4735,7 +4735,7 @@ let mobileViewportLayout={active:false,portrait:false,w:innerWidth,h:innerHeight
 
 function readPortraitViewportSnapshot(){
   try{
-    const saved=JSON.parse(sessionStorage.getItem('rampagePortraitViewport')||'null');
+    const saved=JSON.parse(sessionStorage.getItem('rampagePortraitViewportV2')||'null');
     if(saved&&Number.isFinite(saved.w)&&Number.isFinite(saved.h)&&saved.w>saved.h&&saved.w>=320&&saved.h>=240)return saved;
   }catch(_){}
   return null;
@@ -4771,7 +4771,7 @@ function refreshMobileViewportLayout(){
     let logical=readPortraitViewportSnapshot();
     if(!logical){
       logical={w:rawH,h:rawW};
-      try{sessionStorage.setItem('rampagePortraitViewport',JSON.stringify(logical))}catch(_){}
+      try{sessionStorage.setItem('rampagePortraitViewportV2',JSON.stringify(logical))}catch(_){}
     }
     const scale=Math.min(rawH/logical.w,rawW/logical.h);
     const centerX=viewLeft+rawW/2;

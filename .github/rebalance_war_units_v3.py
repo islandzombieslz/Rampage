@@ -134,6 +134,7 @@ required=[
     "function isPortraitFallback(){",
     "const rawH=Math.max(1,innerHeight||document.documentElement.clientHeight||1);",
     "const vv=window.visualViewport;",
+    "rampagePortraitViewportV2",
     "root.style.transform=`translate(-50%,-50%) rotate(90deg) scale(${scale})`;",
     "window.visualViewport?.addEventListener('resize',normalizeMobileViewport,{passive:true});",
     "window.addEventListener('pageshow',normalizeMobileViewport);",
