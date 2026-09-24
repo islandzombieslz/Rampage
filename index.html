@@ -6655,21 +6655,41 @@ function updateWaterAttackState(e,now,dt){
    }
  }else if(p.kind==='wave'&&now>=Number(p.waveStartAt)&&now<Number(p.endAt)&&e.alive){
    const pos=waterWavePosition(p,now),radius=105,pad=radius+50;
-   const ticks=p.nextTickById||(p.nextTickById={});
+   const held=p.draggedIds||(p.draggedIds=Object.create(null));
+   const forwardX=Math.cos(pos.angle),forwardY=Math.sin(pos.angle);
+   // Captura apenas inimigos realmente atingidos pela faixa móvel da água.
    forEachWarSpatialCandidate(pos.x-pad,pos.y-pad,pos.x+pad,pos.y+pad,t=>{
      if(!isRealCombatTarget(t)||t.team===e.team||t===e||najaIsUnderground(t))return;
      if(t.type==='poseidon'&&entityHasActiveSpecial(t,now))return;
-     if(Math.hypot(t.x-pos.x,t.y-pos.y)>radius+(Number(t.r)||25)*.55)return;
-     if(ticks[t.id]===undefined)ticks[t.id]=now;
-     if(now>=ticks[t.id]&&ticks[t.id]<p.endAt){
-       applyCombatHit(t,e,25,{knockForce:0,knockTime:0,tilt:4,allowFlying:true});
-       ticks[t.id]+=POSEIDON_WAVE_TICK_MS;
-     }
-     const travel=Math.min(95*dt,8);
-     t.x+=Math.cos(pos.angle)*travel;t.y+=Math.sin(pos.angle)*travel;
-     t.x=clamp(t.x,35,state.world.w-35);t.y=clamp(t.y,35,state.world.h-35);
-     t.waveDraggedUntil=now+125;
+     if(held[t.id])return;
+     const dx=t.x-pos.x,dy=t.y-pos.y;
+     if(Math.hypot(dx,dy)>radius+(Number(t.r)||25)*.55)return;
+     held[t.id]={
+       along:clamp(dx*forwardX+dy*forwardY,-90,90),
+       across:clamp(-dx*forwardY+dy*forwardX,-90,90),
+       nextDamageAt:now
+     };
    });
+   // Atingidos permanecem arrastados junto à frente da onda enquanto o GIF dura.
+   // Assim o avanço da onda não cancela prematuramente os ticks de dano.
+   for(const [id,drag] of Object.entries(held)){
+     const target=warEntityById.get(Number(id))||state.entities.find(t=>String(t.id)===id);
+     if(!target?.alive||target.team===e.team||najaIsUnderground(target)||
+       (target.type==='poseidon'&&entityHasActiveSpecial(target,now))){
+       delete held[id];continue;
+     }
+     const tx=pos.x+forwardX*drag.along-forwardY*drag.across;
+     const ty=pos.y+forwardY*drag.along+forwardX*drag.across;
+     target.x=clamp(tx,35,state.world.w-35);
+     target.y=clamp(ty,35,state.world.h-35);
+     target.moving=false;target.waveDraggedUntil=now+125;
+     let guard=0;
+     while(target.alive&&now>=drag.nextDamageAt&&drag.nextDamageAt<p.endAt&&guard<4){
+       applyCombatHit(target,e,25,{knockForce:0,knockTime:0,tilt:4,allowFlying:true});
+       drag.nextDamageAt+=POSEIDON_WAVE_TICK_MS;guard++;
+     }
+     if(!target.alive)delete held[id];
+   }
  }
  if(now>=Number(p.endAt)){
    if(p.kind==='normal'&&e.type==='poseidon')e.poseidonNormalCount=Math.min(4,(Number(e.poseidonNormalCount)||0)+1);

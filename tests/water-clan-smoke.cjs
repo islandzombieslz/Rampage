@@ -80,7 +80,6 @@ ctx.updateWaterAttackState(poseidon,clock,.016);
 assert.equal(enemy.hp,915,'wave first 25 damage');
 assert(enemy.waveDraggedUntil>clock,'wave should drag the target');
 clock+=1000;
-enemy.x=ctx.waterWavePosition(p,clock).x;enemy.y=100;
 ctx.updateWaterAttackState(poseidon,clock,.016);
 assert.equal(enemy.hp,890,'wave second one-second tick');
 clock=p.endAt+1;ctx.updateWaterAttackState(poseidon,clock,.016);
