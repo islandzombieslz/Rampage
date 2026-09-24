@@ -2994,7 +2994,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <button id="buyWaterSeahorse" class="shop-sprite-card" aria-label="Comprar Cavalo-marinho por 100 gemas" title="Cavalo-marinho — 100 gemas">
           <img src="assets/water/seahorse/card.png" alt="Cavalo-marinho" draggable="false" decoding="async">
         </button>
-        <button id="buyWaterPoseidon" class="shop-sprite-card" aria-label="Comprar Poseidon por 550 gemas" title="Poseidon — 550 gemas">
+        <button id="buyWaterPoseidon" class="shop-sprite-card" aria-label="Comprar Poseidon por 750 gemas" title="Poseidon — 750 gemas">
           <img src="assets/water/poseidon/card.png" alt="Poseidon" draggable="false" decoding="async">
         </button>
       </div>
@@ -3481,7 +3481,7 @@ const WAR_BASIC_WARRIOR_SPEED_MULTIPLIER=.92; // guerreiros básicos: leve redu�
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:550});
+const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:750});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -4148,6 +4148,9 @@ function serializeWarEntityForNetwork(e,now){
    out.waterAttackSerial=Number(e.waterAttackSerial)||0;
    out.poseidonNormalCount=Number(e.poseidonNormalCount)||0;
    out.poseidonSpecialIndex=Number(e.poseidonSpecialIndex)||0;
+   out.poseidonPhase=e.poseidonPhase||'wave';
+   out.poseidonWaveCount=Number(e.poseidonWaveCount)||0;
+   out.poseidonWaveGoal=Number(e.poseidonWaveGoal)||2;
    if(e.pendingWaterAttack){
      const p=e.pendingWaterAttack;
      out.pendingWaterAttack={
@@ -5556,6 +5559,7 @@ function entityBase(type,x,y,team,color){
  dragonBurnUntil:0,dragonBurnStartedAt:0,dragonBurnNextTick:0,dragonBurnSourceId:null,
  dragonBurnSourceX:0,dragonBurnSourceY:0,dragonBurnSerial:0,dragonBurnFlameCount:0,
  pendingWaterAttack:null,waterAttackKind:null,waterAttackSerial:0,poseidonNormalCount:0,poseidonSpecialIndex:0,
+ poseidonPhase:'wave',poseidonWaveCount:0,poseidonWaveGoal:2,poseidonRetreatStartedAt:0,
  waterSummoned:false,waterSummonerId:null,waveDraggedUntil:0,ownerId:null};
 }
 function spawnWarrior(x,y,team,color,controlled=false,variant='male',ownerId=null,clan='warriors',egyptSummoned=false,egyptSummonerId=null){
@@ -5641,8 +5645,10 @@ function spawnNaja(x,y,team,color){
 }
 function spawnPoseidon(x,y,team,color){
  const e=entityBase('poseidon',x,y,team,color);
- e.clan='water';e.hp=e.maxHp=650;e.shield=e.maxShield=250;e.damage=60;e.r=36;
- e.speed=state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100;
+ e.clan='water';e.hp=e.maxHp=650;e.shield=e.maxShield=250;e.damage=75;e.r=36;
+ e.speed=(state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100)*1.12;
+ e.poseidonPhase='wave';e.poseidonWaveCount=0;e.poseidonWaveGoal=2;
+ e.poseidonNormalCount=0;e.poseidonSpecialIndex=0;e.poseidonRetreatStartedAt=0;
  state.entities.push(e);return e;
 }
 function spawnSeahorse(x,y,team,color,summonerId=null){
@@ -6575,18 +6581,19 @@ const POSEIDON_SUMMON_BODY_MS=2800;
 const POSEIDON_WAVE_DELAY_MS=1000;
 const POSEIDON_WAVE_DURATION_MS=3040;
 const POSEIDON_WAVE_TICK_MS=1000;
+const POSEIDON_NORMAL_RANGE=148;
+const POSEIDON_NORMAL_HIT_RANGE=165;
+const POSEIDON_NORMAL_SPLASH_RADIUS=64;
+const POSEIDON_WAVE_CAST_RANGE=365;
+const POSEIDON_WAVE_SPACING=245;
+const POSEIDON_RETREAT_TIMEOUT_MS=1800;
+const POSEIDON_MELEE_ATTACKS_PER_CYCLE=5;
+const POSEIDON_SUMMON_COUNT=4;
 const SEAHORSE_NORMAL_MS=1470;
-function countLivingWaterSummons(poseidon){
- let count=0;
- for(const t of state.entities){
-   if(t.alive&&t.type==='seahorse'&&t.team===poseidon.team&&t.waterSummonerId===poseidon.id)count++;
- }
- return count;
-}
 function spawnPoseidonSeahorses(e,p){
  const ox=p.originX??e.x,oy=p.originY??e.y,base=(Number(p.serial)||0)*.39;
- for(let i=0;i<3;i++){
-   const a=base+i*Math.PI*2/3,r=72+(i%2)*15;
+ for(let i=0;i<POSEIDON_SUMMON_COUNT;i++){
+   const a=base+i*Math.PI*2/POSEIDON_SUMMON_COUNT,r=72+(i%2)*15;
    spawnSeahorse(clamp(ox+Math.cos(a)*r,45,state.world.w-45),
      clamp(oy+Math.sin(a)*r,45,state.world.h-45),e.team,e.color,e.id);
  }
@@ -6602,10 +6609,9 @@ function startWaterAttack(e,kind,target=null){
  if(!e?.alive||!(e.type==='poseidon'||e.type==='seahorse')||e.pendingWaterAttack||e.attackCooldown>0||e.knockTime>0)return false;
  if(!isRealCombatTarget(target)||target.team===e.team||!canEngageTarget(e,target))return false;
  const d=dist(e,target),now=performance.now();
- if(kind==='normal'&&d>(e.type==='poseidon'?112:108))return false;
- if(kind==='wave'&&d>365)return false;
+ if(kind==='normal'&&d>(e.type==='poseidon'?POSEIDON_NORMAL_RANGE:108))return false;
+ if(kind==='wave'&&d>POSEIDON_WAVE_CAST_RANGE)return false;
  if(e.type==='seahorse'&&kind!=='normal')return false;
- if(e.type==='poseidon'&&kind==='summon'&&countLivingWaterSummons(e)>=3)return false;
  const angle=Math.atan2(target.y-e.y,target.x-e.x);
  e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
  e.moving=false;e.target=target;e.lastAttackAt=now;e.lastCombatAt=now;
@@ -6623,7 +6629,6 @@ function startWaterAttack(e,kind,target=null){
  };
  if(kind!=='normal'){
    e.knockTime=0;e.knockVX=0;e.knockVY=0;
-   e.poseidonNormalCount=0;e.poseidonSpecialIndex=(Number(e.poseidonSpecialIndex)||0)+1;
    addWarGoalProgress(e.team,'specials');
    if(kind==='wave')addWarGoalProgress(e.team,'ranged');
  }
@@ -6637,8 +6642,16 @@ function updateWaterAttackState(e,now,dt){
      if(!p.impacted&&now>=Number(p.impactAt)){
        p.impacted=true;
        const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
-       if(e.alive&&target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=118)
-         applyCombatHit(target,e,e.damage,{knockForce:220,knockTime:.12,tilt:9});
+       if(e.alive&&target?.alive&&target.team!==e.team&&canEngageTarget(e,target)&&dist(e,target)<=POSEIDON_NORMAL_HIT_RANGE){
+         // O tridente acerta o alvo e os inimigos próximos (uma vez por golpe).
+         const radius=POSEIDON_NORMAL_SPLASH_RADIUS,hitRangeSq=POSEIDON_NORMAL_HIT_RANGE**2;
+         forEachWarSpatialCandidate(target.x-radius,target.y-radius,target.x+radius,target.y+radius,t=>{
+           if(!isRealCombatTarget(t)||t===e||t.team===e.team||!canEngageTarget(e,t))return;
+           const tx=t.x-target.x,ty=t.y-target.y,ex=t.x-e.x,ey=t.y-e.y;
+           if(tx*tx+ty*ty>radius*radius||ex*ex+ey*ey>hitRangeSq)return;
+           applyCombatHit(t,e,e.damage,{knockForce:220,knockTime:.12,tilt:9});
+         });
+       }
      }
    }else{
      const target=warEntityById.get(p.targetId)||state.entities.find(t=>t.id===p.targetId);
@@ -6692,7 +6705,24 @@ function updateWaterAttackState(e,now,dt){
    }
  }
  if(now>=Number(p.endAt)){
-   if(p.kind==='normal'&&e.type==='poseidon')e.poseidonNormalCount=Math.min(4,(Number(e.poseidonNormalCount)||0)+1);
+   if(e.type==='poseidon'){
+     if(p.kind==='normal'){
+       e.poseidonNormalCount=Math.min(POSEIDON_MELEE_ATTACKS_PER_CYCLE,(Number(e.poseidonNormalCount)||0)+1);
+       if(e.poseidonPhase==='melee'&&e.poseidonNormalCount>=POSEIDON_MELEE_ATTACKS_PER_CYCLE)e.poseidonPhase='summon';
+     }else if(p.kind==='wave'){
+       e.poseidonWaveCount=(Number(e.poseidonWaveCount)||0)+1;
+       if(e.poseidonWaveCount>=(Number(e.poseidonWaveGoal)||2)){
+         e.poseidonPhase='melee';e.poseidonNormalCount=0;e.poseidonRetreatStartedAt=0;
+       }else{
+         e.poseidonPhase='wave';e.poseidonRetreatStartedAt=now;
+       }
+     }else if(p.kind==='summon'){
+       e.poseidonSpecialIndex=(Number(e.poseidonSpecialIndex)||0)+1;
+       e.poseidonWaveGoal=e.poseidonSpecialIndex%2===0?2:1;
+       e.poseidonWaveCount=0;e.poseidonNormalCount=0;
+       e.poseidonPhase='retreat';e.poseidonRetreatStartedAt=now;
+     }
+   }
    e.pendingWaterAttack=null;e.waterAttackKind=null;e.target=null;
  }
 }
@@ -6700,16 +6730,51 @@ function aiFightPoseidon(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive||e.pendingWaterAttack){e.moving=false;return}
  const target=nearestEngageableCandidate(e,preparedCandidates||state.entities,forcedTeam,false);
  if(!target){e.moving=false;e.target=null;return}
- const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
+ const now=performance.now(),dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
  e.target=target;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>4)e.facing=dx<0?-1:1;
- if((Number(e.poseidonNormalCount)||0)>=4){
-   let kind=(Number(e.poseidonSpecialIndex)||0)%2===0?'wave':'summon';
-   if(kind==='summon'&&countLivingWaterSummons(e)>=3)kind='wave';
-   if(d<=365&&startWaterAttack(e,kind,target))return;
+ const phase=e.poseidonPhase||'wave';
+ if(phase==='retreat'||phase==='wave'){
+   // Abre distância para usar a onda; evita ficar preso na borda da arena.
+   if(d<POSEIDON_WAVE_SPACING){
+     if(!e.poseidonRetreatStartedAt)e.poseidonRetreatStartedAt=now;
+     if(now-e.poseidonRetreatStartedAt<POSEIDON_RETREAT_TIMEOUT_MS){
+       const oldX=e.x,oldY=e.y;
+       e.x=clamp(e.x-dx/d*e.speed*dt,42,state.world.w-42);
+       e.y=clamp(e.y-dy/d*e.speed*dt,42,state.world.h-42);
+       e.moving=Math.hypot(e.x-oldX,e.y-oldY)>.01;
+       if(e.moving)return;
+     }
+   }
+   if(d>POSEIDON_WAVE_CAST_RANGE){
+     e.x=clamp(e.x+dx/d*e.speed*dt,42,state.world.w-42);
+     e.y=clamp(e.y+dy/d*e.speed*dt,42,state.world.h-42);
+     e.moving=true;return;
+   }
+   e.poseidonPhase='wave';
+   if(startWaterAttack(e,'wave',target))return;
+   e.moving=false;return;
  }
- if(d<=100){if(startWaterAttack(e,'normal',target))return;e.moving=false}
- else{e.x+=dx/d*e.speed*dt;e.y+=dy/d*e.speed*dt;e.moving=true}
- e.x=clamp(e.x,42,state.world.w-42);e.y=clamp(e.y,42,state.world.h-42);
+ if(phase==='melee'){
+   if((Number(e.poseidonNormalCount)||0)>=POSEIDON_MELEE_ATTACKS_PER_CYCLE){
+     e.poseidonPhase='summon';
+   }else{
+     if(d<=POSEIDON_NORMAL_RANGE-8){
+       if(startWaterAttack(e,'normal',target))return;
+       e.moving=false;return;
+     }
+     e.x=clamp(e.x+dx/d*e.speed*dt,42,state.world.w-42);
+     e.y=clamp(e.y+dy/d*e.speed*dt,42,state.world.h-42);
+     e.moving=true;return;
+   }
+ }
+ // Após cinco golpes completos, invoca quatro cavalos-marinhos e reinicia o ciclo.
+ if(d>POSEIDON_WAVE_CAST_RANGE){
+   e.x=clamp(e.x+dx/d*e.speed*dt,42,state.world.w-42);
+   e.y=clamp(e.y+dy/d*e.speed*dt,42,state.world.h-42);
+   e.moving=true;return;
+ }
+ if(startWaterAttack(e,'summon',target))return;
+ e.moving=false;
 }
 function aiFightSeahorse(e,dt,forcedTeam,preparedCandidates=null){
  if(!e.alive||e.pendingWaterAttack){e.moving=false;return}
