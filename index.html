@@ -9335,7 +9335,7 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
 }
 
 function syncWaterWaveEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
- const layer=entityCameraLayer,active=waterWaveActiveIds;active.clear(),now=renderFrameNow||performance.now();
+ const layer=entityCameraLayer,active=waterWaveActiveIds;active.clear();const now=renderFrameNow||performance.now();
  for(const poseidon of renderWaterEffectEntities){
    const p=poseidon.pendingWaterAttack;
    if(!poseidon.alive||p?.kind!=='wave'||now<Number(p.waveStartAt)||now>=Number(p.endAt))continue;

@@ -106,4 +106,21 @@ clock=p.hit2At;ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,20,'Seahorse should deal two 10-damage hits');
 ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,20,'Seahorse attack duplicated');
+// Regression: rendering during the preparation phase must not stop the main RAF loop.
+// This function runs even when there are no Poseidon waves on screen.
+const waveRenderStart=js.indexOf('function syncWaterWaveEffects(');
+const waveRenderEnd=js.indexOf('function syncKingPowerEffects(',waveRenderStart);
+assert(waveRenderStart>0&&waveRenderEnd>waveRenderStart,'Water render block not found');
+let renderClock=1000;
+const renderCtx=vm.createContext({
+ entityCameraLayer:{appendChild(){}},
+ waterWaveActiveIds:new Set(),
+ renderFrameNow:renderClock,performance:{now:()=>renderClock},
+ renderWaterEffectEntities:[],waterWaveNodes:new Map(),
+ releaseGifObjectUrl:()=>{}
+});
+vm.runInContext(js.slice(waveRenderStart,waveRenderEnd),renderCtx);
+assert.doesNotThrow(()=>renderCtx.syncWaterWaveEffects(0,0,1,1000,600));
+renderClock+=16;renderCtx.renderFrameNow=renderClock;
+assert.doesNotThrow(()=>renderCtx.syncWaterWaveEffects(0,0,1,1000,600));
 console.log('Water clan assets, JS syntax and functional combat smoke: PASS');
