@@ -3,7 +3,7 @@ p=Path('index.html')
 t=p.read_text(encoding='utf-8')
 
 required=[
-    "const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500});",
+    "const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:550});",
     "function spawnIsis(",
     "e.hp=e.maxHp=265;e.shield=e.maxShield=165;e.damage=ISIS_NORMAL_DAMAGE_1",
     "const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);",
