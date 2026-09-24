@@ -60,7 +60,7 @@ jobs:
               ticks=[]
               i=0
               while True:
-                  i=b.find(b'\\x21\\xf9\\x04',i)
+                  i=b.find(bytes((33,249,4)),i)
                   if i<0: break
                   ticks.append(int.from_bytes(b[i+4:i+6],'little'))
                   i+=8
