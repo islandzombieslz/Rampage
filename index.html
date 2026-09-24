@@ -8796,10 +8796,11 @@ function draw(){
  const margin=170;
  const visible=renderVisibleEntities;visible.length=0;
  renderPresentIds.clear();renderPresentMap.clear();
- renderIsisEffectEntities.length=0;renderBrownEffectEntities.length=0;renderKingEffectEntities.length=0;renderMageEffectEntities.length=0;
+ renderWaterEffectEntities.length=0;renderIsisEffectEntities.length=0;renderBrownEffectEntities.length=0;renderKingEffectEntities.length=0;renderMageEffectEntities.length=0;
  for(const e of state.entities){
    renderPresentMap.set(e.id,e);
    if(e.alive||e.deathStarted)renderPresentIds.add(e.id);
+   if(e.type==='poseidon'&&e.pendingWaterAttack?.kind==='wave')renderWaterEffectEntities.push(e);
    if(e.type==='isis'&&e.pendingIsisAttack)renderIsisEffectEntities.push(e);
    if(e.type==='brownWarrior'&&e.pendingBrownAttack)renderBrownEffectEntities.push(e);
    if(e.type==='king'&&e.pendingKingSpecial)renderKingEffectEntities.push(e);
@@ -8823,6 +8824,7 @@ function draw(){
  syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncMagePowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ syncWaterWaveEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
 }
 function drawEntityMarker(e){
@@ -8905,6 +8907,8 @@ const entityUiAlphaCtx=entityUiAlphaCanvas.getContext('2d',{willReadFrequently:t
 
 function entityUiDisplayName(e){
  if(!e)return 'Unidade';
+ if(e.type==='poseidon')return 'Poseidon';
+ if(e.type==='seahorse')return 'Cavalo-marinho';
  if(e.type==='warrior'){
    const female=e.variant==='female';
    if(e.clan==='egypt')return female?'Guerreira do Egito':'Guerreiro do Egito';
@@ -9074,6 +9078,7 @@ document.addEventListener('pointerup',ev=>{
  else if(!hit)setSelectedEntityUi(null);
 },{capture:true,passive:true});
 document.addEventListener('pointercancel',ev=>entityUiPointerPresses.delete(ev.pointerId),{capture:true,passive:true});
+const waterWaveNodes=new Map();
 const magePowerNodes=new Map();
 const brownPowerNodes=new Map();
 const kingPowerNodes=new Map();
@@ -9086,11 +9091,13 @@ const renderVisibleEntities=[];
 const renderVisibleIds=new Set();
 const renderPresentIds=new Set();
 const renderPresentMap=new Map();
+const renderWaterEffectEntities=[];
 const renderIsisEffectEntities=[];
 const renderBrownEffectEntities=[];
 const renderKingEffectEntities=[];
 const renderMageEffectEntities=[];
 let renderFrameNow=0;
+const waterWaveActiveIds=new Set();
 const magePowerActiveIds=new Set();
 const brownPowerActiveIds=new Set();
 const kingPowerActiveIds=new Set();
@@ -9304,6 +9311,38 @@ function syncMagePowerEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTo
  for(const [id,img] of magePowerNodes)if(!active.has(id)){
    releaseGifObjectUrl(img);
    img.remove();magePowerNodes.delete(id)
+ }
+}
+
+function syncWaterWaveEffects(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+ const layer=entityCameraLayer,active=waterWaveActiveIds;active.clear(),now=renderFrameNow||performance.now();
+ for(const poseidon of renderWaterEffectEntities){
+   const p=poseidon.pendingWaterAttack;
+   if(!poseidon.alive||p?.kind!=='wave'||now<Number(p.waveStartAt)||now>=Number(p.endAt))continue;
+   const pos=waterWavePosition(p,now),pad=170*cullZoom;
+   const cx=(pos.x-cullLeft)*cullZoom,cy=(pos.y-cullTop)*cullZoom;
+   if(cx+pad<-40||cx-pad>screenW+40||cy+pad<-40||cy-pad>screenH+40)continue;
+   active.add(poseidon.id);
+   let img=waterWaveNodes.get(poseidon.id);
+   if(!img){
+     img=document.createElement('img');img.className='water-wave-power';img.draggable=false;
+     img.decoding='async';img.dataset.serial='-1';layer.appendChild(img);waterWaveNodes.set(poseidon.id,img);
+   }else if(img.parentElement!==layer)layer.appendChild(img);
+   const serial=String(p.serial||poseidon.waterAttackSerial||0);
+   if(img.dataset.serial!==serial||!img.hasAttribute('src')){
+     img.dataset.serial=serial;restartGif(img,'poseidonWavePower',serial);
+   }
+   const progress=pos.progress;
+   const alpha=Math.min(clamp(progress/.13,0,1),clamp((1-progress)/.20,0,1));
+   img.style.left=((pos.x-left)*zoom)+'px';img.style.top=((pos.y-top)*zoom)+'px';
+   img.style.width=(245*zoom)+'px';img.style.height=(172*zoom)+'px';
+   img.style.opacity=String(alpha);img.style.visibility=alpha>.01?'visible':'hidden';
+   const reverse=Math.cos(pos.angle)<0;
+   img.style.transform=`translate(-50%,-50%) rotate(${reverse?pos.angle+Math.PI:pos.angle}rad) scaleX(${reverse?-1:1})`;
+   img.style.zIndex=String(110+Math.round((pos.y-top)*zoom));
+ }
+ for(const [id,img] of waterWaveNodes)if(!active.has(id)){
+   releaseGifObjectUrl(img);img.remove();waterWaveNodes.delete(id);
  }
 }
 
@@ -10213,6 +10252,7 @@ function clearEntityVisuals(){
    clearEntityLoopSuspendTimers(el);
    el.querySelectorAll('img').forEach(releaseGifObjectUrl);
  }
+ for(const img of waterWaveNodes.values())releaseGifObjectUrl(img);
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
  for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
@@ -10230,6 +10270,7 @@ function clearEntityVisuals(){
  if(golemRockLayer)golemRockLayer.innerHTML='';
  resetCameraComposite();
  state.golemRockEffects=[];
+ waterWaveNodes.clear();
  magePowerNodes.clear();
  brownPowerNodes.clear();
  kingPowerNodes.clear();isisPowerNodes.clear();
