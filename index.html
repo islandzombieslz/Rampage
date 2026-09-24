@@ -9449,7 +9449,28 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el.className='entity-visual';
  el.style.left='0px';el.style.top='0px';
 
- if(e.type==='brownWarrior'){
+ if(e.type==='poseidon'){
+   el.classList.add('poseidon-visual');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="poseidonIdle" src="${ASSETS.poseidonIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="poseidonWalk" draggable="false" style="opacity:0">
+       <img class="entity-body entity-poseidon-normal" data-asset-key="poseidonNormal" draggable="false" style="opacity:0">
+       <img class="entity-body entity-poseidon-wave-cast" data-asset-key="poseidonWaveCast" draggable="false" style="opacity:0">
+       <img class="entity-body entity-poseidon-summon-cast" data-asset-key="poseidonSummonCast" draggable="false" style="opacity:0">
+     </div><div class="entity-weapon-facing"></div>
+     <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
+ }else if(e.type==='seahorse'){
+   el.classList.add('seahorse-visual');
+   if(e.waterSummoned)el.classList.add('water-summoned-spawn');
+   el.innerHTML=`
+     <div class="entity-facing">
+       <img class="entity-body entity-idle active-sprite" data-asset-key="seahorseIdle" src="${ASSETS.seahorseIdle}" draggable="false" style="opacity:1">
+       <img class="entity-body entity-walk" data-asset-key="seahorseWalk" draggable="false" style="opacity:0">
+       <img class="entity-body entity-seahorse-attack" data-asset-key="seahorseAttack" draggable="false" style="opacity:0">
+     </div><div class="entity-weapon-facing"></div>
+     <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
+ }else if(e.type==='brownWarrior'){
    el.classList.add('brown-warrior-visual');
    el.innerHTML=`
      <div class="entity-facing">
@@ -9596,6 +9617,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._walk=el.querySelector('.entity-walk');
  el._sword=el.querySelector('.entity-sword');
  el._slash=el.querySelector('.entity-slash');
+ el._poseidonNormal=el.querySelector('.entity-poseidon-normal');
+ el._poseidonWaveCast=el.querySelector('.entity-poseidon-wave-cast');
+ el._poseidonSummonCast=el.querySelector('.entity-poseidon-summon-cast');
+ el._seahorseAttack=el.querySelector('.entity-seahorse-attack');
  el._brownAttack=el.querySelector('.entity-brown-attack');
  el._brownSpecial=el.querySelector('.entity-brown-special');
  el._golemAttack=el.querySelector('.entity-golem-attack');
@@ -9629,13 +9654,16 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el.dataset.anubisAttackSerial='-1';
  el.dataset.isisAttackSerial='-1';
  el.dataset.brownAttackSerial='-1';
+ el.dataset.waterAttackSerial='-1';
  el.dataset.mageAttackSerial='-1';
  el.dataset.kingSpecialSerial='-1';
  el.dataset.dragonTakeoffSerial='-1';
  el.dataset.dragonAttackSerial='-1';
  // Chaves dos GIFs visíveis por estado. Quando o estado muda, reiniciamos o
  // GIF que está entrando para ele aparecer desde o quadro 0.
- if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
+ if(e.type==='poseidon')el._gifKeys={idle:'poseidonIdle',walk:'poseidonWalk',attack:'poseidonNormal',waveCast:'poseidonWaveCast',summonCast:'poseidonSummonCast'};
+ else if(e.type==='seahorse')el._gifKeys={idle:'seahorseIdle',walk:'seahorseWalk',attack:'seahorseAttack'};
+ else if(e.type==='brownWarrior')el._gifKeys={idle:'brownIdle',walk:'brownWalk',attack:'brownAttack',special:'brownSpecial'};
  else if(e.type==='golem')el._gifKeys={idle:'golemIdle',walk:'golemWalk',attack:'golemAttack',special:'golemSpecial'};
  else if(e.type==='naja')el._gifKeys={idle:'najaIdle',walk:'najaWalk',attack:'najaAttack',special:'najaSpecial',emerge:'najaSpecialFinal'};
  else if(e.type==='anubis')el._gifKeys={idle:'anubisIdle',walk:'anubisWalk',attack:'anubisMeleeAttack',anubisRanged:'anubisRangedAttack'};
@@ -9654,7 +9682,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._poseidonNormal,el._poseidonWaveCast,el._poseidonSummonCast,el._seahorseAttack,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -9697,7 +9725,9 @@ function entitySpriteForState(el,stateName){
  if(stateName==='walk')return el._walk;
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
- if(stateName==='attack')return el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(stateName==='attack')return el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(stateName==='waveCast')return el._poseidonWaveCast;
+ if(stateName==='summonCast')return el._poseidonSummonCast;
  if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._najaSpecial||el._isisSpecial||el._mageSpecial||el._kingSpecial;
  if(stateName==='emerge')return el._najaSpecialFinal;
  if(stateName==='takeoff')return el._dragonTakeoff;
@@ -9777,7 +9807,8 @@ function setEntitySpriteState(el,desired){
  }
  ensureEntityLoopGif(el,desired,desiredImg);
  const sprites=el._spriteEntries||(el._spriteEntries=[
-   [el._idle,'idle'],[el._walk,'walk'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
+   [el._idle,'idle'],[el._walk,'walk'],[el._poseidonNormal,'attack'],[el._seahorseAttack,'attack'],
+    [el._poseidonWaveCast,'waveCast'],[el._poseidonSummonCast,'summonCast'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
    [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
    [el._kingSpecial,'special'],[el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ].filter(entry=>!!entry[0]));
@@ -9807,8 +9838,10 @@ function setEntitySpriteState(el,desired){
    }
 
    if(ENTITY_LOOP_STATES.has(previous)&&previous!==desired)scheduleEntityLoopGifSuspend(el,previous);
-   if(previous==='attack'&&desired!=='attack'){stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack);stopGif(el._anubisMelee);stopGif(el._isisAttack)}
-   if(previous==='anubisRanged'&&desired!=='anubisRanged')stopGif(el._anubisRanged);
+   if(previous==='attack'&&desired!=='attack'){stopGif(el._poseidonNormal);stopGif(el._seahorseAttack);stopGif(el._brownAttack);stopGif(el._golemAttack);stopGif(el._najaAttack);stopGif(el._anubisMelee);stopGif(el._isisAttack)}
+   if(previous==='waveCast'&&desired!=='waveCast')stopGif(el._poseidonWaveCast);
+    if(previous==='summonCast'&&desired!=='summonCast')stopGif(el._poseidonSummonCast);
+    if(previous==='anubisRanged'&&desired!=='anubisRanged')stopGif(el._anubisRanged);
    if(previous==='special'&&desired!=='special'){
      stopGif(el._brownSpecial);stopGif(el._golemSpecial);stopGif(el._najaSpecial);stopGif(el._isisSpecial);
      stopGif(el._mageSpecial);stopGif(el._kingSpecial);stopGif(el._kingPower);
@@ -9890,7 +9923,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      if(e.type==='brownWarrior'&&!(e.pendingBrownAttack&&e.pendingBrownAttack.endAt>localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='special')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
-     }else if(e.type==='anubis'&&!(e.pendingAnubisAttack&&e.pendingAnubisAttack.endAt>localNow)&&
+     }else if((e.type==='poseidon'||e.type==='seahorse')&&!(e.pendingWaterAttack&&e.pendingWaterAttack.endAt>localNow)&&
+         (el.dataset.anim==='attack'||el.dataset.anim==='waveCast'||el.dataset.anim==='summonCast')){
+        setEntitySpriteState(el,e.moving?'walk':'idle');
+      }else if(e.type==='anubis'&&!(e.pendingAnubisAttack&&e.pendingAnubisAttack.endAt>localNow)&&
         (el.dataset.anim==='attack'||el.dataset.anim==='anubisRanged')){
        setEntitySpriteState(el,e.moving?'walk':'idle');
      }else if(e.type==='golem'&&!activeGolemPending(e,localNow)&&
@@ -9959,10 +9995,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    // No Annubis o X acompanha a direcao: o artwork tem margem assimetrica e,
    // ao espelhar, a compensacao tambem precisa espelhar.
    const anubisFace=(e.facing||1)>=0?1:-1;
-   const renderX=e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
-   const renderY=e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
+   const renderX=e.type==='poseidon'?sx+14*zoom:e.type==='naja'?sx+14*zoom:e.type==='anubis'?sx+(16*anubisFace)*zoom:sx;
+   const renderY=e.type==='poseidon'?sy+16*zoom:e.type==='naja'?sy+16*zoom:e.type==='anubis'?sy+18*zoom:sy;
    const visualTop=renderY-flightLift*zoom;
-   const typeScale=e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.00:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.88:1;
+   const typeScale=e.type==='poseidon'?1.75:e.type==='seahorse'?1.16:e.type==='golem'?1.34:e.type==='anubis'?1.34:e.type==='isis'?1.00:e.type==='naja'?1.75:e.type==='brownWarrior'?1.16:e.type==='mage'?0.96:e.type==='dragon'?1.16:e.type==='king'?0.88:1;
    const visualScale=zoom*typeScale;
    if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
      el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
@@ -10038,7 +10074,20 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }
    }
 
-   if(e.type==='isis'){
+   if(e.type==='poseidon'||e.type==='seahorse'){
+      const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
+      const kind=active?p.kind:null;
+      const desired=active?(kind==='wave'?(localNow<Number(p.bodyEndAt)?'waveCast':'idle'):kind==='summon'?'summonCast':'attack'):(visualMoving?'walk':'idle');
+      setEntitySpriteState(el,desired);
+      const serial=Number(p?.serial||e.waterAttackSerial)||0;
+      if(active&&serial>0&&el.dataset.waterAttackSerial!==String(serial)){
+        el.dataset.waterAttackSerial=String(serial);
+        if(kind==='wave')restartGif(el._poseidonWaveCast,'poseidonWaveCast',serial);
+        else if(kind==='summon')restartGif(el._poseidonSummonCast,'poseidonSummonCast',serial);
+        else if(e.type==='poseidon')restartGif(el._poseidonNormal,'poseidonNormal',serial);
+        else restartGif(el._seahorseAttack,'seahorseAttack',serial);
+      }
+    }else if(e.type==='isis'){
      const p=e.pendingIsisAttack,active=!!p&&Number(p.endAt)>localNow,desired=active?(p.kind==='special'?'special':'attack'):(visualMoving?'walk':'idle');
      setEntitySpriteState(el,desired);const serial=Number(p?.serial||e.isisAttackSerial)||0;
      if(active&&serial>0&&el.dataset.isisAttackSerial!==String(serial)){el.dataset.isisAttackSerial=String(serial);if(p.kind==='special')restartGif(el._isisSpecial,'isisSpecial',serial);else restartGif(el._isisAttack,'isisAttack',serial)}
