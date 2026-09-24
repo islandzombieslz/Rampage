@@ -4692,6 +4692,8 @@ function handleHostCommands(commands){
      if(clan==='egypt'&&cmd.type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-anubis')buyEgyptAnubisForPlayer(p,false);
      if(clan==='egypt'&&cmd.type==='buy-egypt-isis')buyEgyptIsisForPlayer(p,false);
+     if(clan==='water'&&cmd.type==='buy-water-seahorse')buyWaterSeahorseForPlayer(p,false);
+     if(clan==='water'&&cmd.type==='buy-water-poseidon')buyWaterPoseidonForPlayer(p,false);
    }
    NetworkAdapter.removeCommand(uid,id).catch(console.error);
  }
@@ -7327,7 +7329,7 @@ function addWarDamageProgress(teamId,amount){
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
  const clan=normalizeClan(p.clan);
- const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage','buy-egypt-naja','buy-egypt-anubis','buy-egypt-isis']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
+ const allowed=clan==='egypt'?new Set(['buy-egypt-warrior','buy-egypt-mage','buy-egypt-naja','buy-egypt-anubis','buy-egypt-isis']):clan==='water'?new Set(['buy-water-seahorse','buy-water-poseidon']):new Set(['buy-warrior','buy-brown-warrior','buy-king','buy-golem','buy-mage','buy-dragon']);
  if(!allowed.has(type))return;
  if(NetworkAdapter.online&&!NetworkAdapter.isHost)NetworkAdapter.sendCommand(type).catch(console.error);
  else {
@@ -7342,6 +7344,8 @@ function requestWarPurchase(type){
    if(type==='buy-egypt-naja')buyEgyptNajaForPlayer(p,false);
    if(type==='buy-egypt-anubis')buyEgyptAnubisForPlayer(p,false);
    if(type==='buy-egypt-isis')buyEgyptIsisForPlayer(p,false);
+   if(type==='buy-water-seahorse')buyWaterSeahorseForPlayer(p,false);
+   if(type==='buy-water-poseidon')buyWaterPoseidonForPlayer(p,false);
  }
 }
 $('#buyWarrior').onclick=()=>requestWarPurchase('buy-warrior');
@@ -7355,6 +7359,8 @@ $('#buyEgyptMage').onclick=()=>requestWarPurchase('buy-egypt-mage');
 $('#buyEgyptNaja').onclick=()=>requestWarPurchase('buy-egypt-naja');
 $('#buyEgyptAnubis').onclick=()=>requestWarPurchase('buy-egypt-anubis');
 $('#buyEgyptIsis').onclick=()=>requestWarPurchase('buy-egypt-isis');
+$('#buyWaterSeahorse').onclick=()=>requestWarPurchase('buy-water-seahorse');
+$('#buyWaterPoseidon').onclick=()=>requestWarPurchase('buy-water-poseidon');
 function buyForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.warrior;if(p.gems<cost)return false;
@@ -7434,6 +7440,20 @@ function buyEgyptIsisForPlayer(p,bot){
  const t=p.territory,angle=Math.random()*Math.PI*2,r=Math.random()*82;
  spawnIsis(t.x+Math.cos(angle)*r,t.y+Math.sin(angle)*r,p.id,p.color);return true;
 }
+function buyWaterSeahorseForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='water'||p.gems<WAR_UNIT_COSTS.seahorse)return false;
+ p.gems-=WAR_UNIT_COSTS.seahorse;p.troops++;
+ const t=p.territory,a=Math.random()*Math.PI*2,r=Math.random()*95;
+ spawnSeahorse(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,p.id,p.color);
+ return true;
+}
+function buyWaterPoseidonForPlayer(p,bot){
+ if(normalizeClan(p.clan)!=='water'||p.gems<WAR_UNIT_COSTS.poseidon)return false;
+ p.gems-=WAR_UNIT_COSTS.poseidon;p.troops++;
+ const t=p.territory,a=Math.random()*Math.PI*2,r=Math.random()*84;
+ spawnPoseidon(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,p.id,p.color);
+ return true;
+}
 function buyDragonForPlayer(p,bot){
  if(normalizeClan(p.clan)!=='warriors')return false;
  const cost=WAR_UNIT_COSTS.dragon;if(p.gems<cost)return false;p.gems-=cost;p.troops++;
@@ -7444,7 +7464,7 @@ function buyDragonForPlayer(p,bot){
 
 
 function warCompositionForTeam(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0,isis:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0,isis:0,seahorse:0,poseidon:0};
  for(const e of state.entities){
    if(!e.alive||e.team!==teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -7460,6 +7480,12 @@ function enemyWarComposition(teamId){
  return out;
 }
 function affordableBotWarTypes(p){
+ if(normalizeClan(p.clan)==='water'){
+   const water=[];
+   if(p.gems>=WAR_UNIT_COSTS.seahorse)water.push('seahorse');
+   if(p.gems>=WAR_UNIT_COSTS.poseidon)water.push('poseidon');
+   return water;
+ }
  const types=[];
  if(normalizeClan(p.clan)==='egypt'){
    if(p.gems>=WAR_UNIT_COSTS.warrior)types.push('warrior');
@@ -7481,7 +7507,7 @@ function chooseBotWarPurchase(p){
  const affordable=affordableBotWarTypes(p);
  if(!affordable.length)return null;
  const enemy=enemyWarComposition(p.id),own=warCompositionForTeam(p.id);
- const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon+enemy.naja+enemy.anubis+enemy.isis;
+ const enemyTotal=enemy.warrior+enemy.brownWarrior+enemy.king+enemy.mage+enemy.golem+enemy.dragon+enemy.naja+enemy.anubis+enemy.isis+enemy.seahorse+enemy.poseidon;
  const opening=(Number(p.botWarPurchases)||0)<2;
 
  // Abertura ainda tem personalidade/variação e evita todos os NPCs montarem
@@ -7490,7 +7516,7 @@ function chooseBotWarPurchase(p){
    return affordable[Math.floor(Math.random()*affordable.length)];
  }
 
- const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1,naja:1,anubis:1,isis:1};
+ const score={warrior:1,brownWarrior:1,king:1,mage:1,golem:1,dragon:1,naja:1,anubis:1,isis:1,seahorse:1,poseidon:1};
  // Contra Mago, Guerreiro consegue pressionar; contra muitos Guerreiros, Golem
  // e Mago ganham valor; Golem/Dragão inimigos aumentam bastante o valor de ranged.
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
@@ -7502,6 +7528,8 @@ function chooseBotWarPurchase(p){
  score.naja+=(enemy.warrior+enemy.brownWarrior+enemy.king)*1.30+enemy.mage*.55+enemy.golem*.35+enemy.naja*.45;
  score.anubis+=enemy.dragon*1.75+enemy.golem*1.15+enemy.mage*.70+(enemy.warrior+enemy.brownWarrior+enemy.king)*.65+enemy.anubis*.45;
  score.isis+=(own.warrior+own.mage+own.naja+own.anubis)*.38+enemy.brownWarrior*.45+enemy.golem*.45+enemy.mage*.25+enemy.isis*.20;
+  score.seahorse+=enemy.mage*.65+enemy.seahorse*.2;
+  score.poseidon+=(enemy.warrior+enemy.seahorse+enemy.brownWarrior)*.6+enemy.golem*.45;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
  if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10;score.naja*=.25}
@@ -7518,6 +7546,7 @@ function chooseBotWarPurchase(p){
  return bestType;
 }
 function buyBotWarType(p,type){
+ if(normalizeClan(p.clan)==='water')return type==='poseidon'?buyWaterPoseidonForPlayer(p,true):buyWaterSeahorseForPlayer(p,true);
  if(normalizeClan(p.clan)==='egypt'){
    if(type==='mage')return buyEgyptMageForPlayer(p,true);
    if(type==='naja')return buyEgyptNajaForPlayer(p,true);
@@ -7539,7 +7568,7 @@ function updateWarBotPurchases(now,force=false){
      const type=chooseBotWarPurchase(p);
      if(!type)break;
      let bought=buyBotWarType(p,type);
-     if(!bought&&p.gems>=WAR_UNIT_COSTS.warrior)bought=normalizeClan(p.clan)==='egypt'?buyEgyptWarriorForPlayer(p,true):buyForPlayer(p,true);
+     if(!bought&&p.gems>=WAR_UNIT_COSTS.warrior)bought=normalizeClan(p.clan)==='egypt'?buyEgyptWarriorForPlayer(p,true):normalizeClan(p.clan)==='water'?buyWaterSeahorseForPlayer(p,true):buyForPlayer(p,true);
      if(!bought)break;
      p.botWarPurchases=(Number(p.botWarPurchases)||0)+1;
      p.botNextPurchaseAt=now+(state.prepLeft<3?rand(220,420):rand(650,1250));
@@ -8286,6 +8315,7 @@ let last=performance.now(), messageUntil=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
+const buyWaterSeahorsePerfEl=$('#buyWaterSeahorse'),buyWaterPoseidonPerfEl=$('#buyWaterPoseidon');
 const buyWarriorPerfEl=$('#buyWarrior'),buyBrownWarriorPerfEl=$('#buyBrownWarrior'),buyKingPerfEl=$('#buyKing'),buyGolemPerfEl=$('#buyGolem'),buyMagePerfEl=$('#buyMage'),buyDragonPerfEl=$('#buyDragon'),buyEgyptWarriorPerfEl=$('#buyEgyptWarrior'),buyEgyptMagePerfEl=$('#buyEgyptMage'),buyEgyptNajaPerfEl=$('#buyEgyptNaja'),buyEgyptAnubisPerfEl=$('#buyEgyptAnubis'),buyEgyptIsisPerfEl=$('#buyEgyptIsis');
 function perfSetText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function perfSetDisabled(el,value){value=!!value;if(el&&el.disabled!==value)el.disabled=value}
@@ -10037,6 +10067,8 @@ function updateHUD(){
     perfSetDisabled(buyEgyptNajaPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.naja);
     perfSetDisabled(buyEgyptAnubisPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.anubis);
     perfSetDisabled(buyEgyptIsisPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.isis);
+     perfSetDisabled(buyWaterSeahorsePerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.seahorse);
+     perfSetDisabled(buyWaterPoseidonPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.poseidon);
   }
 }
 function finishGame(msg){
