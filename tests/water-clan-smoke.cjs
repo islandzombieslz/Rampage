@@ -59,14 +59,19 @@ assert(html.includes('poseidon:750'),'Poseidon price');
 let poseidon={id:1,type:'poseidon',team:'water',color:'#0af',x:100,y:100,damage:75,
  alive:true,attackCooldown:0,knockTime:0,poseidonNormalCount:0,poseidonSpecialIndex:0};
 let enemy={id:2,type:'warrior',team:'enemy',x:155,y:100,r:30,alive:true,hp:1000,shield:0};
-state.entities.push(poseidon,enemy);
-ctx.warEntityById.set(1,poseidon);ctx.warEntityById.set(2,enemy);
+const splash={id:3,type:'warrior',team:'enemy',x:175,y:100,r:30,alive:true,hp:1000,shield:0};
+const ally={id:4,type:'warrior',team:'water',x:170,y:100,r:30,alive:true,hp:1000,shield:0};
+state.entities.push(poseidon,enemy,splash,ally);
+ctx.warEntityById.set(1,poseidon);ctx.warEntityById.set(2,enemy);ctx.warEntityById.set(3,splash);
 assert(ctx.startWaterAttack(poseidon,'normal',enemy));
 let p=poseidon.pendingWaterAttack;
 clock=p.impactAt;ctx.updateWaterAttackState(poseidon,clock,.016);
 assert.equal(enemy.hp,925,'Poseidon normal should deal 75 once');
+assert.equal(splash.hp,925,'normal hit should affect the surrounding area');
+assert.equal(ally.hp,1000,'normal area must not damage allies');
 ctx.updateWaterAttackState(poseidon,clock,.016);
 assert.equal(enemy.hp,925,'normal impact duplicated');
+assert.equal(splash.hp,925,'normal splash duplicated');
 clock=p.endAt+1;ctx.updateWaterAttackState(poseidon,clock,.016);
 assert.equal(poseidon.poseidonNormalCount,1);
 poseidon.attackCooldown=0;
@@ -109,6 +114,54 @@ clock=p.hit2At;ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,20,'Seahorse should deal two 10-damage hits');
 ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,20,'Seahorse attack duplicated');
+// Full AI cycle: two ranged casts, five melee attacks, four summons, retreat,
+// then a single ranged cast before the next five melee attacks.
+const boss={id:20,type:'poseidon',team:'water',color:'#0af',x:400,y:400,damage:75,speed:112,
+ alive:true,attackCooldown:0,knockTime:0,poseidonPhase:'wave',poseidonWaveCount:0,poseidonWaveGoal:2,
+ poseidonNormalCount:0,poseidonSpecialIndex:0,poseidonRetreatStartedAt:0};
+const foe={id:21,type:'warrior',team:'enemy',x:700,y:400,r:30,alive:true,hp:2000,shield:0};
+state.entities.push(boss,foe);
+ctx.warEntityById.set(20,boss);ctx.warEntityById.set(21,foe);
+ctx.nearestEngageableCandidate=()=>foe;
+function finishBossCast(){
+ const cast=boss.pendingWaterAttack;assert(cast,'expected active attack');
+ clock=cast.endAt+1;ctx.updateWaterAttackState(boss,clock,.016);
+ boss.attackCooldown=0;clock+=10;
+}
+ctx.aiFightPoseidon(boss,.016);
+assert.equal(boss.pendingWaterAttack?.kind,'wave','first attack should be ranged');
+finishBossCast();
+assert.equal(boss.poseidonPhase,'wave');
+assert.equal(boss.poseidonWaveCount,1);
+ctx.aiFightPoseidon(boss,.016);
+assert.equal(boss.pendingWaterAttack?.kind,'wave','second attack should also be ranged');
+finishBossCast();
+assert.equal(boss.poseidonPhase,'melee');
+foe.x=boss.x+100;foe.y=boss.y;
+for(let n=1;n<=5;n++){
+ ctx.aiFightPoseidon(boss,.016);
+ assert.equal(boss.pendingWaterAttack?.kind,'normal','normal hit '+n);
+ finishBossCast();
+ assert.equal(boss.poseidonNormalCount,n);
+ assert.equal(boss.poseidonPhase,n===5?'summon':'melee');
+}
+ctx.aiFightPoseidon(boss,.016);
+assert.equal(boss.pendingWaterAttack?.kind,'summon','special summon follows five melee hits');
+p=boss.pendingWaterAttack;clock=p.summonAt;ctx.updateWaterAttackState(boss,clock,.016);
+assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===boss.id).length,4);
+finishBossCast();
+assert.equal(boss.poseidonPhase,'retreat');
+assert.equal(boss.poseidonWaveGoal,1,'alternate two waves and one wave between cycles');
+const beforeRetreat=boss.x;
+ctx.aiFightPoseidon(boss,.1);
+assert(boss.x<beforeRetreat,'Poseidon should move away before ranged attack');
+assert.equal(boss.pendingWaterAttack,null,'retreat must precede the next wave');
+clock+=1801;
+ctx.aiFightPoseidon(boss,.016);
+assert.equal(boss.pendingWaterAttack?.kind,'wave','the next cycle starts with a ranged attack');
+finishBossCast();
+assert.equal(boss.poseidonPhase,'melee','one-wave cycle transitions to melee');
+assert.equal(boss.poseidonNormalCount,0,'normal hit count resets after ranged phase');
 // Regression: rendering during the preparation phase must not stop the main RAF loop.
 // This function runs even when there are no Poseidon waves on screen.
 const waveRenderStart=js.indexOf('function syncWaterWaveEffects(');
