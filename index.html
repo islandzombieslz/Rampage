@@ -1314,6 +1314,17 @@ html,body{
 .entity-isis-attack,.entity-isis-special{opacity:0}
 .isis-special-power{position:absolute;display:block;object-fit:contain;pointer-events:none;transform-origin:center;will-change:auto;opacity:0;visibility:hidden;transition:none}
 
+/* ===== CLÃ DA ÁGUA ===== */
+.entity-visual.poseidon-visual{width:110px;height:130px}
+.entity-visual.poseidon-visual .entity-facing{width:110px;height:122px}
+.entity-visual.poseidon-visual .entity-body{left:-8px;top:-8px;width:126px;height:132px;object-fit:contain}
+.entity-visual.poseidon-visual .entity-weapon-facing{display:none !important}
+.entity-visual.seahorse-visual{width:96px;height:116px}
+.entity-visual.seahorse-visual .entity-facing{width:96px;height:108px}
+.entity-visual.seahorse-visual .entity-body{left:0;top:0;width:110px;height:110px;object-fit:contain}
+.entity-visual.seahorse-visual .entity-weapon-facing{display:none !important}
+.entity-visual.seahorse-visual.water-summoned-spawn{animation:egyptSummonFade .58s ease-out both}
+.water-wave-power{position:absolute;object-fit:contain;pointer-events:none;transform-origin:center;will-change:auto;opacity:0;visibility:hidden}
 /* ===== GUERREIRA MARROM ===== */
 .entity-visual.brown-warrior-visual{width:96px;height:116px}
 .entity-visual.brown-warrior-visual .entity-facing{width:96px;height:108px}
@@ -2292,7 +2303,7 @@ body.booting #landscapeRoot{visibility:hidden}
   top:40.5% !important;
   bottom:23.5% !important;
   display:grid !important;
-  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
   gap:9px !important;
   align-items:stretch !important;
   min-width:0 !important;
@@ -2332,6 +2343,14 @@ body.booting #landscapeRoot{visibility:hidden}
 #clanScreen .clan-option[data-clan="egypt"].selected{
   border-color:rgba(227,179,65,.82) !important;
   box-shadow:inset 0 0 16px rgba(227,179,65,.14) !important;
+}
+#clanScreen .clan-option[data-clan="water"].selected{
+  border-color:rgba(70,175,240,.86) !important;
+  box-shadow:inset 0 0 16px rgba(70,175,240,.16) !important;
+}
+#shop .clan-shop[data-clan-shop="water"]:not([hidden]){
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  grid-template-rows:repeat(1,minmax(0,1fr)) !important;
 }
 #clanScreen #clanSelectionStatus{
   position:absolute !important;
@@ -2896,6 +2915,10 @@ window.dispatchEvent(new Event('firebase-ready'));
           <div class="small">Guerreiro/Guerreira do Egito • Mago/Maga do Egito • Naja do Egito • Annubis</div>
         </div>
       </button>
+      <button class="clan-option" data-clan="water" type="button" aria-label="Escolher clã Água">
+        <img src="assets/water/poseidon/card.png" alt="Clã da Água" loading="lazy" decoding="async">
+        <div><h3>Água</h3><div class="small">Poseidon • Cavalo-marinho</div></div>
+      </button>
     </div>
     <div id="clanSelectionStatus">Selecionado: Guerreiros</div>
     <div class="divider"></div>
@@ -2965,6 +2988,14 @@ window.dispatchEvent(new Event('firebase-ready'));
         </button>
         <button id="buyEgyptIsis" class="shop-sprite-card" aria-label="Comprar Isis do Egito por 500 gemas" title="Isis do Egito — 500 gemas">
           <img src="assets/egypt/isis/card.png" alt="Isis do Egito" draggable="false" decoding="async">
+        </button>
+      </div>
+      <div class="shop-sprite-grid clan-shop" data-clan-shop="water" hidden>
+        <button id="buyWaterSeahorse" class="shop-sprite-card" aria-label="Comprar Cavalo-marinho por 100 gemas" title="Cavalo-marinho — 100 gemas">
+          <img src="assets/water/seahorse/card.png" alt="Cavalo-marinho" draggable="false" decoding="async">
+        </button>
+        <button id="buyWaterPoseidon" class="shop-sprite-card" aria-label="Comprar Poseidon por 550 gemas" title="Poseidon — 550 gemas">
+          <img src="assets/water/poseidon/card.png" alt="Poseidon" draggable="false" decoding="async">
         </button>
       </div>
     </div>
@@ -3294,6 +3325,17 @@ const ASSETS = {
   isisSpecial:'assets/egypt/isis/special.gif',
   isisPower:'assets/egypt/isis/power-special.gif',
 
+  // Clã da Água — sprites locais do GitHub.
+  poseidonIdle:'assets/water/poseidon/idle.gif',
+  poseidonWalk:'assets/water/poseidon/walk.gif',
+  poseidonNormal:'assets/water/poseidon/normal.gif',
+  poseidonWaveCast:'assets/water/poseidon/special-wave.gif',
+  poseidonSummonCast:'assets/water/poseidon/special-summon.gif',
+  poseidonWavePower:'assets/water/poseidon/wave.gif',
+  seahorseIdle:'assets/water/seahorse/idle.gif',
+  seahorseWalk:'assets/water/seahorse/walk.gif',
+  seahorseAttack:'assets/water/seahorse/attack.gif',
+
   // Dragão Guerreiro — clã Guerreiros
   dragonGround:'assets/dragon/dragao-guerreiro-parado.gif',
   dragonTakeoff:'assets/dragon/dragao-guerreiro-pulando.gif',
@@ -3439,7 +3481,7 @@ const WAR_BASIC_WARRIOR_SPEED_MULTIPLIER=.92; // guerreiros básicos: leve redu�
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500});
+const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:550});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -4031,8 +4073,8 @@ function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padSt
 function rand(a,b){return a+Math.random()*(b-a)}
 function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
 function localPlayer(){return state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||state.players.find(p=>p.local)||state.players[0]}
-function normalizeClan(value){return value==='egypt'?'egypt':'warriors'}
-function clanLabel(value){return normalizeClan(value)==='egypt'?'Egito':'Guerreiros'}
+function normalizeClan(value){return value==='egypt'?'egypt':value==='water'?'water':'warriors'}
+function clanLabel(value){return normalizeClan(value)==='egypt'?'Egito':normalizeClan(value)==='water'?'Água':'Guerreiros'}
 function serializeWarEntityForNetwork(e,now){
  const out={
    id:e.id,type:e.type,x:e.x,y:e.y,team:e.team,color:e.color||'#ffffff',
@@ -5066,7 +5108,7 @@ $('#lobbyContinue').onclick=async()=>{
 
 let clanDraft=null;
 let clanConfirmInFlight=false;
-function oppositeClan(clan){return normalizeClan(clan)==='egypt'?'warriors':'egypt'}
+function oppositeClan(clan){return normalizeClan(clan)==='egypt'?'warriors':normalizeClan(clan)==='water'?'warriors':'egypt'}
 function resetClanDraft(){
  const me=localPlayer();
  clanDraft=normalizeClan(me?.clan||'warriors');
@@ -5090,7 +5132,7 @@ function prepareWarClanAssignments(){
  if(state.players.length===2&&humans.length===1&&bots.length===1){
    bots[0].clan=oppositeClan(humans[0].clan);bots[0].clanChosen=true;bots[0].clanConfirmed=true;
  }else if(state.players.length>=3){
-   for(const p of bots){p.clan=Math.random()<.5?'warriors':'egypt';p.clanChosen=true;p.clanConfirmed=true}
+   for(const p of bots){p.clan=['warriors','egypt','water'][Math.floor(Math.random()*3)];p.clanChosen=true;p.clanConfirmed=true}
  }
 }
 function renderClanSelection(){
