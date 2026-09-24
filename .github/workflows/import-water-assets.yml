@@ -39,7 +39,8 @@ jobs:
           else:
               raise AssertionError(f'Unexpected extension: {p}')
           assert len(b)>1000,(p,len(b))
-          print(p,len(b))          PY
+          print(p,len(b))
+          PY
           }
           fetch_image 'https://i.postimg.cc/Y9Z4vtvs/card-poseidon.png' 'assets/water/poseidon/card.png'
           fetch_image 'https://i.postimg.cc/sDFQyDdW/Parado.gif' 'assets/water/poseidon/idle.gif'
