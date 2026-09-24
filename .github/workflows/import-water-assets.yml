@@ -53,6 +53,19 @@ jobs:
           fetch_image 'https://i.postimg.cc/CLjZKTSk/cavalo-andando.gif' 'assets/water/seahorse/walk.gif'
           fetch_image 'https://i.postimg.cc/3Jgyw5Yp/cavalo-parado.gif' 'assets/water/seahorse/idle.gif'
           fetch_image 'https://i.postimg.cc/5NwHtdbw/cavalo-ataque.gif' 'assets/water/seahorse/attack.gif'
+          python - <<'PY'
+          from pathlib import Path
+          for p in sorted(Path('assets/water').rglob('*.gif')):
+              b=p.read_bytes()
+              ticks=[]
+              i=0
+              while True:
+                  i=b.find(b'\\x21\\xf9\\x04',i)
+                  if i<0: break
+                  ticks.append(int.from_bytes(b[i+4:i+6],'little'))
+                  i+=8
+              print(f'GIF DURATION {p}: {sum(max(2,x) for x in ticks)*10} ms; frames={len(ticks)}; size={len(b)}')
+          PY
           git add assets/water/
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
