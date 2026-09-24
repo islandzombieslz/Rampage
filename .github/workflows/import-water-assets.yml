@@ -27,20 +27,19 @@ jobs:
             curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 180 -A 'Mozilla/5.0' "$url" -o "$dest"
             test -s "$dest"
             FILE="$dest" python - <<'PY'
-import os, pathlib
-p=pathlib.Path(os.environ['FILE'])
-b=p.read_bytes()
-if p.suffix=='.gif':
-    assert b[:6] in (b'GIF87a',b'GIF89a'),f'Invalid GIF: {p}'
-    assert b[-1]==0x3b,f'Incomplete GIF: {p}'
-elif p.suffix=='.png':
-    assert b.startswith(bytes.fromhex('89504e470d0a1a0a')),f'Invalid PNG: {p}'
-    assert b'IEND' in b[-32:],f'Incomplete PNG: {p}'
-else:
-    raise AssertionError(f'Unexpected extension: {p}')
-assert len(b)>1000,(p,len(b))
-print(p,len(b))
-PY
+          import os, pathlib
+          p=pathlib.Path(os.environ['FILE'])
+          b=p.read_bytes()
+          if p.suffix=='.gif':
+              assert b[:6] in (b'GIF87a',b'GIF89a'),f'Invalid GIF: {p}'
+              assert b[-1]==0x3b,f'Incomplete GIF: {p}'
+          elif p.suffix=='.png':
+              assert b.startswith(bytes.fromhex('89504e470d0a1a0a')),f'Invalid PNG: {p}'
+              assert b'IEND' in b[-32:],f'Incomplete PNG: {p}'
+          else:
+              raise AssertionError(f'Unexpected extension: {p}')
+          assert len(b)>1000,(p,len(b))
+          print(p,len(b))          PY
           }
           fetch_image 'https://i.postimg.cc/Y9Z4vtvs/card-poseidon.png' 'assets/water/poseidon/card.png'
           fetch_image 'https://i.postimg.cc/sDFQyDdW/Parado.gif' 'assets/water/poseidon/idle.gif'
