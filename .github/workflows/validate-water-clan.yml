@@ -1,0 +1,19 @@
+name: Validate Water Clan
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'assets/water/**'
+      - 'tests/water-clan-smoke.cjs'
+      - '.github/workflows/validate-water-clan.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test local art and Water combat
+        run: node tests/water-clan-smoke.cjs
