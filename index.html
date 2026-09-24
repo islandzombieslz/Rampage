@@ -4086,7 +4086,8 @@ function serializeWarEntityForNetwork(e,now){
    shakeSerial:Number(e.shakeSerial)||0,shakePower:Number(e.shakePower)||0,
    deathStarted:e.deathStarted?1:0,deathDir:Number(e.deathDir)||1,regenSerial:Number(e.regenSerial)||0,
    isisDamageImmuneRemainingMs:Math.max(0,(Number(e.isisDamageImmuneUntil)||0)-now),
-   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null
+   variant:e.variant||'male',ownerId:e.ownerId??null,clan:normalizeClan(e.clan),egyptSummoned:!!e.egyptSummoned,egyptSummonerId:e.egyptSummonerId??null,
+   waterSummoned:!!e.waterSummoned,waterSummonerId:e.waterSummonerId??null
  };
 
  if(e.type==='golem'){
@@ -4140,6 +4141,27 @@ function serializeWarEntityForNetwork(e,now){
        hit1RemainingMs:p.hit1At?Math.max(0,Number(p.hit1At)-now):0,
        hit2RemainingMs:p.hit2At?Math.max(0,Number(p.hit2At)-now):0,
        hit1Done:!!p.hit1Done,hit2Done:!!p.hit2Done
+     };
+   }
+ }else if(e.type==='poseidon'||e.type==='seahorse'){
+   out.waterAttackKind=e.waterAttackKind??null;
+   out.waterAttackSerial=Number(e.waterAttackSerial)||0;
+   out.poseidonNormalCount=Number(e.poseidonNormalCount)||0;
+   out.poseidonSpecialIndex=Number(e.poseidonSpecialIndex)||0;
+   if(e.pendingWaterAttack){
+     const p=e.pendingWaterAttack;
+     out.pendingWaterAttack={
+       kind:p.kind,serial:Number(p.serial)||out.waterAttackSerial,targetId:p.targetId??null,
+       originX:Number(p.originX)||e.x,originY:Number(p.originY)||e.y,angle:Number(p.angle)||0,
+       duration:Number(p.duration)||SEAHORSE_NORMAL_MS,remainingMs:Math.max(0,Number(p.endAt)-now),
+       bodyRemainingMs:Math.max(0,Number(p.bodyEndAt)-now),
+       impactRemainingMs:Math.max(0,Number(p.impactAt)-now),
+       hit1RemainingMs:Math.max(0,Number(p.hit1At)-now),
+       hit2RemainingMs:Math.max(0,Number(p.hit2At)-now),
+       summonRemainingMs:Math.max(0,Number(p.summonAt)-now),
+       waveStartRemainingMs:Math.max(0,Number(p.waveStartAt)-now),
+       waveDuration:Number(p.waveDuration)||POSEIDON_WAVE_DURATION_MS,
+       hit1Done:!!p.hit1Done,hit2Done:!!p.hit2Done,impacted:!!p.impacted,summoned:!!p.summoned
      };
    }
  }else if(e.type==='anubis'){
@@ -4548,6 +4570,30 @@ function applyRemoteGame(game){
          };
        }
      }
+     if(out.pendingWaterAttack?.remainingMs!=null){
+       const p=out.pendingWaterAttack,serial=Number(p.serial)||Number(out.waterAttackSerial)||0;
+       const remaining=Math.max(0,Number(p.remainingMs)||0),duration=Math.max(1,Number(p.duration)||POSEIDON_NORMAL_MS);
+       const oldPending=old?.pendingWaterAttack;
+       const sameSerial=!!oldPending&&Number(oldPending.serial)===serial&&oldPending.kind===p.kind;
+       if(remaining<=0){out.pendingWaterAttack=null;out.waterAttackKind=null}
+       else{
+         const startedAt=sameSerial?(Number(oldPending.startedAt)||localNow-Math.max(0,duration-remaining)):localNow-Math.max(0,duration-remaining);
+         const endAt=sameSerial?Math.min(Number(oldPending.endAt)||localNow+remaining,localNow+remaining):localNow+remaining;
+         const relative=(key)=>localNow+Math.max(0,Number(p[key])||0);
+         out.pendingWaterAttack={
+           ...p,serial,duration,startedAt,endAt,
+           bodyEndAt:sameSerial?Math.min(Number(oldPending.bodyEndAt)||relative('bodyRemainingMs'),relative('bodyRemainingMs')):relative('bodyRemainingMs'),
+           impactAt:p.impacted?localNow:(sameSerial?Number(oldPending.impactAt):0)||relative('impactRemainingMs'),
+           hit1At:p.hit1Done?localNow:(sameSerial?Number(oldPending.hit1At):0)||relative('hit1RemainingMs'),
+           hit2At:p.hit2Done?localNow:(sameSerial?Number(oldPending.hit2At):0)||relative('hit2RemainingMs'),
+           summonAt:p.summoned?localNow:(sameSerial?Number(oldPending.summonAt):0)||relative('summonRemainingMs'),
+           waveStartAt:(sameSerial?Number(oldPending.waveStartAt):0)||relative('waveStartRemainingMs'),
+           hit1Done:!!(oldPending?.hit1Done||p.hit1Done),hit2Done:!!(oldPending?.hit2Done||p.hit2Done),
+           impacted:!!(oldPending?.impacted||p.impacted),summoned:!!(oldPending?.summoned||p.summoned)
+         };
+       }
+     }
+     if(!out.pendingWaterAttack)out.waterAttackKind=null;
      if(out.pendingAnubisAttack?.remainingMs!=null){
        const p=out.pendingAnubisAttack;
        const serial=Number(p.serial)||Number(out.anubisAttackSerial)||0;
