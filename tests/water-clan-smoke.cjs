@@ -174,6 +174,7 @@ assert(boss.x<beforeRetreat,'Poseidon should move away before ranged attack');
 assert.equal(boss.pendingWaterAttack,null,'retreat must precede the next wave');
 clock+=1801;
 for(let n=1;n<=3;n++){
+ if(n>1){foe.x=boss.x+300;foe.y=boss.y}
  ctx.aiFightPoseidon(boss,.016);
  assert.equal(boss.pendingWaterAttack?.kind,'wave','next cycle ranged '+n);
  finishBossCast();
