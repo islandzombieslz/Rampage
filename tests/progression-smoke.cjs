@@ -76,7 +76,7 @@ assert.equal(goalState.players[0].bonusGems,50+90+65+45);
 assert.equal(goalState.warGoalEvents.length,4);
 assert.equal(goalState.warGoalEvents[0].serial,1);
 assert.equal(goalState.warGoalEvents.at(-1).serial,4);
-assert(html.includes("F.runTransaction(profile,current=>"),'Firebase atomic XP claim');
+assert(html.includes("F.runTransaction(F.ref(F.firebaseDb,'profiles/'+uid),current=>"),'Firebase atomic XP claim');
 assert(html.includes("'profiles/'+uid"),'independent profile location');
 assert(html.includes("ap.settled.add(id)"),'prevent repeat claims in cloud');
 assert(html.includes("id==='gameScreen'"),'XP HUD not displayed during matches');
@@ -141,11 +141,12 @@ async function testCloudOnlyAccountProgress(){
    NetworkAdapter:{localPlayerId:uid,waitFirebase:async()=>F}
  });
  vm.runInContext(section('const accountProgress={','function beginMatchTracking(){'),ctx);
+ const ap=()=>vm.runInContext('accountProgress',ctx);
  const tick=()=>new Promise(resolve=>setImmediate(resolve));
  ctx.watchAccountXP({uid});
  await tick();await tick();
- assert.equal(ctx.accountProgress.status,'error','denied Firebase is shown, not masked as local XP');
- assert.equal(ctx.accountProgress.totalXp,null,'no local XP fallback');
+ assert.equal(ap().status,'error','denied Firebase is shown, not masked as local XP');
+ assert.equal(ap().totalXp,null,'no local XP fallback');
  assert.match(mockNodes['#accountXpSync'].textContent,/regras do Firebase/i);
  assert.equal(mockNodes['#accountXpHud'].hidden,false,'HUD visible on initial menu');
  assert.equal(mockNodes['#accountXpLevel'].textContent,'Nível —');
@@ -153,7 +154,7 @@ async function testCloudOnlyAccountProgress(){
  permitted=true;connected=false;connectionCallback({val:()=>false});
  connected=true;connectionCallback({val:()=>true});
  await tick();await tick();
- assert.equal(ctx.accountProgress.status,'ready','profile read+write verification succeeds');
+ assert.equal(ap().status,'ready','profile read+write verification succeeds');
  assert.equal(profile.totalXp,0);
  assert.equal(mockNodes['#accountXpLevel'].textContent,'Nível 1');
 
@@ -161,7 +162,7 @@ async function testCloudOnlyAccountProgress(){
  ctx.mockResult=first;
  assert.equal(await vm.runInContext('claimMatchXP(mockResult)',ctx),true);
  assert.equal(profile.totalXp,150,'XP committed to profile first');
- assert.equal(ctx.accountProgress.totalXp,150);
+ assert.equal(ap().totalXp,150);
  assert.equal(mockNodes['#accountXpText'].textContent,'150 / 500 XP');
  assert.equal(await vm.runInContext('claimMatchXP(mockResult)',ctx),true);
  assert.equal(profile.totalXp,150,'repeated result cannot award a second time');
@@ -172,13 +173,13 @@ async function testCloudOnlyAccountProgress(){
  ctx.mockResult=failed;
  assert.equal(await vm.runInContext('claimMatchXP(mockResult)',ctx),false);
  assert.equal(profile.totalXp,150,'denied write must never pretend it saved XP');
- assert.equal(ctx.accountProgress.pending.has(failed.id),true,'result held in memory only');
+ assert.equal(ap().pending.has(failed.id),true,'result held in memory only');
  assert.equal(storage.size,0,'no local XP fallback after error');
  permitted=true;connected=false;connectionCallback({val:()=>false});
  connected=true;connectionCallback({val:()=>true});
  await tick();await tick();await tick();
  assert.equal(profile.totalXp,325,'retry saves previously failed match to Firebase');
- assert.equal(ctx.accountProgress.pending.size,0);
+ assert.equal(ap().pending.size,0);
  assert.equal(mockNodes['#accountXpText'].textContent,'325 / 500 XP');
 
  // Old-version pending receipts migrate only after the Firebase profile is reachable.
