@@ -81,6 +81,10 @@ assert(html.includes("'profiles/'+uid"),'independent profile location');
 assert(html.includes("ap.settled.add(id)"),'prevent repeat claims in cloud');
 assert(html.includes("id==='gameScreen'"),'XP HUD not displayed during matches');
 assert(html.includes('id="warGoalToasts"'),'goal toast container');
+assert(!/<section id="gameScreen" class="screen active"/.test(html),'hidden game must not be marked active on boot');
+assert(/<div id="accountXpHud" aria-label="Nível da conta">/.test(html),'XP HUD must start visible');
+assert(html.includes("authStateReady()"),'restore existing account before anonymous sign-in');
+assert(html.includes('firebaseAccountUIStarted=true'),'register authentication listener only once');
 const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
  id,style:{display:'none'},classList:{classes:new Set(),add(value){this.classes.add(value)},remove(value){this.classes.delete(value)},contains(value){return this.classes.has(value)}}
 }));
