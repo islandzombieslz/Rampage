@@ -568,6 +568,16 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 .hud-top{position:absolute;top:14px;left:14px;right:14px;display:flex;justify-content:space-between;gap:10px}
 .hud-box{background:#0d1117dd;border:1px solid #ffffff1d;border-radius:14px;padding:10px 14px;backdrop-filter:blur(8px)}
 #centerMessage{position:absolute;left:50%;top:15%;transform:translateX(-50%);font-size:clamp(24px,5vw,46px);font-weight:900;text-shadow:0 3px 12px #000;text-align:center}
+#warGoalToasts{position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:9;
+ display:flex;flex-direction:column;align-items:flex-start;gap:5px;pointer-events:none;max-width:42%}
+.war-goal-toast{display:flex;align-items:center;gap:9px;width:max-content;max-width:100%;
+ padding:5px 9px;border-radius:9px;background:#13191edb;border:1px solid #ffffff35;
+ color:#f5eee1;font-size:clamp(9px,1vw,12px);font-weight:750;line-height:1.25;
+ box-shadow:0 3px 9px #0005;animation:warGoalRise 3.6s ease-out both}
+.war-goal-toast strong{font-size:inherit;color:#ffdc5e;white-space:nowrap}
+@keyframes warGoalRise{0%{opacity:0;transform:translateY(14px)}
+ 12%{opacity:1;transform:translateY(0)}76%{opacity:1;transform:translateY(-8px)}
+ 100%{opacity:0;transform:translateY(-42px)}}
 #shopButton{position:absolute;right:18px;bottom:18px;pointer-events:auto}
 #shop{position:absolute;right:18px;bottom:78px;width:min(330px,calc(100vw - 36px));background:#0d1117ed;border:1px solid var(--line);border-radius:18px;padding:16px;display:none;pointer-events:auto}
 #shop.open{display:block}
@@ -1231,6 +1241,20 @@ html,body{
 #accountMenu.open{display:block}#accountMenu input{width:100%;margin-bottom:9px}#accountMenu .account-actions{display:grid;gap:8px}
 #accountStatus{font-size:12px;color:var(--muted);margin-top:8px}#accountName{max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #firebaseStatus{position:absolute;left:12px;bottom:10px;z-index:30;font-size:10px;color:#8b949e}
+#accountXpHud{position:absolute;top:calc(var(--safe-top) + 6px);left:calc(var(--safe-left) + 8px);z-index:55;
+ display:flex;align-items:center;gap:9px;pointer-events:none;font-family:inherit}
+#accountXpHud[hidden]{display:none!important}
+#accountXpLevel{color:#fff;font-weight:900;font-size:clamp(12px,1.4vw,17px);white-space:nowrap;
+ -webkit-text-stroke:.65px #080807;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000}
+#accountXpTrack{position:relative;width:clamp(105px,15vw,174px);height:18px;border-radius:999px;
+ overflow:hidden;background:#25231b;border:2px solid #120c07;box-shadow:0 1px 5px #0009}
+#accountXpFill{height:100%;width:0%;border-radius:999px;
+ background:repeating-linear-gradient(110deg,#f49714 0px,#f49714 12px,#ffdc39 12px,#ffdc39 24px,#ea8713 24px,#ea8713 36px,#ffe14b 36px,#ffe14b 48px);
+ transition:width .65s cubic-bezier(.16,.7,.25,1)}
+#accountXpText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+ color:#fff;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px #000,0 -1px 2px #000}
+#accountXpHud.xp-level-up #accountXpTrack{animation:xpTrackPulse .7s ease-out}
+@keyframes xpTrackPulse{45%{box-shadow:0 0 13px 3px #ffce42}100%{box-shadow:0 1px 5px #0009}}
 
 
 /* ===== GOLEM GUERREIRO ===== */
@@ -2749,6 +2773,10 @@ window.dispatchEvent(new Event('firebase-ready'));
 <audio id="battleMusic" src="assets/audio/som-de-batalha.mp3" preload="auto" playsinline hidden></audio>
 <div id="assetWarning">Não foi possível carregar um ou mais assets locais do jogo.</div>
 <div id="mobileStartHint"><span>Toque para manter o jogo em tela cheia</span></div>
+<div id="accountXpHud" hidden aria-label="Nível da conta">
+ <strong id="accountXpLevel">Nível 1</strong>
+ <div id="accountXpTrack"><div id="accountXpFill"></div><span id="accountXpText">0 / 500 XP</span></div>
+</div>
 <div id="screenTransitionFade" aria-hidden="true"></div>
 
 <section id="menuScreen" class="screen active">
@@ -2948,6 +2976,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       </div>
     </div>
     <div id="centerMessage"></div>
+    <div id="warGoalToasts" aria-live="polite" aria-atomic="false"></div>
     <div id="cameraHint" aria-hidden="true"></div>
     <button id="shopButton" aria-label="Abrir ou fechar loja" title="Loja">
       <img src="assets/ui/botao-loja.png" alt="" draggable="false" decoding="async">
@@ -3724,7 +3753,7 @@ setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; }
+function screen(id){ $('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
 
 /* ==================== TRILHA SONORA ==================== */
