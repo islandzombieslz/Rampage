@@ -2800,6 +2800,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <button id="logoutBtn" class="danger" style="display:none">Sair da conta</button>
       </div>
       <div id="accountStatus">Firebase carregando...</div>
+       <div class="small" style="margin-top:8px"><a href="FIREBASE-XP-SETUP.md" target="_blank" rel="noopener noreferrer" style="color:#ffc857">Configuração do XP na conta</a></div>
     </div>
   </div>
   <div class="menu-sprite-actions">
@@ -4227,6 +4228,20 @@ function acceptAccountXPSnapshot(uid,data,epoch=accountProgress.epoch){
  }
  refreshAccountXP();
 }
+function requireCloudXPReady(){
+ const ap=accountProgress;
+ if(ap.uid&&ap.connected&&ap.verified&&ap.status!=='error')return true;
+ const message=ap.status==='error'?(ap.error||'Erro de acesso ao XP'):
+   'Aguarde a autenticação e o carregamento do XP da conta.';
+ const notice=$('#accountXpReward');
+ if(notice){
+   notice.textContent='Não é possível iniciar partida com XP indisponível. '+message;
+   notice.hidden=false;
+   setTimeout(()=>{if(notice.textContent.includes('XP indisponível'))notice.hidden=true},6500);
+ }
+ updateAccountXPSyncStatus();
+ return false;
+}
 function readLegacyMatchAwards(uid){
  // One-time migration of the PREVIOUS version's pending matches.
  // Neither its stored total nor its optimistic XP is ever shown as account XP.
@@ -5436,7 +5451,7 @@ $$('.plus,.minus').forEach(b=>{
 });
 let roomCreateInFlight=false,roomJoinInFlight=false;
 async function createCurrentRoom(btn){
-  if(roomCreateInFlight)return false;
+  if(roomCreateInFlight||!requireCloudXPReady())return false;
   roomCreateInFlight=true;
   const oldText=btn?.textContent||'';
   if(btn){btn.disabled=true;btn.textContent='Criando...'}
@@ -5461,7 +5476,7 @@ async function createCurrentRoom(btn){
 }
 $('#createRoomBtn').onclick=()=>createCurrentRoom($('#createRoomBtn'));
 $('#confirmJoin').onclick=async()=>{
-  if(roomJoinInFlight)return;
+  if(roomJoinInFlight||!requireCloudXPReady())return;
   roomJoinInFlight=true;
   const btn=$('#confirmJoin'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Entrando...';
   try{
@@ -5526,6 +5541,7 @@ function updateLobbyAuthority(){
 }
 $('#lobbyContinue').onclick=async()=>{
   if(NetworkAdapter.online&&!NetworkAdapter.isHost)return;
+  if(!requireCloudXPReady())return;
   if(state.mode==='war'){
     if(state.players.length<2){
       state.players.push({id:'p2',name:'Player 2',human:false,local:false,color:COLORS[1],clan:'warriors',clanChosen:true,clanConfirmed:true});
@@ -5666,6 +5682,7 @@ function configureWarShopForClan(){
 let warStartInFlight=false;
 $('#startWarBtn').onclick=async()=>{
  if(warStartInFlight||(NetworkAdapter.online&&!NetworkAdapter.isHost))return;
+ if(!requireCloudXPReady())return;
  if(!allWarClanHumansConfirmed()){renderClanSelection();flash('Todos precisam confirmar o clã.',1.4);return}
  warStartInFlight=true;
  const btn=$('#startWarBtn');btn.disabled=true;
