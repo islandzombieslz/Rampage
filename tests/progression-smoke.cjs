@@ -78,7 +78,7 @@ assert.equal(goalState.warGoalEvents[0].serial,1);
 assert.equal(goalState.warGoalEvents.at(-1).serial,4);
 assert(html.includes("F.runTransaction(profile,current=>"),'Firebase atomic XP claim');
 assert(html.includes("'profiles/'+uid"),'independent profile location');
-assert(html.includes("accountProgress.claimed.add(key)"),'prevent repeat claims');
+assert(html.includes("ledger.settled[id]=true"),'prevent repeat claims');
 assert(html.includes("id==='gameScreen'"),'XP HUD not displayed during matches');
 assert(html.includes('id="warGoalToasts"'),'goal toast container');
 const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
