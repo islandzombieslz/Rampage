@@ -1,0 +1,98 @@
+name: Apply local looping menu wallpaper and desktop fullscreen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-menu-wallpaper.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rampage-menu-wallpaper-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download the actual GIF into the repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/ui
+          curl --location --fail --retry 4 --retry-delay 3 --connect-timeout 25 --max-time 240 \
+            'https://i.postimg.cc/zvt1VzDv/walpaper.gif' -o assets/ui/walpaper.gif
+          test -s assets/ui/walpaper.gif
+
+      - name: Validate GIF and ensure infinite loop without re-encoding frames
+        shell: python
+        run: |
+          from pathlib import Path
+          import struct
+          path=Path("assets/ui/walpaper.gif")
+          data=path.read_bytes()
+          assert data[:6] in (b"GIF87a",b"GIF89a"), "Download is not a GIF"
+          assert 13<len(data)<90_000_000, "Unexpected GIF size"
+          width,height=struct.unpack("<HH",data[6:10])
+          assert 0<width<=8192 and 0<height<=8192, "Invalid GIF dimensions"
+          marker=b"NETSCAPE2.0"
+          at=data.find(marker)
+          if at>=0 and data[at+len(marker):at+len(marker)+2]==b"\x03\x01":
+              pos=at+len(marker)+2
+              data=data[:pos]+b"\x00\x00"+data[pos+2:]
+          else:
+              gct_bytes=3*(1<<((data[10]&7)+1)) if data[10]&0x80 else 0
+              pos=13+gct_bytes
+              data=data[:pos]+b"\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00"+data[pos:]
+          path.write_bytes(data)
+          print(f"Valid looping GIF: {width}x{height}, {len(data)} bytes")
+
+      - name: Apply narrowly scoped source changes
+        run: |
+          python -m py_compile .github/patch_menu_wallpaper.py
+          python .github/patch_menu_wallpaper.py
+          python .github/update_asset_cache.py
+
+      - name: Check JavaScript syntax, local paths and cache manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path("index.html").read_text(encoding="utf-8")
+          sw=Path("sw.js").read_text(encoding="utf-8")
+          assert html.count("assets/ui/walpaper.gif")>=7, "Missing local GIF or generated manifest"
+          assert html.count('assets/ui/walpaper-menus.png')==0, "Old menu wallpaper still referenced"
+          assert 'https://i.postimg.cc/zvt1VzDv/walpaper.gif' not in html
+          assert '"assets/ui/walpaper.gif":' in html and '"assets/ui/walpaper.gif":' in sw
+          assert Path("assets/ui/walpaper.gif").read_bytes()[:3]==b"GIF"
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',html,re.S)
+          assert scripts
+          Path("/tmp/rampage-wallpaper-main.js").write_text(scripts[-1],encoding="utf-8")
+          print("Local GIF reference and generated cache checks passed.")
+          PY
+          node --check /tmp/rampage-wallpaper-main.js
+          node --check sw.js
+          node tests/water-clan-smoke.cjs
+
+      - name: Publish the GIF and code in the same commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -- .github/patch_menu_wallpaper.py .github/workflows/deploy-menu-wallpaper.yml
+          git add index.html sw.js assets/ui/walpaper.gif
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m 'Use local looping GIF menus and fit fullscreen war arena on desktop'
+          git pull --rebase origin main
+          git push origin HEAD:main
