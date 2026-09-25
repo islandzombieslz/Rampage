@@ -57,7 +57,7 @@ const ctx=vm.createContext({
 vm.runInContext(js.slice(start,end),ctx);
 assert(html.includes('poseidon:750'),'Poseidon price');
 assert(html.includes('naja:650'),'Naja price');
-assert(html.includes('e.hp=e.maxHp=550;e.shield=e.maxShield=250;e.damage=75'),'Poseidon hp decrease');
+assert(html.includes('e.hp=e.maxHp=550;e.shield=e.maxShield=150;e.damage=75'),'Poseidon hp decrease');
 assert(html.includes('e.hp=e.maxHp=230;\n e.shield=e.maxShield=230;'),'King HP and shield decrease');
 assert(html.includes("e.attackCooldown=e.type==='king'?.90"),'King slower attack');
 assert(html.includes("e.hp=e.maxHp=e.clan==='warriors'?250:200"),'Warrior mage only gains HP');
@@ -102,14 +102,14 @@ enemy.x=150;enemy.y=100;
 assert(ctx.startWaterAttack(poseidon,'summon',enemy));
 p=poseidon.pendingWaterAttack;
 clock=p.summonAt;ctx.updateWaterAttackState(poseidon,clock,.016);
-assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,4);
+assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,3);
 ctx.updateWaterAttackState(poseidon,clock,.016);
-assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,4,'summons duplicated');
+assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,3,'summons duplicated');
 clock=p.endAt+1;ctx.updateWaterAttackState(poseidon,clock,.016);
 poseidon.attackCooldown=0;
 assert(ctx.startWaterAttack(poseidon,'summon',enemy),'previous summons must not block a new cast');
 p=poseidon.pendingWaterAttack;clock=p.summonAt;ctx.updateWaterAttackState(poseidon,clock,.016);
-assert.equal(state.entities.filter(e=>e.alive&&e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,4,'second cast must not accumulate');
+assert.equal(state.entities.filter(e=>e.alive&&e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,3,'second cast must not accumulate');
 assert(state.entities.filter(e=>e.alive&&e.waterSummonerId===poseidon.id).every(e=>e.shield===0&&e.maxShield===0),'summoned seahorses have no shield');
 clock=p.endAt+1;ctx.updateWaterAttackState(poseidon,clock,.016);
 poseidon.attackCooldown=0;
@@ -117,7 +117,7 @@ const firstSummons=state.entities.filter(e=>e.alive&&e.waterSummonerId===poseido
 firstSummons[0].alive=false;firstSummons[1].alive=false;
 assert(ctx.startWaterAttack(poseidon,'summon',enemy),'summon special should refill losses');
 p=poseidon.pendingWaterAttack;clock=p.summonAt;ctx.updateWaterAttackState(poseidon,clock,.016);
-assert.equal(state.entities.filter(e=>e.alive&&e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,4,'refills two losses without exceeding four');
+assert.equal(state.entities.filter(e=>e.alive&&e.type==='seahorse'&&e.waterSummonerId===poseidon.id).length,3,'refills two losses without exceeding three');
 let horse={id:3,type:'seahorse',team:'water',color:'#0af',x:110,y:100,damage:25,alive:true,attackCooldown:0,knockTime:0};
 state.entities.push(horse);ctx.warEntityById.set(3,horse);
 clock+=100;enemy.x=155;enemy.y=100;
@@ -132,10 +132,10 @@ clock=p.hit2At;ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,25,'Seahorse should deal two 12.5-damage hits');
 ctx.updateWaterAttackState(horse,clock,.016);
 assert.equal(oldHp-enemy.hp,25,'Seahorse attack duplicated');
-// Full AI cycle: two ranged casts, five melee attacks, four summons, retreat,
-// then a single ranged cast before the next five melee attacks.
+// Full AI cycle: three ranged casts, six melee attacks, three summons, retreat,
+// then three ranged casts again.
 const boss={id:20,type:'poseidon',team:'water',color:'#0af',x:400,y:400,damage:75,speed:112,
- alive:true,attackCooldown:0,knockTime:0,poseidonPhase:'wave',poseidonWaveCount:0,poseidonWaveGoal:2,
+ alive:true,attackCooldown:0,knockTime:0,poseidonPhase:'wave',poseidonWaveCount:0,poseidonWaveGoal:3,
  poseidonNormalCount:0,poseidonSpecialIndex:0,poseidonRetreatStartedAt:0};
 const foe={id:21,type:'warrior',team:'enemy',x:700,y:400,r:30,alive:true,hp:2000,shield:0};
 state.entities.push(boss,foe);
@@ -146,39 +146,39 @@ function finishBossCast(){
  clock=cast.endAt+1;ctx.updateWaterAttackState(boss,clock,.016);
  boss.attackCooldown=0;clock+=10;
 }
-ctx.aiFightPoseidon(boss,.016);
-assert.equal(boss.pendingWaterAttack?.kind,'wave','first attack should be ranged');
-finishBossCast();
-assert.equal(boss.poseidonPhase,'wave');
-assert.equal(boss.poseidonWaveCount,1);
-ctx.aiFightPoseidon(boss,.016);
-assert.equal(boss.pendingWaterAttack?.kind,'wave','second attack should also be ranged');
-finishBossCast();
-assert.equal(boss.poseidonPhase,'melee');
+for(let n=1;n<=3;n++){
+ ctx.aiFightPoseidon(boss,.016);
+ assert.equal(boss.pendingWaterAttack?.kind,'wave','ranged cast '+n);
+ finishBossCast();
+ assert.equal(boss.poseidonWaveCount,n);
+ assert.equal(boss.poseidonPhase,n===3?'melee':'wave');
+}
 foe.x=boss.x+100;foe.y=boss.y;
-for(let n=1;n<=5;n++){
+for(let n=1;n<=6;n++){
  ctx.aiFightPoseidon(boss,.016);
  assert.equal(boss.pendingWaterAttack?.kind,'normal','normal hit '+n);
  finishBossCast();
  assert.equal(boss.poseidonNormalCount,n);
- assert.equal(boss.poseidonPhase,n===5?'summon':'melee');
+ assert.equal(boss.poseidonPhase,n===6?'summon':'melee');
 }
 ctx.aiFightPoseidon(boss,.016);
-assert.equal(boss.pendingWaterAttack?.kind,'summon','special summon follows five melee hits');
+assert.equal(boss.pendingWaterAttack?.kind,'summon','special summon follows six melee hits');
 p=boss.pendingWaterAttack;clock=p.summonAt;ctx.updateWaterAttackState(boss,clock,.016);
-assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===boss.id).length,4);
+assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===boss.id).length,3);
 finishBossCast();
 assert.equal(boss.poseidonPhase,'retreat');
-assert.equal(boss.poseidonWaveGoal,1,'alternate two waves and one wave between cycles');
+assert.equal(boss.poseidonWaveGoal,3,'all subsequent ranged phases use three waves');
 const beforeRetreat=boss.x;
 ctx.aiFightPoseidon(boss,.1);
 assert(boss.x<beforeRetreat,'Poseidon should move away before ranged attack');
 assert.equal(boss.pendingWaterAttack,null,'retreat must precede the next wave');
 clock+=1801;
-ctx.aiFightPoseidon(boss,.016);
-assert.equal(boss.pendingWaterAttack?.kind,'wave','the next cycle starts with a ranged attack');
-finishBossCast();
-assert.equal(boss.poseidonPhase,'melee','one-wave cycle transitions to melee');
+for(let n=1;n<=3;n++){
+ ctx.aiFightPoseidon(boss,.016);
+ assert.equal(boss.pendingWaterAttack?.kind,'wave','next cycle ranged '+n);
+ finishBossCast();
+ assert.equal(boss.poseidonPhase,n===3?'melee':'wave');
+}
 assert.equal(boss.poseidonNormalCount,0,'normal hit count resets after ranged phase');
 // Clã reservado pelo humano; os dois NPCs devem ocupar os outros clãs.
 const clanStart=js.indexOf('function prepareWarClanAssignments(');
