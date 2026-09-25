@@ -3266,7 +3266,7 @@ const NetworkAdapter = {
   },
   async sendInput(input){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase();await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...input,t:F.serverTimestamp()})},
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
-  async pushState(snapshot){if(!this.roomId||!this.isHost)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
+  async pushState(snapshot){if(!this.roomId||!this.isHost||state.phase==='finished')return;const F=await this.waitFirebase();if(state.phase==='finished')return;await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
   async removeCommand(uid,id){const F=await this.waitFirebase();await F.remove(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${uid}/${id}`))}
 };
 
@@ -10687,7 +10687,13 @@ function finishGame(msg,result=null){
  state.running=false;state.phase='finished';state.camera.intro=false;state.spectator.active=false;state.spectator.transitioning=false;$('#gameScreen').classList.remove('spectator-mode');
  flash(matchResultMessage(state.matchResult,NetworkAdapter.localPlayerId),4);
  claimMatchXP(state.matchResult).catch(console.error);
- if(NetworkAdapter.online&&NetworkAdapter.isHost)NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()}).catch(console.error);
+ if(NetworkAdapter.online&&NetworkAdapter.isHost){
+   NetworkAdapter.roomStatus='finished';
+   (async()=>{
+     while(NetworkAdapter.pushing)await new Promise(resolve=>setTimeout(resolve,25));
+     await NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()});
+   })().catch(console.error);
+ }
  setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
 }
 
