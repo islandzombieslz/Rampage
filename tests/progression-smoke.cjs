@@ -190,8 +190,9 @@ async function testCloudOnlyAccountProgress(){
  await tick();await tick();await tick();
  assert.equal(profile.totalXp,525,'old pending match is migrated once');
  assert.equal(storage.has('rampageXpPendingV1:'+uid),false);
- assert.equal(mockNodes['#accountXpLevel'].textContent,'Nível 2');
- assert.equal(mockNodes['#accountXpText'].textContent,'25 / 950 XP');
+ assert.equal(vm.runInContext('xpLevelProgress(accountProgress.totalXp).level',ctx),2);
+ assert.equal(vm.runInContext('xpLevelProgress(accountProgress.totalXp).xp',ctx),25);
+ // The visual label intentionally waits for the level-up animation to complete.
 
  mockNodes['#gameScreen'].style.display='flex';
  ctx.refreshAccountXP();
