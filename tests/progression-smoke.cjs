@@ -87,7 +87,7 @@ const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
 const xpHud={hidden:true};
 const screenCtx=vm.createContext({
  $:selector=>selector==='#accountXpHud'?xpHud:screens.find(item=>selector==='#'+item.id),
- $:selector=>selector==='.screen'?screens:[],
+ [String.fromCharCode(36,36)]:selector=>selector==='.screen'?screens:[],
  window:{FirebaseBridge:{firebaseAuth:{currentUser:{uid:'test-user'}}}}
 });
 vm.runInContext(section('function screen(id){','const MENU_SCREEN_IDS='),screenCtx);
