@@ -1253,6 +1253,11 @@ html,body{
  transition:width .65s cubic-bezier(.16,.7,.25,1)}
 #accountXpText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
  color:#fff;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px #000,0 -1px 2px #000}
+#accountXpSync{position:absolute;left:0;top:24px;font-size:9px;color:#d4d9dd;white-space:nowrap;text-shadow:0 1px 2px #000}
+#accountXpSync[data-state="pending"]{color:#ffd67c}
+#accountXpReward{position:absolute;left:0;top:40px;background:#151a1ede;color:#ffdd63;font-size:11px;font-weight:800;
+ padding:5px 8px;border:1px solid #ffe16c88;border-radius:8px;white-space:nowrap;text-shadow:0 1px 3px #000}
+#accountXpReward[hidden]{display:none!important}
 #accountXpHud.xp-level-up #accountXpTrack{animation:xpTrackPulse .7s ease-out}
 @keyframes xpTrackPulse{45%{box-shadow:0 0 13px 3px #ffce42}100%{box-shadow:0 1px 5px #0009}}
 
@@ -2776,6 +2781,8 @@ window.dispatchEvent(new Event('firebase-ready'));
 <div id="accountXpHud" hidden aria-label="Nível da conta">
  <strong id="accountXpLevel">Nível 1</strong>
  <div id="accountXpTrack"><div id="accountXpFill"></div><span id="accountXpText">0 / 500 XP</span></div>
+ <div id="accountXpSync" data-state="pending">Conectando ao Firebase…</div>
+ <div id="accountXpReward" hidden></div>
 </div>
 <div id="screenTransitionFade" aria-hidden="true"></div>
 
@@ -3753,7 +3760,7 @@ setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; }
+function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; if(id!=='gameScreen'&&typeof refreshAccountXP==='function')refreshAccountXP(); }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
 
 /* ==================== TRILHA SONORA ==================== */
@@ -4312,10 +4319,7 @@ async function claimMatchXP(result){
  const xp=Number(result.awards[uid]);
  if(!Number.isInteger(xp)||xp<50||xp>400||!/^m_[a-z0-9_]{12,70}$/i.test(String(result.id||'')))return;
  const ledger=activeXPLedger(uid);
- const alreadyConfirmed=accountProgress.uid===uid&&accountProgress.serverConnected?
-   !ledger.pending[result.id]&&accountProgress.totalXp!==null&&accountProgress.ledger?.confirmed>0:false;
- // An existing award must be verified against the Firebase ledger; a new
- // match is put in the write-ahead queue before the network request.
+ // A new match is put in the write-ahead queue before the network request.
  if(!ledger.pending[result.id]){
    savePendingMatchXP(uid,result);
    if(accountProgress.uid===uid){
@@ -4323,7 +4327,7 @@ async function claimMatchXP(result){
      refreshAccountXP();
    }
  }
- if(!alreadyConfirmed)await syncMatchXP(uid,result);
+ await syncMatchXP(uid,result);
 }
 window.addEventListener('online',()=>{if(accountProgress.uid){accountProgress.retryAt=0;retryPendingMatchXP(accountProgress.uid).catch(console.error)}});
 document.addEventListener('visibilitychange',()=>{
