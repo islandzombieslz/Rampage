@@ -81,4 +81,23 @@ assert(html.includes("'profiles/'+uid"),'independent profile location');
 assert(html.includes("accountProgress.claimed.add(key)"),'prevent repeat claims');
 assert(html.includes("id==='gameScreen'"),'XP HUD not displayed during matches');
 assert(html.includes('id="warGoalToasts"'),'goal toast container');
-console.log('Level thresholds, combat rewards, result messages and goals: PASS');
+const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
+ id,style:{display:'none'},classList:{classes:new Set(),add(value){this.classes.add(value)},remove(value){this.classes.delete(value)},contains(value){return this.classes.has(value)}}
+}));
+const xpHud={hidden:true};
+const screenCtx=vm.createContext({
+ $:selector=>selector==='#accountXpHud'?xpHud:screens.find(item=>selector==='#'+item.id),
+ $:selector=>selector==='.screen'?screens:[],
+ window:{FirebaseBridge:{firebaseAuth:{currentUser:{uid:'test-user'}}}}
+});
+vm.runInContext(section('function screen(id){','const MENU_SCREEN_IDS='),screenCtx);
+screenCtx.screen('modeScreen');
+assert.equal(screens.filter(item=>item.style.display==='flex').length,1,'one menu must be visible');
+assert.equal(screens.find(item=>item.id==='modeScreen').style.display,'flex','create match menu opens');
+assert.equal(xpHud.hidden,false,'level indicator visible in menus');
+screenCtx.screen('joinScreen');
+assert.equal(screens.filter(item=>item.style.display==='flex').length,1,'previous menu must close');
+assert.equal(screens.find(item=>item.id==='joinScreen').style.display,'flex','join code menu opens');
+screenCtx.screen('gameScreen');
+assert.equal(xpHud.hidden,true,'level indicator hidden during match');
+console.log('Level thresholds, match rewards, goals and menu navigation: PASS');
