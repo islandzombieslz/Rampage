@@ -1,0 +1,18 @@
+name: Validate Progression and Match Rewards
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'tests/progression-smoke.cjs'
+      - '.github/workflows/validate-progression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test level curve, match results, and team milestones
+        run: node tests/progression-smoke.cjs
