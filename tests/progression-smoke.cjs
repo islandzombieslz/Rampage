@@ -101,3 +101,71 @@ assert.equal(screens.find(item=>item.id==='joinScreen').style.display,'flex','jo
 screenCtx.screen('gameScreen');
 assert.equal(xpHud.hidden,true,'level indicator hidden during match');
 console.log('Level thresholds, match rewards, goals and menu navigation: PASS');
+
+async function testXPAwardPersistence(){
+ const storage=new Map(),uid='xp-user';
+ const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
+ let denied=true,profile=null;
+ const F={
+   firebaseAuth:{currentUser:{uid}},firebaseDb:{},
+   ref:(_db,path)=>path,
+   onValue:(_path,ok,fail)=>{
+     if(denied)fail(Object.assign(new Error('PERMISSION_DENIED'),{code:'PERMISSION_DENIED'}));
+     else ok({val:()=>profile});
+     return ()=>{};
+   },
+   runTransaction:async (_path,fn)=>{
+     if(denied)throw Object.assign(new Error('PERMISSION_DENIED'),{code:'PERMISSION_DENIED'});
+     const next=fn(profile);
+     if(next!==undefined)profile=next;
+     return {committed:next!==undefined,snapshot:{val:()=>profile}};
+   }
+ };
+ const mockNodes={};
+ for(const id of ['accountXpHud','accountXpFill','accountXpLevel','accountXpText','accountXpSync','accountXpReward']){
+   mockNodes['#'+id]={style:{},dataset:{},hidden:false,textContent:'',classList:{add(){},remove(){}}};
+ }
+ const gameScreen={classList:{contains:()=>false}};
+ mockNodes['#gameScreen']=gameScreen;
+ function context(){
+   const ctx=vm.createContext({
+     Math,Object,Date,Number,String,JSON,localStorage,console,
+     window:{addEventListener(){},FirebaseBridge:{firebaseAuth:F.firebaseAuth}},
+     document:{addEventListener(){},hidden:false},
+     $:selector=>mockNodes[selector],
+     setTimeout:()=>{},requestAnimationFrame:cb=>cb(),
+     NetworkAdapter:{localPlayerId:uid,waitFirebase:async()=>F}
+   });
+   vm.runInContext(section('const accountProgress={','function beginMatchTracking(){'),ctx);
+   return ctx;
+ }
+ let ctx=context();
+ ctx.watchAccountXP({uid});
+ await Promise.resolve();await Promise.resolve();
+ const match={id:'m_abcdefghijklmnop',mode:'war',winnerId:uid,awards:{[uid]:150}};
+ ctx.mockResult=match;
+ await vm.runInContext('claimMatchXP(mockResult)',ctx);
+ assert.equal(JSON.parse(storage.get('rampageXpLedgerV2:'+uid)).pending[match.id].xp,150);
+ assert.equal(vm.runInContext('visibleXPTotal(accountProgress.ledger)',ctx),150);
+ assert.match(mockNodes['#accountXpSync'].textContent,/sincroniza/i);
+ await vm.runInContext('claimMatchXP(mockResult)',ctx);
+ assert.equal(vm.runInContext('visibleXPTotal(accountProgress.ledger)',ctx),150,'same result must not double credit offline');
+ ctx=context();ctx.watchAccountXP({uid});await Promise.resolve();await Promise.resolve();
+ assert.equal(vm.runInContext('visibleXPTotal(accountProgress.ledger)',ctx),150,'earned XP survives reload');
+ denied=false;
+ vm.runInContext('accountProgress.retryAt=0',ctx);
+ await vm.runInContext('retryPendingMatchXP("xp-user")',ctx);
+ assert.equal(profile.totalXp,150,'pending XP gets committed on reconnect');
+ assert.equal(vm.runInContext('visibleXPTotal(accountProgress.ledger)',ctx),150,'cloud confirmation must not double count');
+ assert.equal(Object.keys(JSON.parse(storage.get('rampageXpLedgerV2:'+uid)).pending).length,0);
+ ctx.mockResult=match;
+ await vm.runInContext('claimMatchXP(mockResult)',ctx);
+ assert.equal(profile.totalXp,150,'duplicate cloud claim must remain one-time');
+ ctx.mockResult={id:'m_ponmlkjihgfedcba',mode:'war',winnerId:uid,awards:{[uid]:175}};
+ await vm.runInContext('claimMatchXP(mockResult)',ctx);
+ assert.equal(profile.totalXp,325,'next distinct match must also award XP');
+ assert.equal(vm.runInContext('visibleXPTotal(accountProgress.ledger)',ctx),325);
+ console.log('XP denied Firebase, reload, recovery and idempotent cloud sync: PASS');
+}
+testXPAwardPersistence().catch(err=>{console.error(err);process.exitCode=1});
+
