@@ -4191,6 +4191,56 @@ async function claimMatchXP(result){
    }
  }finally{accountProgress.claiming.delete(key)}
 }
+function beginMatchTracking(){
+ state.matchId='m_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12);
+ state.matchStats={};state.matchResult=null;state.warGoalSerial=0;state.warGoalEvents=[];state.warGoalSurvivalSecond=0;
+ clearWarGoalToasts();
+ for(const player of state.players)if(player.human)matchStatsFor(player.id);
+}
+function matchStatsFor(uid){
+ if(!state.matchStats[uid])state.matchStats[uid]={damage:0,wonRounds:0,victorySeconds:0,victoryTimeLimit:0};
+ return state.matchStats[uid];
+}
+function recordMatchDamage(attacker,amount){
+ if(!state.matchId||state.phase!=='combat')return;
+ const uid=state.mode==='war'?attacker.team:attacker.ownerId;
+ if(!uid||!state.players.some(p=>p.human&&p.id===uid))return;
+ const stats=matchStatsFor(uid);
+ stats.damage+=(Number(amount)||0);
+}
+function makeMatchResult(winnerId){
+ const humans=state.players.filter(p=>p.human);
+ const winner=state.players.find(p=>p.id===winnerId);
+ const pvp=state.mode==='war'&&humans.length>1;
+ const awards={};
+ for(const player of humans){
+   const win=state.mode==='pve'?winnerId==='players':player.id===winnerId;
+   if(!win){awards[player.id]=50;continue}
+   const stats=matchStatsFor(player.id);
+   const damageScore=clamp((Number(stats.damage)||0)/1200,0,1);
+   // PVE is a fixed-duration survival mode; battle speed applies to the timed War rounds.
+   const pace=state.mode==='pve'?1:stats.victoryTimeLimit>0?
+     clamp(1-stats.victorySeconds/stats.victoryTimeLimit,0,1):0;
+   const low=pvp?200:100,high=pvp?400:200;
+   awards[player.id]=clamp(Math.round(low+(high-low)*(.7*damageScore+.3*pace)),low,high);
+ }
+ return {
+   id:state.matchId,mode:state.mode,winnerId:winnerId||null,winnerName:winner?.name||'',
+   winnerClan:winner?.clan||'warriors',pvp,humanCount:humans.length,
+   awards
+ };
+}
+function matchResultMessage(result,uid){
+ if(!result)return 'PARTIDA ENCERRADA';
+ if(result.mode==='pve'){
+   if(result.winnerId==='players')return Number(result.humanCount)>1?'A partida acabou, os jogadores venceram!':'Você venceu!';
+   return Number(result.humanCount)>1?'A partida acabou, os inimigos venceram!':'Você foi derrotado, clã: Inimigos venceu!';
+ }
+ if(!result.winnerId)return 'A partida terminou em empate.';
+ if(result.pvp)return 'A partida acabou, '+String(result.winnerName||'Jogador')+' foi o vencedor!';
+ if(result.winnerId===uid)return 'Você venceu!';
+ return 'Você foi derrotado, clã: '+clanLabel(result.winnerClan)+' venceu!';
+}
 function localPlayer(){return state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||state.players.find(p=>p.local)||state.players[0]}
 function normalizeClan(value){return value==='egypt'?'egypt':value==='water'?'water':'warriors'}
 function clanLabel(value){return normalizeClan(value)==='egypt'?'Egito':normalizeClan(value)==='water'?'Água':'Guerreiros'}
