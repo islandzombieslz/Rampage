@@ -4487,7 +4487,9 @@ function serializeGame(){
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0,
    kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED
  }));
- return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles};
+ return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles,
+   matchId:state.matchId,matchResult:state.matchResult,matchStats:state.matchStats,
+   warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents};
 }
 
 const REMOTE_WAR_RENDER_DELAY_MS=160;
@@ -4549,6 +4551,16 @@ function applyRemoteGame(game){
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
+ state.matchId=game.matchId||state.matchId;
+ if(game.matchResult)state.matchResult=game.matchResult;
+ if(game.matchStats&&typeof game.matchStats==='object')state.matchStats=game.matchStats;
+ if(state.mode==='war'&&Array.isArray(game.warGoalEvents)){
+   const lastSeen=Number(state.warGoalSerial)||0;
+   for(const event of game.warGoalEvents)if(Number(event.serial)>lastSeen&&event.team===NetworkAdapter.localPlayerId)showWarGoalToast(event);
+   state.warGoalSerial=Math.max(lastSeen,Number(game.warGoalSerial)||0);
+   state.warGoalEvents=game.warGoalEvents;
+ }
+ if(game.matchResult)claimMatchXP(game.matchResult).catch(console.error);
  if(Array.isArray(game.entities)){
    remotePreviousEntities.clear();
    for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
@@ -4887,7 +4899,11 @@ function applyRemoteGame(game){
    flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);
  }
  if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}
- if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){NetworkAdapter.remoteFinishScheduled=true;flash('PARTIDA ENCERRADA',3);setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false},3600)}
+ if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){
+   NetworkAdapter.remoteFinishScheduled=true;
+   flash(game.matchResult?matchResultMessage(game.matchResult,NetworkAdapter.localPlayerId):'PARTIDA ENCERRADA',4);
+   setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false},4200);
+ }
 }
 function configureGameScreenForMode(){
  const pve=state.mode==='pve';$('#gameScreen').classList.toggle('pve-mode',pve);$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
@@ -7583,7 +7599,7 @@ function restorePVEPartyForNextRound(){
 function advancePVERound(message='RODADA CONCLUÍDA'){
   if(state.phase==='between')return;
   if(state.round>=state.rounds){
-    finishGame(message==='TODOS CAÍRAM'?'Todos foram derrotados na última rodada.':'Vitória! Vocês sobreviveram a todas as rodadas.');
+    finishGame('',makeMatchResult(message==='TODOS CAÍRAM'?'enemy':'players'));
     return;
   }
 
@@ -7602,7 +7618,7 @@ function advancePVERound(message='RODADA CONCLUÍDA'){
 
 /* ==================== PVE ==================== */
 function startPVE(){
- state.round=1;state.roundScores={};state.phase='combat';state.running=true;state.entities=[];state.particles=[];
+ beginMatchTracking();state.round=1;state.roundScores={};state.phase='combat';state.running=true;state.entities=[];state.particles=[];
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
  beginPVERound();
 }
@@ -7695,7 +7711,7 @@ function updatePVE(dt){
  const alivePlayers=alivePlayersList.length;
  if(alivePlayers===0){advancePVERound('TODOS CAÍRAM');return}
  if(state.timeLeft<=0){
-   if(state.round>=state.rounds)finishGame('Vitória! Vocês sobreviveram a todas as rodadas.');
+   if(state.round>=state.rounds)finishGame('',makeMatchResult('players'));
    else advancePVERound('RODADA CONCLUÍDA');
  }
 }
@@ -7703,7 +7719,7 @@ function updatePVE(dt){
 /* ==================== MESTRE DA GUERRA ==================== */
 function startWarMode(){
  state.gems=normalizeWarStartingGems(state.gems);
- state.round=1;state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;state.running=true;state.entities=[];state.particles=[];state.dragonProjectiles=[];
+ beginMatchTracking();state.round=1;state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;state.running=true;state.entities=[];state.particles=[];state.dragonProjectiles=[];
  state.players.forEach((p,i)=>{p.bonusGems=0;p.gems=state.gems;p.troops=0;p.score=0;});
  navigateScreen('gameScreen');configureGameScreenForMode();
  $('#shop').classList.remove('open');
@@ -8217,6 +8233,12 @@ function finishWarRound(){
  const max=Math.max(...Object.values(counts));
  const winners=state.players.filter(p=>counts[p.id]===max);
  winners.forEach(p=>p.score=(p.score||0)+1);
+ const elapsed=clamp(state.warTime-Math.max(0,state.timeLeft),0,state.warTime);
+ for(const player of winners){
+   const stats=matchStatsFor(player.id);stats.wonRounds++;
+   stats.victorySeconds+=elapsed;
+   stats.victoryTimeLimit+=state.warTime;
+ }
 
  // Recompensas acumulativas para as rodadas seguintes.
  // Vencedor recebe +200; cada perdedor também progride, mas recebe +100.
@@ -8234,7 +8256,7 @@ function finishWarRound(){
  if(state.round>=state.rounds){
    setTimeout(()=>{
      const best=Math.max(...state.players.map(p=>p.score||0));const champs=state.players.filter(p=>(p.score||0)===best);
-     finishGame(champs.length===1?`${champs[0].name} venceu a guerra!`:'A guerra terminou empatada.');
+     finishGame('',makeMatchResult(champs.length===1?champs[0].id:null));
    },2100);
  }else{
    setTimeout(()=>{state.round++;state.running=true;setupWarRound();beginWarCameraIntro();flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3)},2300);
@@ -10657,8 +10679,12 @@ function updateHUD(){
      perfSetDisabled(buyWaterPoseidonPerfEl,state.phase!=='prep'||gems<WAR_UNIT_COSTS.poseidon);
   }
 }
-function finishGame(msg){
- state.running=false;state.phase='finished';state.camera.intro=false;state.spectator.active=false;state.spectator.transitioning=false;$('#gameScreen').classList.remove('spectator-mode');flash(msg,4);
+function finishGame(msg,result=null){
+ if(state.phase==='finished')return;
+ state.matchResult=result||makeMatchResult(null);
+ state.running=false;state.phase='finished';state.camera.intro=false;state.spectator.active=false;state.spectator.transitioning=false;$('#gameScreen').classList.remove('spectator-mode');
+ flash(matchResultMessage(state.matchResult,NetworkAdapter.localPlayerId),4);
+ claimMatchXP(state.matchResult).catch(console.error);
  if(NetworkAdapter.online&&NetworkAdapter.isHost)NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()}).catch(console.error);
  setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
 }
