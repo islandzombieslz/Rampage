@@ -4116,6 +4116,81 @@ function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function rand(a,b){return a+Math.random()*(b-a)}
 function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
+/* Account progression: one monotonic Firebase profile per authenticated UID, outside ephemeral rooms. */
+const accountProgress={uid:null,unsubscribe:null,totalXp:null,claiming:new Set(),animation:0};
+function xpRequiredForLevel(level){
+ const n=Math.max(1,Math.floor(Number(level)||1));
+ let required=500;
+ for(let l=1;l<n;l++)required+=l<15?450:l<50?850:1000;
+ return required;
+}
+function xpLevelProgress(totalXp){
+ let remainder=Math.max(0,Math.floor(Number(totalXp)||0)),level=1,needed=xpRequiredForLevel(1);
+ while(remainder>=needed&&level<10000){remainder-=needed;level++;needed=xpRequiredForLevel(level)}
+ return {level,xp:remainder,needed,totalXp:Math.max(0,Math.floor(Number(totalXp)||0))};
+}
+function renderAccountXP(totalXp,immediate=false){
+ const hud=$('#accountXpHud'),bar=$('#accountXpFill'),label=$('#accountXpLevel'),counter=$('#accountXpText');
+ if(!hud||!bar||!label||!counter)return;
+ const next=xpLevelProgress(totalXp),previous=accountProgress.totalXp===null?null:xpLevelProgress(accountProgress.totalXp);
+ accountProgress.totalXp=next.totalXp;
+ hud.hidden=!accountProgress.uid||$('#gameScreen').classList.contains('active');
+ const draw=()=>{label.textContent='Nível '+next.level;counter.textContent=next.xp+' / '+next.needed+' XP';bar.style.width=(next.xp/next.needed*100)+'%'};
+ if(immediate||!previous||next.totalXp<=previous.totalXp){accountProgress.animation++;draw();return}
+ const serial=++accountProgress.animation;
+ if(next.level>previous.level){
+   bar.style.width='100%';hud.classList.add('xp-level-up');
+   setTimeout(()=>{
+     if(serial!==accountProgress.animation)return;
+     label.textContent='Nível '+next.level;counter.textContent=next.xp+' / '+next.needed+' XP';
+     bar.style.transition='none';bar.style.width='0%';
+     requestAnimationFrame(()=>requestAnimationFrame(()=>{if(serial===accountProgress.animation){bar.style.transition='';bar.style.width=(next.xp/next.needed*100)+'%'}}));
+     setTimeout(()=>{if(serial===accountProgress.animation)hud.classList.remove('xp-level-up')},750);
+   },670);
+ }else draw();
+}
+function watchAccountXP(user){
+ if(accountProgress.unsubscribe){accountProgress.unsubscribe();accountProgress.unsubscribe=null}
+ accountProgress.uid=user?.uid||null;accountProgress.totalXp=null;accountProgress.animation++;
+ const hud=$('#accountXpHud');if(hud)hud.hidden=!user||$('#gameScreen').classList.contains('active');
+ if(!user){renderAccountXP(0,true);return}
+ NetworkAdapter.waitFirebase().then(F=>{
+   if(accountProgress.uid!==user.uid)return;
+   accountProgress.unsubscribe=F.onValue(F.ref(F.firebaseDb,'profiles/'+user.uid),snap=>{
+     if(accountProgress.uid!==user.uid)return;
+     renderAccountXP(snap.val()?.totalXp||0);
+   },err=>{$('#accountStatus').textContent='Não foi possível carregar o XP do Firebase.';console.error(err)});
+   retryPendingMatchXP(user.uid).catch(console.error);
+ }).catch(console.error);
+}
+function savePendingMatchXP(uid,result){
+ try{localStorage.setItem('rampageXpPendingV1:'+uid,JSON.stringify(result))}catch(_){}
+}
+async function retryPendingMatchXP(uid){
+ let pending=null;try{pending=JSON.parse(localStorage.getItem('rampageXpPendingV1:'+uid)||'null')}catch(_){}
+ if(pending&&window.FirebaseBridge?.firebaseAuth?.currentUser?.uid===uid)await claimMatchXP(pending);
+}
+async function claimMatchXP(result){
+ if(!result||typeof result!=='object'||!/^m_[a-z0-9_]{12,70}$/i.test(String(result.id||'')))return;
+ const F=await NetworkAdapter.waitFirebase(),user=F.firebaseAuth.currentUser;
+ if(!user||!Object.prototype.hasOwnProperty.call(result.awards||{},user.uid))return;
+ const uid=user.uid,id=result.id,xp=Number(result.awards[uid]);
+ if(!Number.isInteger(xp)||xp<50||xp>400)return;
+ const key=uid+':'+id;if(accountProgress.claiming.has(key))return;
+ accountProgress.claiming.add(key);savePendingMatchXP(uid,result);
+ try{
+   const profile=F.ref(F.firebaseDb,'profiles/'+uid);
+   const tx=await F.runTransaction(profile,current=>{
+     const value=current&&typeof current==='object'?current:{};
+     if(value.awards&&Object.prototype.hasOwnProperty.call(value.awards,id))return;
+     const total=Math.max(0,Math.floor(Number(value.totalXp)||0));
+     return {...value,totalXp:total+xp,awards:{...(value.awards||{}),[id]:{xp,mode:result.mode,at:Date.now()}}};
+   },undefined,false);
+   if(tx.committed||tx.snapshot?.val()?.awards?.[id]){
+     try{localStorage.removeItem('rampageXpPendingV1:'+uid)}catch(_){}
+   }
+ }finally{accountProgress.claiming.delete(key)}
+}
 function localPlayer(){return state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||state.players.find(p=>p.local)||state.players[0]}
 function normalizeClan(value){return value==='egypt'?'egypt':value==='water'?'water':'warriors'}
 function clanLabel(value){return normalizeClan(value)==='egypt'?'Egito':normalizeClan(value)==='water'?'Água':'Guerreiros'}
