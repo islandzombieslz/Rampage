@@ -5485,8 +5485,8 @@ function resize(){
   if(state.mode==='war'){
     if(!isMobileLike() && !state.camera.manual){
       // Keep the complete arena in view after F11 or desktop window resize.
-      state.camera.intro=false;
-      state.camera.zoom=warCameraMinZoom();
+      // Preserve the opening fly-in during F11/fullscreen resize.
+      if(!state.camera.intro)state.camera.zoom=Math.max(state.camera.zoom,warCameraMinZoom());
     }
     clampWarCamera();
   }
@@ -5653,7 +5653,7 @@ function spawnNaja(x,y,team,color){
 }
 function spawnPoseidon(x,y,team,color){
  const e=entityBase('poseidon',x,y,team,color);
- e.clan='water';e.hp=e.maxHp=550;e.shield=e.maxShield=250;e.damage=75;e.r=36;
+ e.clan='water';e.hp=e.maxHp=550;e.shield=e.maxShield=150;e.damage=75;e.r=36;
  e.speed=(state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100)*1.12;
  e.poseidonPhase='wave';e.poseidonWaveCount=0;e.poseidonWaveGoal=2;
  e.poseidonNormalCount=0;e.poseidonSpecialIndex=0;e.poseidonRetreatStartedAt=0;
@@ -6595,11 +6595,11 @@ const POSEIDON_NORMAL_SPLASH_RADIUS=64;
 const POSEIDON_WAVE_CAST_RANGE=365;
 const POSEIDON_WAVE_SPACING=245;
 const POSEIDON_RETREAT_TIMEOUT_MS=1800;
-const POSEIDON_MELEE_ATTACKS_PER_CYCLE=5;
-const POSEIDON_SUMMON_COUNT=4;
+const POSEIDON_MELEE_ATTACKS_PER_CYCLE=7;
+const POSEIDON_SUMMON_COUNT=3;
 const SEAHORSE_NORMAL_MS=1050;
 function spawnPoseidonSeahorses(e,p){
- // No máximo quatro cavalos vivos de cada Poseidon; novas invocações repõem baixas.
+ // No máximo três cavalos vivos de cada Poseidon; novas invocações repõem baixas.
  let alive=0;
  for(const unit of state.entities){
    if(unit.alive&&unit.type==='seahorse'&&unit.waterSummoned&&unit.waterSummonerId===e.id&&unit.team===e.team)alive++;
@@ -6781,7 +6781,7 @@ function aiFightPoseidon(e,dt,forcedTeam,preparedCandidates=null){
      e.moving=true;return;
    }
  }
- // Após cinco golpes completos, invoca quatro cavalos-marinhos e reinicia o ciclo.
+ // Após sete golpes completos, invoca até três cavalos-marinhos e reinicia o ciclo.
  if(d>POSEIDON_WAVE_CAST_RANGE){
    e.x=clamp(e.x+dx/d*e.speed*dt,42,state.world.w-42);
    e.y=clamp(e.y+dy/d*e.speed*dt,42,state.world.h-42);
@@ -8404,7 +8404,8 @@ function aiFight(e,dt,forcedTeam,preparedCandidates=null){
 function warCameraMinZoom(){
  const {w,h}=gameViewport();
  if(isMobileLike())return .55;
- return Math.min(2.15,Math.max(.1,Math.min(w/state.world.w,h/state.world.h)));
+ // Desktop: fill both viewport axes so no empty area outside the arena is visible.
+ return Math.min(2.15,Math.max(w/state.world.w,h/state.world.h));
 }
 function clampWarCameraAxis(position,worldSize,viewSize){
  if(viewSize>=worldSize)return (worldSize-viewSize)/2;
@@ -8454,7 +8455,7 @@ function beginWarCameraIntro(){
  // Depois desliza suavemente até o território do jogador e aproxima levemente.
  const me=localPlayer();
  const t=me?.territory||{x:state.world.w/2,y:state.world.h/2};
- c.targetZoom=isMobileLike()?1.12:warCameraMinZoom();
+ c.targetZoom=isMobileLike()?1.12:Math.min(2.15,warCameraMinZoom()*1.55);
  c.targetX=clampWarCameraAxis(t.x-w/(2*c.targetZoom),state.world.w,w/c.targetZoom);
  c.targetY=clampWarCameraAxis(t.y-h/(2*c.targetZoom),state.world.h,h/c.targetZoom);
  c.introFromX=c.x;c.introFromY=c.y;c.introFromZoom=c.zoom;
