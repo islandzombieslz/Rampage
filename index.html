@@ -3753,7 +3753,7 @@ setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function screen(id){ $('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; }
+function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
 
 /* ==================== TRILHA SONORA ==================== */
