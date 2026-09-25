@@ -4126,13 +4126,15 @@ function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getIte
 /* Account progression: one monotonic Firebase profile per authenticated UID, outside ephemeral rooms. */
 /* Account progression: write-ahead XP ledger plus authenticated RTDB profile.
    A denied/offline database never silently discards an earned match. */
+/* CLOUD-ONLY ACCOUNT XP: RTDB is the sole source of level/progress.
+   No client-side XP balance, no optimistic progress, and no silent rewards. */
 const accountProgress={
- uid:null,unsubscribe:null,ledger:null,totalXp:null,claiming:new Set(),
- animation:0,syncError:'',serverConnected:false,lastAward:null,retryAt:0
+ uid:null,unsubscribe:null,connectionUnsubscribe:null,epoch:0,checking:false,
+ connected:false,verified:false,totalXp:null,status:'auth',error:'',animation:0,
+ claiming:new Set(),settled:new Set(),pending:new Map(),lastAward:null
 };
 function xpRequiredForLevel(level){
- const n=Math.max(1,Math.floor(Number(level)||1));
- let required=500;
+ const n=Math.max(1,Math.floor(Number(level)||1));let required=500;
  for(let l=1;l<n;l++)required+=l<15?450:l<50?850:1000;
  return required;
 }
@@ -4141,71 +4143,46 @@ function xpLevelProgress(totalXp){
  while(remainder>=needed&&level<10000){remainder-=needed;level++;needed=xpRequiredForLevel(level)}
  return {level,xp:remainder,needed,totalXp:Math.max(0,Math.floor(Number(totalXp)||0))};
 }
-function xpLedgerKey(uid){return 'rampageXpLedgerV2:'+uid}
-function readXPLedger(uid){
- let raw=null;
- try{raw=JSON.parse(localStorage.getItem(xpLedgerKey(uid))||'null')}catch(_){}
- const confirmed=Math.max(0,Math.floor(Number(raw?.confirmed)||0));
- const pending={},settled={};
- for(const id of Object.keys(raw?.settled||{}))if(/^m_[a-z0-9_]{12,70}$/i.test(id))settled[id]=true;
- for(const [id,entry] of Object.entries(raw?.pending||{})){
-   const xp=Number(entry?.xp),match=entry?.match;
-   if(/^m_[a-z0-9_]{12,70}$/i.test(id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&match?.awards?.[uid]===xp&&!settled[id]){
-     pending[id]={xp,match};
-   }
- }
- // Recover the single-slot queue used by the previous version, including the
- // match which failed before this fix. Do not clear it until Firebase confirms.
- try{
-   const old=JSON.parse(localStorage.getItem('rampageXpPendingV1:'+uid)||'null');
-   const xp=Number(old?.awards?.[uid]);
-   if(old&&/^m_[a-z0-9_]{12,70}$/i.test(old.id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&!pending[old.id]&&!settled[old.id])
-     pending[old.id]={xp,match:old};
- }catch(_){}
- return {confirmed,pending,settled};
-}
-function saveXPLedger(uid,ledger){
- try{localStorage.setItem(xpLedgerKey(uid),JSON.stringify(ledger));return true}
- catch(err){console.error('Não foi possível guardar a recompensa localmente.',err);return false}
-}
-function activeXPLedger(uid){
- return accountProgress.uid===uid&&accountProgress.ledger?accountProgress.ledger:readXPLedger(uid);
-}
-function pendingXPTotal(ledger){
- return Object.values(ledger?.pending||{}).reduce((sum,entry)=>sum+Math.max(0,Number(entry.xp)||0),0);
-}
-function visibleXPTotal(ledger){
- return Math.max(0,Math.floor(Number(ledger?.confirmed)||0))+pendingXPTotal(ledger);
+function isGameScreenVisible(){return $('#gameScreen')?.style.display==='flex'}
+function accountXPErrorMessage(error){
+ const code=String(error?.code||error?.message||error||'').toLowerCase();
+ if(code.includes('permission'))return 'Acesso ao XP negado: configurar regras do Firebase';
+ if(code.includes('network')||code.includes('unavailable')||code.includes('disconnected'))return 'Sem conexão com o Firebase';
+ return 'Falha ao acessar XP da conta';
 }
 function updateAccountXPSyncStatus(){
  const tag=$('#accountXpSync');if(!tag)return;
- const pending=Object.keys(accountProgress.ledger?.pending||{}).length;
- if(pending){
-   tag.textContent=accountProgress.syncError?'XP neste dispositivo • sincronização pendente':'Sincronizando '+pending+' recompensa'+(pending===1?'':'s')+'…';
-   tag.dataset.state='pending';
- }else if(accountProgress.serverConnected){
-   tag.textContent='XP salvo na conta';tag.dataset.state='saved';
- }else{
-   tag.textContent=accountProgress.syncError?'Firebase indisponível • progresso local':'Conectando ao Firebase…';
-   tag.dataset.state='pending';
- }
+ const ap=accountProgress;
+ const message=ap.status==='ready'?'XP salvo na conta':
+  ap.status==='saving'?'Salvando XP na conta…':
+  ap.status==='error'?(ap.error||'Erro ao acessar XP da conta'):
+  ap.status==='auth'?'Conectando à sua conta…':
+  ap.connected?'Carregando XP da conta…':'Aguardando conexão com Firebase…';
+ tag.textContent=message;tag.dataset.state=ap.status==='error'?'error':ap.status==='ready'?'saved':'pending';
+ const accountStatus=$('#accountStatus');
+ if(accountStatus&&ap.status==='error')accountStatus.textContent=message;
 }
 function showAccountXPReward(){
  const notice=$('#accountXpReward'),award=accountProgress.lastAward;
- if(!notice||!award||$('#gameScreen').classList.contains('active'))return;
- notice.textContent=(award.won?'Vitória':'Partida concluída')+' • +'+award.xp+' XP'+
-   (accountProgress.ledger?.pending?.[award.id]?' (sincronização pendente)':'');
+ if(!notice||!award||isGameScreenVisible())return;
+ notice.textContent=(award.won?'Vitória':'Partida concluída')+' • +'+award.xp+' XP salvo na conta';
  notice.hidden=false;accountProgress.lastAward=null;
  const serial=Date.now();notice.dataset.serial=String(serial);
- setTimeout(()=>{if(notice.dataset.serial===String(serial))notice.hidden=true},5200);
+ setTimeout(()=>{if(notice.dataset.serial===String(serial))notice.hidden=true},5500);
 }
-function renderAccountXP(totalXp,immediate=false){
+function renderAccountXP(totalXp=accountProgress.totalXp,immediate=false){
  const hud=$('#accountXpHud'),bar=$('#accountXpFill'),label=$('#accountXpLevel'),counter=$('#accountXpText');
  if(!hud||!bar||!label||!counter)return;
+ hud.hidden=isGameScreenVisible();
  updateAccountXPSyncStatus();
- if($('#gameScreen').classList.contains('active')){hud.hidden=true;return}
- const next=xpLevelProgress(totalXp),previous=accountProgress.totalXp===null?null:xpLevelProgress(accountProgress.totalXp);
- accountProgress.totalXp=next.totalXp;hud.hidden=!accountProgress.uid;
+ if(totalXp===null||!accountProgress.verified){
+   accountProgress.animation++;
+   label.textContent='Nível —';counter.textContent='XP da conta';bar.style.width='0%';
+   return;
+ }
+ const next=xpLevelProgress(totalXp);
+ const previous=accountProgress.displayedXp===undefined?null:xpLevelProgress(accountProgress.displayedXp);
+ accountProgress.displayedXp=next.totalXp;
  const draw=()=>{label.textContent='Nível '+next.level;counter.textContent=next.xp+' / '+next.needed+' XP';bar.style.width=(next.xp/next.needed*100)+'%'};
  if(immediate||!previous||next.totalXp<=previous.totalXp){accountProgress.animation++;draw();return}
  const serial=++accountProgress.animation;
@@ -4223,120 +4200,177 @@ function renderAccountXP(totalXp,immediate=false){
  }else draw();
 }
 function refreshAccountXP(immediate=false){
- if(!accountProgress.uid||!accountProgress.ledger)return;
- renderAccountXP(visibleXPTotal(accountProgress.ledger),immediate);
+ renderAccountXP(accountProgress.totalXp,immediate);
  showAccountXPReward();
 }
-function mergeAccountXPServer(uid,data){
- if(accountProgress.uid!==uid||!accountProgress.ledger)return;
- const ledger=accountProgress.ledger;
- if(data&&typeof data==='object'){
-   ledger.confirmed=Math.max(ledger.confirmed,Math.max(0,Math.floor(Number(data.totalXp)||0)));
-   for(const id of Object.keys(data.awards||{})){
-     if(/^m_[a-z0-9_]{12,70}$/i.test(id)){
-       ledger.settled[id]=true;delete ledger.pending[id];
-     }
-   }
+function acceptAccountXPSnapshot(uid,data,epoch=accountProgress.epoch){
+ const ap=accountProgress;
+ if(ap.uid!==uid||ap.epoch!==epoch||!ap.verified||!ap.connected)return;
+ const value=Number(data?.totalXp);
+ if(!Number.isSafeInteger(value)||value<0)return;
+ ap.totalXp=value;ap.status='ready';ap.error='';
+ for(const id of Object.keys(data?.awards||{})){
+   ap.settled.add(id);ap.pending.delete(id);
  }
- accountProgress.serverConnected=true;accountProgress.syncError='';
- saveXPLedger(uid,ledger);refreshAccountXP();
+ refreshAccountXP();
+}
+function readLegacyMatchAwards(uid){
+ // One-time migration of the PREVIOUS version's pending matches.
+ // Neither its stored total nor its optimistic XP is ever shown as account XP.
+ const matches=new Map();
+ try{
+   const raw=JSON.parse(localStorage.getItem('rampageXpLedgerV2:'+uid)||'null');
+   for(const [id,entry] of Object.entries(raw?.pending||{})){
+     const result=entry?.match,xp=Number(result?.awards?.[uid]);
+     if(/^m_[a-z0-9_]{12,70}$/i.test(id)&&id===result?.id&&Number.isInteger(xp)&&xp>=50&&xp<=400)matches.set(id,result);
+   }
+ }catch(_){}
+ try{
+   const result=JSON.parse(localStorage.getItem('rampageXpPendingV1:'+uid)||'null');
+   const xp=Number(result?.awards?.[uid]);
+   if(/^m_[a-z0-9_]{12,70}$/i.test(result?.id||'')&&Number.isInteger(xp)&&xp>=50&&xp<=400)matches.set(result.id,result);
+ }catch(_){}
+ return matches;
+}
+function clearLegacyMatchAward(uid,id){
+ try{
+   const oldKey='rampageXpPendingV1:'+uid;
+   const item=JSON.parse(localStorage.getItem(oldKey)||'null');
+   if(item?.id===id)localStorage.removeItem(oldKey);
+   const key='rampageXpLedgerV2:'+uid,ledger=JSON.parse(localStorage.getItem(key)||'null');
+   if(ledger?.pending?.[id]){
+     delete ledger.pending[id];
+     if(Object.keys(ledger.pending).length)localStorage.setItem(key,JSON.stringify(ledger));
+     else localStorage.removeItem(key);
+   }
+ }catch(_){}
+}
+async function verifyAccountXP(uid,epoch){
+ const ap=accountProgress;
+ if(!uid||ap.uid!==uid||ap.epoch!==epoch||ap.checking||!ap.connected)return false;
+ ap.checking=true;ap.verified=false;ap.status='loading';refreshAccountXP();
+ try{
+   const F=await NetworkAdapter.waitFirebase();
+   if(ap.uid!==uid||ap.epoch!==epoch||!ap.connected)return false;
+   // A transaction probes BOTH read and write access, even on an existing profile.
+   const tx=await F.runTransaction(F.ref(F.firebaseDb,'profiles/'+uid),current=>{
+     if(!current||typeof current!=='object')return {totalXp:0};
+     if(!Number.isSafeInteger(Number(current.totalXp))||Number(current.totalXp)<0)return;
+     return current;
+   },{applyLocally:false});
+   if(ap.uid!==uid||ap.epoch!==epoch||!ap.connected)return false;
+   const data=tx.snapshot?.val();
+   if(!tx.committed||!Number.isSafeInteger(Number(data?.totalXp))||Number(data?.totalXp)<0)
+     throw new Error('Perfil de XP inválido ou sem permissão de escrita');
+   ap.verified=true;ap.status='ready';ap.error='';ap.totalXp=Number(data.totalXp);
+   for(const id of Object.keys(data.awards||{})){ap.settled.add(id);ap.pending.delete(id);clearLegacyMatchAward(uid,id)}
+   refreshAccountXP(true);
+   // Recover only old, already-completed match receipts. No local XP balance is read.
+   for(const [id,result] of readLegacyMatchAwards(uid))if(!ap.settled.has(id))ap.pending.set(id,result);
+   void retryPendingMatchXP(uid);
+   return true;
+ }catch(err){
+   if(ap.uid!==uid||ap.epoch!==epoch)return false;
+   ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);
+   ap.totalXp=null;refreshAccountXP();console.error('Firebase account XP verification:',err);
+   return false;
+ }finally{if(ap.uid===uid&&ap.epoch===epoch)ap.checking=false}
 }
 function watchAccountXP(user){
- if(accountProgress.unsubscribe){accountProgress.unsubscribe();accountProgress.unsubscribe=null}
- accountProgress.uid=user?.uid||null;accountProgress.totalXp=null;accountProgress.animation++;
- accountProgress.serverConnected=false;accountProgress.syncError='';accountProgress.lastAward=null;
- accountProgress.ledger=user?readXPLedger(user.uid):null;
- const hud=$('#accountXpHud');if(hud)hud.hidden=!user||$('#gameScreen').classList.contains('active');
- if(!user){updateAccountXPSyncStatus();return}
- refreshAccountXP(true);
+ const ap=accountProgress;
+ if(ap.unsubscribe){ap.unsubscribe();ap.unsubscribe=null}
+ if(ap.connectionUnsubscribe){ap.connectionUnsubscribe();ap.connectionUnsubscribe=null}
+ const uid=user?.uid||null,epoch=++ap.epoch;
+ ap.uid=uid;ap.connected=false;ap.verified=false;ap.totalXp=null;ap.displayedXp=undefined;
+ ap.error='';ap.status=uid?'loading':'auth';ap.checking=false;ap.settled.clear();ap.pending.clear();
+ ap.claiming.clear();ap.lastAward=null;refreshAccountXP(true);
+ if(!uid)return;
  NetworkAdapter.waitFirebase().then(F=>{
-   if(accountProgress.uid!==user.uid)return;
-   accountProgress.unsubscribe=F.onValue(F.ref(F.firebaseDb,'profiles/'+user.uid),snap=>{
-     if(accountProgress.uid!==user.uid)return;
-     mergeAccountXPServer(user.uid,snap.val());
-     retryPendingMatchXP(user.uid).catch(console.error);
+   if(ap.uid!==uid||ap.epoch!==epoch)return;
+   const connectedRef=F.ref(F.firebaseDb,'.info/connected');
+   ap.connectionUnsubscribe=F.onValue(connectedRef,snap=>{
+     if(ap.uid!==uid||ap.epoch!==epoch)return;
+     const connected=snap.val()===true,wasConnected=ap.connected;
+     ap.connected=connected;
+     if(!connected){
+       ap.verified=false;ap.status='loading';ap.totalXp=null;refreshAccountXP();
+     }else if(!wasConnected||ap.status==='error')void verifyAccountXP(uid,epoch);
    },err=>{
-     if(accountProgress.uid!==user.uid)return;
-     accountProgress.syncError=String(err?.code||err?.message||'Firebase indisponível');
-     refreshAccountXP();console.warn('XP Firebase:',err);
+     if(ap.uid!==uid||ap.epoch!==epoch)return;
+     ap.connected=false;ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);ap.totalXp=null;refreshAccountXP();
    });
-   retryPendingMatchXP(user.uid).catch(console.error);
- }).catch(err=>{accountProgress.syncError=String(err);refreshAccountXP();console.error(err)});
-}
-function savePendingMatchXP(uid,result){
- const xp=Number(result?.awards?.[uid]),id=String(result?.id||'');
- if(!/^m_[a-z0-9_]{12,70}$/i.test(id)||!Number.isInteger(xp)||xp<50||xp>400)return false;
- const ledger=activeXPLedger(uid);
- if(ledger.settled[id])return true;
- if(!ledger.pending[id])ledger.pending[id]={xp,match:result};
- const saved=saveXPLedger(uid,ledger);
- if(accountProgress.uid===uid){accountProgress.ledger=ledger;refreshAccountXP()}
- return saved;
+   ap.unsubscribe=F.onValue(F.ref(F.firebaseDb,'profiles/'+uid),snap=>{
+     if(ap.uid!==uid||ap.epoch!==epoch)return;
+     acceptAccountXPSnapshot(uid,snap.val(),epoch);
+   },err=>{
+     if(ap.uid!==uid||ap.epoch!==epoch)return;
+     ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);
+     ap.totalXp=null;refreshAccountXP();console.error('Firebase XP subscription:',err);
+   });
+ }).catch(err=>{
+   if(ap.uid!==uid||ap.epoch!==epoch)return;
+   ap.status='error';ap.error=accountXPErrorMessage(err);refreshAccountXP();console.error(err);
+ });
 }
 async function retryPendingMatchXP(uid){
- if(!uid||accountProgress.uid!==uid||!accountProgress.ledger)return;
- // At most one retry batch per 25 seconds; successful transactions remove entries.
- if(Date.now()<accountProgress.retryAt)return;
- accountProgress.retryAt=Date.now()+25000;
- const entries=Object.values(accountProgress.ledger.pending);
- for(const entry of entries)await syncMatchXP(uid,entry.match);
-}
-async function syncMatchXP(uid,result){
- const id=String(result?.id||''),key=uid+':'+id;
- if(accountProgress.claiming.has(key))return;
- const F=await NetworkAdapter.waitFirebase(),user=F.firebaseAuth.currentUser;
- if(!user||user.uid!==uid)return;
- const ledger=activeXPLedger(uid),entry=ledger.pending[id];
- if(!entry)return;
- accountProgress.claiming.add(key);
- try{
-   const profile=F.ref(F.firebaseDb,'profiles/'+uid);
-   const tx=await F.runTransaction(profile,current=>{
-     const value=current&&typeof current==='object'?current:{};
-     if(value.awards&&Object.prototype.hasOwnProperty.call(value.awards,id))return;
-     const total=Math.max(0,Math.floor(Number(value.totalXp)||0));
-     return {...value,totalXp:total+entry.xp,
-       awards:{...(value.awards||{}),[id]:{xp:entry.xp,mode:result.mode,at:Date.now()}}};
-   },{applyLocally:false});
-   const data=tx.snapshot?.val();
-   if(data?.awards&&Object.prototype.hasOwnProperty.call(data.awards,id)){
-     if(accountProgress.uid===uid)mergeAccountXPServer(uid,data);
-     else{
-       ledger.confirmed=Math.max(ledger.confirmed,Math.max(0,Math.floor(Number(data.totalXp)||0)));
-       delete ledger.pending[id];ledger.settled[id]=true;saveXPLedger(uid,ledger);
-     }
-     try{localStorage.removeItem('rampageXpPendingV1:'+uid)}catch(_){}
-   }else{
-     accountProgress.syncError='Recompensa ainda não confirmada';refreshAccountXP();
-   }
- }catch(err){
-   accountProgress.syncError=String(err?.code||err?.message||'Firebase indisponível');
-   refreshAccountXP();
-   console.warn('XP aguardando sincronização com Firebase:',err);
- }finally{accountProgress.claiming.delete(key)}
+ const ap=accountProgress;
+ if(!ap.verified||!ap.connected||ap.uid!==uid)return;
+ for(const [id,result] of [...ap.pending]){
+   if(ap.settled.has(id)){ap.pending.delete(id);continue}
+   if(!ap.claiming.has(uid+':'+id))await claimMatchXP(result);
+ }
 }
 async function claimMatchXP(result){
- if(!result||typeof result!=='object')return;
- const F=await NetworkAdapter.waitFirebase();
- const uid=F.firebaseAuth.currentUser?.uid||NetworkAdapter.localPlayerId;
- if(!uid||!Object.prototype.hasOwnProperty.call(result.awards||{},uid))return;
+ if(!result||typeof result!=='object'||!/^m_[a-z0-9_]{12,70}$/i.test(String(result.id||'')))return false;
+ const F=await NetworkAdapter.waitFirebase(),user=F.firebaseAuth.currentUser;
+ const uid=user?.uid,ap=accountProgress;
+ if(!uid||uid!==ap.uid||!Object.prototype.hasOwnProperty.call(result.awards||{},uid))return false;
  const xp=Number(result.awards[uid]);
- if(!Number.isInteger(xp)||xp<50||xp>400||!/^m_[a-z0-9_]{12,70}$/i.test(String(result.id||'')))return;
- const ledger=activeXPLedger(uid);
- if(ledger.settled[result.id])return;
- // A new match is put in the write-ahead queue before the network request.
- if(!ledger.pending[result.id]){
-   savePendingMatchXP(uid,result);
-   if(accountProgress.uid===uid){
-     accountProgress.lastAward={id:result.id,xp,won:result.winnerId===uid||result.winnerId==='players'};
+ if(!Number.isInteger(xp)||xp<50||xp>400)return false;
+ const id=result.id,key=uid+':'+id;
+ if(ap.settled.has(id))return true;
+ ap.pending.set(id,result); // in-memory retry only; never credited as saved XP
+ if(!ap.connected||!ap.verified){refreshAccountXP();return false}
+ if(ap.claiming.has(key))return false;
+ ap.claiming.add(key);ap.status='saving';refreshAccountXP();
+ try{
+   const tx=await F.runTransaction(F.ref(F.firebaseDb,'profiles/'+uid),current=>{
+     if(!current||typeof current!=='object')return; // never recreate a deleted profile mid-match
+     if(current.awards&&Object.prototype.hasOwnProperty.call(current.awards,id))return;
+     const total=Number(current.totalXp);
+     if(!Number.isSafeInteger(total)||total<0)return;
+     return {...current,totalXp:total+xp,
+       awards:{...(current.awards||{}),[id]:{xp,mode:result.mode,at:Date.now()}}};
+   },{applyLocally:false});
+   if(ap.uid!==uid)return false;
+   const data=tx.snapshot?.val();
+   if(!data?.awards||!Object.prototype.hasOwnProperty.call(data.awards,id))
+     throw new Error('Recompensa não confirmada pelo Firebase');
+   ap.settled.add(id);ap.pending.delete(id);clearLegacyMatchAward(uid,id);
+   if(ap.connected&&ap.verified){
+     ap.totalXp=Math.max(Number(ap.totalXp)||0,Number(data.totalXp)||0);
+     ap.status='ready';ap.error='';
+     ap.lastAward={id,xp,won:result.winnerId===uid||result.winnerId==='players'};
      refreshAccountXP();
    }
- }
- await syncMatchXP(uid,result);
+   return true;
+ }catch(err){
+   if(ap.uid===uid){
+     ap.status='error';ap.error=accountXPErrorMessage(err);
+     // Hide unconfirmed XP, rather than presenting it as stored on the account.
+     refreshAccountXP();
+   }
+   console.error('XP was NOT saved to account:',err);
+   return false;
+ }finally{ap.claiming.delete(key)}
 }
-window.addEventListener('online',()=>{if(accountProgress.uid){accountProgress.retryAt=0;retryPendingMatchXP(accountProgress.uid).catch(console.error)}});
+window.addEventListener('online',()=>{
+ if(accountProgress.uid&&accountProgress.connected&&!accountProgress.verified)
+   void verifyAccountXP(accountProgress.uid,accountProgress.epoch);
+});
 document.addEventListener('visibilitychange',()=>{
- if(!document.hidden&&accountProgress.uid){accountProgress.retryAt=0;retryPendingMatchXP(accountProgress.uid).catch(console.error)}
+ if(!document.hidden&&accountProgress.uid&&accountProgress.connected&&!accountProgress.verified)
+   void verifyAccountXP(accountProgress.uid,accountProgress.epoch);
 });
 function beginMatchTracking(){
  state.matchId='m_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12);
