@@ -6926,7 +6926,7 @@ function updateWaterAttackState(e,now,dt){
        }
      }else if(p.kind==='summon'){
        e.poseidonSpecialIndex=(Number(e.poseidonSpecialIndex)||0)+1;
-       e.poseidonWaveGoal=3;
+       e.poseidonWaveGoal=e.poseidonSpecialIndex%2===0?2:1;
        e.poseidonWaveCount=0;e.poseidonNormalCount=0;
        e.poseidonPhase='retreat';e.poseidonRetreatStartedAt=now;
      }
