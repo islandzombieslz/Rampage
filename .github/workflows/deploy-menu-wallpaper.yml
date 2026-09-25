@@ -27,7 +27,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets/ui
-          curl --location --fail --retry 4 --retry-delay 3 --connect-timeout 25 --max-time 240 \
+          curl --http1.1 --location --fail --show-error --retry 12 --retry-all-errors \
+            --retry-delay 2 --connect-timeout 30 --max-time 1200 --continue-at - \
             'https://i.postimg.cc/zvt1VzDv/walpaper.gif' -o assets/ui/walpaper.gif
           test -s assets/ui/walpaper.gif
 
