@@ -167,18 +167,18 @@ p=boss.pendingWaterAttack;clock=p.summonAt;ctx.updateWaterAttackState(boss,clock
 assert.equal(state.entities.filter(e=>e.type==='seahorse'&&e.waterSummonerId===boss.id).length,3);
 finishBossCast();
 assert.equal(boss.poseidonPhase,'retreat');
-assert.equal(boss.poseidonWaveGoal,3,'all subsequent ranged phases use three waves');
+assert.equal(boss.poseidonWaveGoal,1,'the next ranged phase remains one wave');
 const beforeRetreat=boss.x;
 ctx.aiFightPoseidon(boss,.1);
 assert(boss.x<beforeRetreat,'Poseidon should move away before ranged attack');
 assert.equal(boss.pendingWaterAttack,null,'retreat must precede the next wave');
 clock+=1801;
-for(let n=1;n<=3;n++){
+for(let n=1;n<=1;n++){
  if(n>1){foe.x=boss.x+300;foe.y=boss.y}
  ctx.aiFightPoseidon(boss,.016);
  assert.equal(boss.pendingWaterAttack?.kind,'wave','next cycle ranged '+n);
  finishBossCast();
- assert.equal(boss.poseidonPhase,n===3?'melee':'wave');
+ assert.equal(boss.poseidonPhase,n===1?'melee':'wave');
 }
 assert.equal(boss.poseidonNormalCount,0,'normal hit count resets after ranged phase');
 // Clã reservado pelo humano; os dois NPCs devem ocupar os outros clãs.
