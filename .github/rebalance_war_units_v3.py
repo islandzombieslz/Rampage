@@ -3,7 +3,7 @@ p=Path('index.html')
 t=p.read_text(encoding='utf-8')
 
 required=[
-    "const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:750});",
+    "const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:650,anubis:450,isis:500,seahorse:100,poseidon:750});",
     "function spawnIsis(",
     "e.hp=e.maxHp=265;e.shield=e.maxShield=165;e.damage=ISIS_NORMAL_DAMAGE_1",
     "const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);",
@@ -89,7 +89,14 @@ required=[
     "function updateIsisAttackState(",
     "function syncIsisPowerEffects(",
     "const WAR_BASIC_WARRIOR_SPEED_MULTIPLIER=.92;",
-    "e.attackCooldown=e.type==='king'?.65:e.type==='warrior'?.70:.50;",
+    "e.clan='water';e.hp=e.maxHp=550;e.shield=e.maxShield=250;e.damage=75;",
+    "e.clan='water';e.hp=e.maxHp=150;e.shield=e.maxShield=summonerId===null?100:0;e.damage=25;",
+    "const SEAHORSE_NORMAL_MS=1050;",
+    "const missing=Math.max(0,POSEIDON_SUMMON_COUNT-alive);",
+    "function prepareWarClanAssignments(){",
+    "if(state.mode==='war')prepareWarClanAssignments();",
+    "seahorse:0,poseidon:0};",
+    "e.attackCooldown=e.type==='king'?.90:e.type==='warrior'?.70:.50;",
     "e.damage=33;",
     "e.hp=e.maxHp=650;",
     "e.shield=e.maxShield=250;",
@@ -97,7 +104,7 @@ required=[
     "e.shield=e.maxShield=165;",
     "e.type==='brownWarrior'?1.16",
     "e.type==='king'?0.88",
-    "e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE",
+    "e.hp=e.maxHp=215;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE",
     "e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=DRAGON_FIREBALL_DAMAGE",
     "content:attr(data-unit-name);",
     ".entity-visual:not(.dying).entity-ui-hovered .entity-bars,",

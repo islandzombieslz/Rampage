@@ -2980,7 +2980,7 @@ window.dispatchEvent(new Event('firebase-ready'));
         <button id="buyEgyptMage" class="shop-sprite-card" aria-label="Comprar Mago do Egito por 550 gemas" title="Mago do Egito — 550 gemas">
           <img src="assets/egypt/mage/card.png" alt="Magos do Egito" draggable="false" decoding="async">
         </button>
-        <button id="buyEgyptNaja" class="shop-sprite-card" aria-label="Comprar Naja do Egito por 550 gemas" title="Naja do Egito — 550 gemas">
+        <button id="buyEgyptNaja" class="shop-sprite-card" aria-label="Comprar Naja do Egito por 650 gemas" title="Naja do Egito — 650 gemas">
           <img src="assets/egypt/naja/card.png" alt="Naja do Egito" draggable="false" decoding="async">
         </button>
         <button id="buyEgyptAnubis" class="shop-sprite-card" aria-label="Comprar Annubis do Egito por 450 gemas" title="Annubis do Egito — 450 gemas">
@@ -3481,7 +3481,7 @@ const WAR_BASIC_WARRIOR_SPEED_MULTIPLIER=.92; // guerreiros básicos: leve redu�
 const WAR_GOLEM_EXTRA_SPEED_MULTIPLIER=.87; // depois dos -50%, o Golem fica um pouco mais lento que o Mago
 /* UNIT STATS/BARS TUNING 2026-09-09 */
 /* BROWN WARRIOR SYSTEM 2026-09-12 */
-const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:550,anubis:450,isis:500,seahorse:100,poseidon:750});
+const WAR_UNIT_COSTS=Object.freeze({warrior:100,brownWarrior:450,king:500,golem:550,mage:550,dragon:450,naja:650,anubis:450,isis:500,seahorse:100,poseidon:750});
 const WAR_ROUND_GEM_REWARD=Object.freeze({winner:200,loser:100,tie:100});
 const WAR_GOALS=Object.freeze({specials:{target:5,reward:70},ranged:{target:3,reward:40},damage:{target:100,reward:50}});
 const difficultyConfig={
@@ -4802,10 +4802,8 @@ function syncFirebaseRoom(room){
    const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0}));
    state.players=[...humans,...bots];
    // Nao forca dois humanos para clans diferentes enquanto estao apenas selecionando.
-   // Contra um unico NPC, o bot acompanha visualmente o cla oposto sem bloquear o humano.
-   if(state.mode==='war'&&state.players.length===2&&humans.length===1&&bots.length===1){
-     bots[0].clan=oppositeClan(humans[0].clan);
-   }
+   // Também atualiza os clãs dos NPCs ao mudar a seleção no Firebase.
+   if(state.mode==='war')prepareWarClanAssignments();
    renderPlayers();
    if(room.status==='clan'&&$('#clanScreen').style.display==='none')navigateScreen('clanScreen');
    if(room.status==='clan'){renderClanSelection();configureWarShopForClan();}
@@ -5137,7 +5135,7 @@ $('#lobbyContinue').onclick=async()=>{
       else{p.clanConfirmed=true;p.clanChosen=true}
     }
     const humans=state.players.filter(p=>p.human),bots=state.players.filter(p=>!p.human);
-    if(state.players.length===2&&humans.length===1&&bots.length===1)bots[0].clan=oppositeClan(humans[0].clan);
+    prepareWarClanAssignments();
     renderPlayers();
     navigateScreen('clanScreen');
     resetClanDraft();
@@ -5179,11 +5177,13 @@ function clanUnavailableForLocal(clan){
 }
 function prepareWarClanAssignments(){
  if(state.mode!=='war')return;
- const humans=state.players.filter(p=>p.human),bots=state.players.filter(p=>!p.human);
- if(state.players.length===2&&humans.length===1&&bots.length===1){
-   bots[0].clan=oppositeClan(humans[0].clan);bots[0].clanChosen=true;bots[0].clanConfirmed=true;
- }else if(state.players.length>=3){
-   for(const p of bots){p.clan=['warriors','egypt','water'][Math.floor(Math.random()*3)];p.clanChosen=true;p.clanConfirmed=true}
+ const used=new Set(state.players.filter(p=>p.human).map(p=>normalizeClan(p.clan)));
+ const available=['water','egypt','warriors'].filter(clan=>!used.has(clan));
+ for(const bot of state.players.filter(p=>!p.human)){
+   // Os humanos reservam seus clãs; NPCs ocupam os restantes sem repetição.
+   const clan=available.shift();
+   if(!clan)break; // O modo Guerra admite no máximo três participantes.
+   bot.clan=clan;bot.clanChosen=true;bot.clanConfirmed=true;
  }
 }
 function renderClanSelection(){
@@ -5217,8 +5217,7 @@ $$('.clan-option[data-clan]').forEach(btn=>btn.onclick=()=>{
  if(clanUnavailableForLocal(selected))return;
  clanDraft=selected;
  me.clan=selected;me.clanChosen=true;me.clanSelectedAt=Date.now();
- const bot=state.players.length===2?state.players.find(p=>!p.human):null;
- if(bot)bot.clan=oppositeClan(selected);
+ prepareWarClanAssignments();
  renderClanSelection();configureWarShopForClan();
  // Selection stays visually local immediately; Firebase mirrors it in the background.
  if(NetworkAdapter.online)NetworkAdapter.setClan(selected).then(ok=>{
@@ -5272,7 +5271,7 @@ $('#startWarBtn').onclick=async()=>{
  const btn=$('#startWarBtn');btn.disabled=true;
  try{
    // Fecha as regras de clã antes de criar as tropas da rodada.
-   // Em 1x1 os clãs ficam exclusivos; com 3 participantes NPCs podem repetir aleatoriamente.
+   // Clãs dos NPCs são exclusivos também com três participantes.
    prepareWarClanAssignments();renderPlayers();renderClanSelection();
    // Um clique inicia a preparação imediatamente. O guard local impede callbacks
    // atrasados de 'clan' de devolver a tela ou reconstruir state.players; em seguida
@@ -5593,8 +5592,8 @@ function spawnBrownWarrior(x,y,team,color){
 function spawnKing(x,y,team,color){
  const e=entityBase('king',x,y,team,color);
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER;
- e.hp=e.maxHp=280;
- e.shield=e.maxShield=280;
+ e.hp=e.maxHp=230;
+ e.shield=e.maxShield=230;
  e.damage=33;
  e.r=29;
  e.kingNormalCount=0;
@@ -5645,7 +5644,7 @@ function spawnNaja(x,y,team,color){
 }
 function spawnPoseidon(x,y,team,color){
  const e=entityBase('poseidon',x,y,team,color);
- e.clan='water';e.hp=e.maxHp=650;e.shield=e.maxShield=250;e.damage=75;e.r=36;
+ e.clan='water';e.hp=e.maxHp=550;e.shield=e.maxShield=250;e.damage=75;e.r=36;
  e.speed=(state.mode==='war'?100*WAR_TROOP_SPEED_MULTIPLIER*WAR_GOLEM_EXTRA_SPEED_MULTIPLIER:100)*1.12;
  e.poseidonPhase='wave';e.poseidonWaveCount=0;e.poseidonWaveGoal=2;
  e.poseidonNormalCount=0;e.poseidonSpecialIndex=0;e.poseidonRetreatStartedAt=0;
@@ -5653,14 +5652,14 @@ function spawnPoseidon(x,y,team,color){
 }
 function spawnSeahorse(x,y,team,color,summonerId=null){
  const e=entityBase('seahorse',x,y,team,color);
- e.clan='water';e.hp=e.maxHp=150;e.shield=e.maxShield=100;e.damage=20;e.r=30;
+ e.clan='water';e.hp=e.maxHp=150;e.shield=e.maxShield=summonerId===null?100:0;e.damage=25;e.r=30;
  if(state.mode==='war')e.speed*=WAR_TROOP_SPEED_MULTIPLIER*WAR_BASIC_WARRIOR_SPEED_MULTIPLIER;
  e.waterSummoned=summonerId!==null;e.waterSummonerId=summonerId;
  state.entities.push(e);return e;
 }
 function spawnMage(x,y,team,color,variant='male',clan='warriors'){
  const e=entityBase('mage',x,y,team,color);
- e.variant=variant==='female'?'female':'male';e.clan=normalizeClan(clan);e.hp=e.maxHp=200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
+ e.variant=variant==='female'?'female':'male';e.clan=normalizeClan(clan);e.hp=e.maxHp=e.clan==='warriors'?250:200;e.shield=e.maxShield=50;e.damage=5;e.r=31;
  // Mantém a velocidade-base própria; no modo Guerra recebe exatamente -50%.
  e.speed=state.mode==='war'?92*WAR_TROOP_SPEED_MULTIPLIER:92;e.attackCooldown=0;e.mageCycle=0;
  if(e.clan==='egypt'){e.egyptSpecialObservedHp=e.hp;e.egyptSpecialObservedShield=e.shield;e.egyptHpTriggerPending=false;e.egyptShieldTriggerPending=false;}
@@ -5671,7 +5670,7 @@ function spawnAnubis(x,y,team,color){
  const e=entityBase('anubis',x,y,team,color);
  e.clan='egypt';
  // Exatamente a mesma vida, escudo e velocidade-base do Dragão Guerreiro.
- e.hp=e.maxHp=165;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;
+ e.hp=e.maxHp=215;e.shield=e.maxShield=65;e.damage=ANUBIS_PROJECTILE_DAMAGE;e.r=34;
  e.speed=state.mode==='war'?110*WAR_TROOP_SPEED_MULTIPLIER:110;
  e.attackCooldown=0;e.anubisAttackSerial=0;e.anubisNextShotAt=0;e.pendingAnubisAttack=null;
  state.entities.push(e);return e;
@@ -6589,11 +6588,17 @@ const POSEIDON_WAVE_SPACING=245;
 const POSEIDON_RETREAT_TIMEOUT_MS=1800;
 const POSEIDON_MELEE_ATTACKS_PER_CYCLE=5;
 const POSEIDON_SUMMON_COUNT=4;
-const SEAHORSE_NORMAL_MS=1470;
+const SEAHORSE_NORMAL_MS=1050;
 function spawnPoseidonSeahorses(e,p){
+ // No máximo quatro cavalos vivos de cada Poseidon; novas invocações repõem baixas.
+ let alive=0;
+ for(const unit of state.entities){
+   if(unit.alive&&unit.type==='seahorse'&&unit.waterSummoned&&unit.waterSummonerId===e.id&&unit.team===e.team)alive++;
+ }
+ const missing=Math.max(0,POSEIDON_SUMMON_COUNT-alive);
  const ox=p.originX??e.x,oy=p.originY??e.y,base=(Number(p.serial)||0)*.39;
- for(let i=0;i<POSEIDON_SUMMON_COUNT;i++){
-   const a=base+i*Math.PI*2/POSEIDON_SUMMON_COUNT,r=72+(i%2)*15;
+ for(let i=0;i<missing;i++){
+   const a=base+i*Math.PI*2/POSEIDON_SUMMON_COUNT,r=72+((alive+i)%2)*15;
    spawnSeahorse(clamp(ox+Math.cos(a)*r,45,state.world.w-45),
      clamp(oy+Math.sin(a)*r,45,state.world.h-45),e.team,e.color,e.id);
  }
@@ -6622,7 +6627,7 @@ function startWaterAttack(e,kind,target=null){
  e.pendingWaterAttack={
    kind,serial:e.waterAttackSerial,targetId:target.id,originX:e.x,originY:e.y,angle,duration,
    startedAt:now,endAt:now+duration,bodyEndAt:now+(kind==='wave'?POSEIDON_WAVE_BODY_MS:duration),
-   impactAt:now+Math.round(duration*.52),hit1At:now+440,hit2At:now+1020,
+   impactAt:now+Math.round(duration*.52),hit1At:now+(e.type==='seahorse'?300:440),hit2At:now+(e.type==='seahorse'?730:1020),
    hit1Done:false,hit2Done:false,impacted:false,summoned:false,
    summonAt:now+1300,waveStartAt:now+POSEIDON_WAVE_DELAY_MS,
    waveDuration:POSEIDON_WAVE_DURATION_MS,nextTickById:{}
@@ -7345,7 +7350,7 @@ function performAttack(e,preparedCandidates=null){
  e.lastAttackAt=now;
  e.lastCombatAt=now;
  // Cadências separadas: Rei menos sequencial; Guerreiros básicos com pausa mais perceptível.
- e.attackCooldown=e.type==='king'?.65:e.type==='warrior'?.70:.50;
+ e.attackCooldown=e.type==='king'?.90:e.type==='warrior'?.70:.50;
  e.attackAnim=.30;
  e.attackSerial++;
  if(e.type==='king')e.kingNormalCount=Math.min(6,(Number(e.kingNormalCount)||0)+1);
@@ -7755,7 +7760,7 @@ function warCompositionForTeam(teamId){
  return out;
 }
 function enemyWarComposition(teamId){
- const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0,isis:0};
+ const out={warrior:0,brownWarrior:0,king:0,mage:0,golem:0,dragon:0,naja:0,anubis:0,isis:0,seahorse:0,poseidon:0};
  for(const e of state.entities){
    if(!e.alive||e.team===teamId||!(e.type in out))continue;
    out[e.type]++;
@@ -7805,14 +7810,14 @@ function chooseBotWarPurchase(p){
  score.warrior+=enemy.mage*1.45+enemy.golem*.12;
  score.brownWarrior+=enemy.warrior*.75+enemy.brownWarrior*.55+enemy.king*.70+enemy.mage*1.20+enemy.golem*.45;
  score.king+=enemy.warrior*.75+enemy.king*.55+enemy.mage*1.25+enemy.golem*.35;
- score.golem+=(enemy.warrior+enemy.king)*1.65+enemy.mage*.35+enemy.dragon*.45;
- score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55;
- score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70+enemy.naja*.55;
+ score.golem+=(enemy.warrior+enemy.king)*1.65+enemy.mage*.35+enemy.dragon*.45+enemy.seahorse*1.45;
+ score.mage+=enemy.golem*1.85+enemy.dragon*2.15+(enemy.warrior+enemy.king)*.55+enemy.poseidon*1.2+enemy.seahorse*.6;
+ score.dragon+=enemy.golem*1.35+enemy.mage*.85+(enemy.warrior+enemy.king)*.45+enemy.dragon*.70+enemy.naja*.55+enemy.poseidon*.8+enemy.seahorse*.7;
  score.naja+=(enemy.warrior+enemy.brownWarrior+enemy.king)*1.30+enemy.mage*.55+enemy.golem*.35+enemy.naja*.45;
  score.anubis+=enemy.dragon*1.75+enemy.golem*1.15+enemy.mage*.70+(enemy.warrior+enemy.brownWarrior+enemy.king)*.65+enemy.anubis*.45;
  score.isis+=(own.warrior+own.mage+own.naja+own.anubis)*.38+enemy.brownWarrior*.45+enemy.golem*.45+enemy.mage*.25+enemy.isis*.20;
-  score.seahorse+=enemy.mage*.65+enemy.seahorse*.2;
-  score.poseidon+=(enemy.warrior+enemy.seahorse+enemy.brownWarrior)*.6+enemy.golem*.45;
+  score.seahorse+=enemy.mage*.65+enemy.seahorse*.2+enemy.poseidon*.2;
+  score.poseidon+=(enemy.warrior+enemy.seahorse+enemy.brownWarrior)*.6+enemy.golem*.45+enemy.poseidon*.3;
  // Guerreiro não alcança Dragão voando: evita responder a um exército aéreo
  // comprando mais unidades que não conseguem atacá-lo.
  if(enemy.dragon>0){score.warrior*=.10;score.brownWarrior*=.10;score.king*=.10;score.naja*=.25}
