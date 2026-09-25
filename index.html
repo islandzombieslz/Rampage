@@ -4117,7 +4117,7 @@ function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padSt
 function rand(a,b){return a+Math.random()*(b-a)}
 function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
 /* Account progression: one monotonic Firebase profile per authenticated UID, outside ephemeral rooms. */
-const accountProgress={uid:null,unsubscribe:null,totalXp:null,claiming:new Set(),animation:0};
+const accountProgress={uid:null,unsubscribe:null,totalXp:null,claiming:new Set(),claimed:new Set(),animation:0};
 function xpRequiredForLevel(level){
  const n=Math.max(1,Math.floor(Number(level)||1));
  let required=500;
@@ -4176,7 +4176,7 @@ async function claimMatchXP(result){
  if(!user||!Object.prototype.hasOwnProperty.call(result.awards||{},user.uid))return;
  const uid=user.uid,id=result.id,xp=Number(result.awards[uid]);
  if(!Number.isInteger(xp)||xp<50||xp>400)return;
- const key=uid+':'+id;if(accountProgress.claiming.has(key))return;
+ const key=uid+':'+id;if(accountProgress.claimed.has(key)||accountProgress.claiming.has(key))return;
  accountProgress.claiming.add(key);savePendingMatchXP(uid,result);
  try{
    const profile=F.ref(F.firebaseDb,'profiles/'+uid);
@@ -4187,6 +4187,7 @@ async function claimMatchXP(result){
      return {...value,totalXp:total+xp,awards:{...(value.awards||{}),[id]:{xp,mode:result.mode,at:Date.now()}}};
    },undefined,false);
    if(tx.committed||tx.snapshot?.val()?.awards?.[id]){
+     accountProgress.claimed.add(key);
      try{localStorage.removeItem('rampageXpPendingV1:'+uid)}catch(_){}
    }
  }finally{accountProgress.claiming.delete(key)}
@@ -4551,6 +4552,7 @@ function applyRemoteGame(game){
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
+ if(game.matchId&&game.matchId!==state.matchId){state.matchResult=null;state.warGoalSerial=0;state.warGoalEvents=[];clearWarGoalToasts()}
  state.matchId=game.matchId||state.matchId;
  if(game.matchResult)state.matchResult=game.matchResult;
  if(game.matchStats&&typeof game.matchStats==='object')state.matchStats=game.matchStats;
@@ -4997,7 +4999,7 @@ function syncFirebaseRoom(room){
  handleHostCommands(room.commands);
  if(room.status==='lobby'||room.status==='clan')updateLobbyAuthority();
 }
-async function initFirebaseAccountUI(){const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');try{await F.getRedirectResult(F.firebaseAuth)}catch(_){}F.onAuthStateChanged(F.firebaseAuth,user=>{NetworkAdapter.localPlayerId=user?.uid||null;if(user){const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';$('#guestLogin').style.display='none';$('#googleLogin').style.display='none';$('#saveNick').style.display='block';$('#logoutBtn').style.display='block'}else{name.textContent='Entrar';status.textContent='Escolha convidado ou Google.';$('#guestLogin').style.display='block';$('#googleLogin').style.display='block';$('#saveNick').style.display='none';$('#logoutBtn').style.display='none'}})}
+async function initFirebaseAccountUI(){const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');try{await F.getRedirectResult(F.firebaseAuth)}catch(_){}F.onAuthStateChanged(F.firebaseAuth,user=>{NetworkAdapter.localPlayerId=user?.uid||null;watchAccountXP(user);if(user){const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';$('#guestLogin').style.display='none';$('#googleLogin').style.display='none';$('#saveNick').style.display='block';$('#logoutBtn').style.display='block'}else{name.textContent='Entrar';status.textContent='Escolha convidado ou Google.';$('#guestLogin').style.display='block';$('#googleLogin').style.display='block';$('#saveNick').style.display='none';$('#logoutBtn').style.display='none'}})}
 window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
 $('#accountButton').onclick=e=>{e.stopPropagation();$('#accountMenu').classList.toggle('open')};$('#accountMenu').onclick=e=>e.stopPropagation();document.addEventListener('click',()=>$('#accountMenu')?.classList.remove('open'));
 $('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#accountName').textContent=n};
