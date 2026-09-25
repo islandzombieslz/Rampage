@@ -5902,7 +5902,10 @@ function applyCombatHit(target,attacker,amount,options={}){
  }
  if(remaining>0)target.hp-=remaining;
  // O primeiro rompimento do escudo da Naja arma exatamente um especial extra.
- if(beforeShield>0&&target.shield<=0)registerIsisAllyShieldBreak(target);
+ if(beforeShield>0&&target.shield<=0){
+   registerIsisAllyShieldBreak(target);
+   if(state.mode==='war'&&attacker.team!==target.team)addWarGoalProgress(attacker.team,'shields');
+ }
  if(target.type==='naja'&&!target.najaShieldSpecialUsed&&beforeShield>0&&target.shield<=0){
    target.najaShieldSpecialUsed=true;
    target.najaShieldSpecialPending=true;
@@ -5910,7 +5913,10 @@ function applyCombatHit(target,attacker,amount,options={}){
  }
  const afterDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
  const actualDamage=Math.max(0,beforeDurability-afterDurability);
- if(actualDamage>0&&attacker.team&&attacker.team!==target.team)addWarDamageProgress(attacker.team,actualDamage);
+ if(actualDamage>0&&attacker.team&&attacker.team!==target.team){
+   if(state.mode==='war')addWarDamageProgress(attacker.team,actualDamage);
+   recordMatchDamage(attacker,actualDamage);
+ }
 
  // Direção do impacto. Se estiver exatamente sobreposto, usa a direção do atacante.
  let dx=target.x-attacker.x,dy=target.y-attacker.y;
@@ -5988,6 +5994,7 @@ function applyCombatHit(target,attacker,amount,options={}){
 
  if(target.hp<=0){
    target.hp=0;
+   if(!target.deathStarted&&attacker.team!==target.team&&state.mode==='war')addWarGoalProgress(attacker.team,'eliminations');
    startEntityDeath(target,dx,dy);
  }
 }
@@ -7618,11 +7625,12 @@ function setupWarRound(){
  state.entities=[];state.particles=[];state.dragonProjectiles=[];
  warCandidateCache.clear();warCandidateLists.clear();warCombatGrid.clear();warBurningEntities.clear();deadTargetIds.clear();
  warAIGridBuiltAt=0;warSeparationAccumulator=0;
+ clearWarGoalToasts();state.warGoalEvents=[];
  clearEntityVisuals();state.phase='prep';state.prepLeft=15;state.timeLeft=state.warTime;
  state.players.forEach((p,i)=>{
    p.gems=Math.max(0,state.gems+(p.bonusGems||0));
    p.troops=0;
-   p.warGoals={specials:0,ranged:0,damage:0,specialsClaimed:false,rangedClaimed:false,damageClaimed:false};
+   p.warGoals=freshWarGoals();
    p.territory=territoryFor(i,state.players.length);
    // Cada rodada começa: Guerreiro -> Guerreira -> Guerreiro -> Guerreira...
    p.nextWarriorVariant='male';
@@ -7635,37 +7643,37 @@ function setupWarRound(){
    p.botNextPurchaseAt=botPrepNow+350+i*180+rand(0,450);
   });
 }
-function addWarGoalProgress(teamId,kind){
- const goal=WAR_GOALS[kind];
- if(state.mode!=='war'||state.phase!=='combat'||!goal)return;
- const p=state.players.find(player=>player.id===teamId);
- if(!p)return;
- const progress=p.warGoals||(p.warGoals={specials:0,ranged:0,damage:0,specialsClaimed:false,rangedClaimed:false,damageClaimed:false});
- const claimedKey=kind+'Claimed';
- progress[kind]=Math.min(goal.target,(Number(progress[kind])||0)+1);
- if(progress[claimedKey]||progress[kind]<goal.target)return;
- progress[claimedKey]=true;
+function showWarGoalToast(event){
+ const stack=$('#warGoalToasts');if(!stack||$('#gameScreen').style.display==='none')return;
+ const toast=document.createElement('div');toast.className='war-goal-toast';
+ const title=document.createElement('span');title.textContent='✓ '+String(event.label||'META');
+ const reward=document.createElement('strong');reward.textContent='+'+(Number(event.reward)||0)+' 💎';
+ toast.append(title,reward);stack.appendChild(toast);
+ toast.addEventListener('animationend',()=>toast.remove(),{once:true});
+}
+function clearWarGoalToasts(){const stack=$('#warGoalToasts');if(stack)stack.replaceChildren()}
+function awardWarGoal(p,kind){
+ const goal=WAR_GOALS[kind];if(!goal||p.warGoals[kind+'Claimed'])return;
+ p.warGoals[kind+'Claimed']=true;
  p.bonusGems=(Number(p.bonusGems)||0)+goal.reward;
- if(p.id===localWarTeamId()){
-   const label=kind==='specials'?'ESPECIAIS':'DISTÂNCIA';
-   flash(`META ${label} ${goal.target}/${goal.target} • +${goal.reward} 💎`,1.5);
- }
+ const event={serial:++state.warGoalSerial,team:p.id,label:goal.label,reward:goal.reward,round:state.round};
+ state.warGoalEvents.push(event);
+ if(state.warGoalEvents.length>24)state.warGoalEvents.shift();
+ if(p.id===localWarTeamId())showWarGoalToast(event);
+}
+function addWarGoalProgress(teamId,kind,amount=1){
+ const goal=WAR_GOALS[kind];if(state.mode!=='war'||state.phase!=='combat'||!goal)return;
+ const p=state.players.find(player=>player.id===teamId);if(!p)return;
+ const progress=p.warGoals||(p.warGoals=freshWarGoals());
+ progress[kind]=Math.min(goal.target,(Number(progress[kind])||0)+Math.max(0,Number(amount)||0));
+ if(progress[kind]>=goal.target)awardWarGoal(p,kind);
 }
 $('#shopButton').onclick=()=>{configureWarShopForClan();$('#shop').classList.toggle('open')};
 $('#shop').onclick=(ev)=>{if(ev.target===$('#shop'))$('#shop').classList.remove('open')};
 function addWarDamageProgress(teamId,amount){
- const goal=WAR_GOALS.damage;
- if(state.mode!=='war'||state.phase!=='combat'||!goal)return;
- const value=Math.max(0,Number(amount)||0);
- if(value<=0)return;
- const p=state.players.find(player=>player.id===teamId);
- if(!p)return;
- const progress=p.warGoals||(p.warGoals={specials:0,ranged:0,damage:0,specialsClaimed:false,rangedClaimed:false,damageClaimed:false});
- progress.damage=Math.min(goal.target,(Number(progress.damage)||0)+value);
- if(progress.damageClaimed||progress.damage<goal.target)return;
- progress.damageClaimed=true;
- p.bonusGems=(Number(p.bonusGems)||0)+goal.reward;
- if(p.id===localWarTeamId())flash(`META DANO ${goal.target}/${goal.target} • +${goal.reward} 💎`,1.5);
+ if(state.mode!=='war'||state.phase!=='combat'||amount<=0)return;
+ addWarGoalProgress(teamId,'damage',amount);
+ addWarGoalProgress(teamId,'damageHigh',amount);
 }
 function requestWarPurchase(type){
  if(state.phase!=='prep')return;const p=localPlayer();if(!p)return;
@@ -7919,7 +7927,8 @@ function updateWarBotPurchases(now,force=false){
 }
 
 function startCombatPhase(){
- state.phase='combat';state.timeLeft=state.warTime;
+ state.phase='combat';state.timeLeft=state.warTime;state.warGoalSurvivalSecond=0;
+ for(const p of state.players)if(p.troops>=WAR_GOALS.army.target)addWarGoalProgress(p.id,'army',p.troops);
  for(const e of state.entities)if(e.alive&&e.type==='dragon')beginDragonTakeoff(e);
  flash('GUERRA!',1.2);
 }
@@ -8069,6 +8078,10 @@ function updateWar(dt){
      aiFight(e,dt,null,warCandidatesFor(e,warCombatGrid,avoidDragons,now));
    }
    state.timeLeft-=dt;
+   if(state.warTime-state.timeLeft>=WAR_GOALS.survival.target&&!state.warGoalSurvivalSecond){
+     state.warGoalSurvivalSecond=1;
+     for(const p of state.players)if(living.some(e=>e.alive&&e.team===p.id))addWarGoalProgress(p.id,'survival',WAR_GOALS.survival.target);
+   }
    if(warFrameEnemiesByTeam.size<=1 || state.timeLeft<=0)finishWarRound();
  }
 }
