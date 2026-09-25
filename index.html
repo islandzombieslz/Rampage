@@ -1255,6 +1255,7 @@ html,body{
  color:#fff;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px #000,0 -1px 2px #000}
 #accountXpSync{position:absolute;left:0;top:24px;font-size:9px;color:#d4d9dd;white-space:nowrap;text-shadow:0 1px 2px #000}
 #accountXpSync[data-state="pending"]{color:#ffd67c}
+#accountXpSync[data-state="error"]{color:#ff7d7d;max-width:270px;white-space:normal;line-height:1.25}
 #accountXpReward{position:absolute;left:0;top:40px;background:#151a1ede;color:#ffdd63;font-size:11px;font-weight:800;
  padding:5px 8px;border:1px solid #ffe16c88;border-radius:8px;white-space:nowrap;text-shadow:0 1px 3px #000}
 #accountXpReward[hidden]{display:none!important}
@@ -2778,10 +2779,10 @@ window.dispatchEvent(new Event('firebase-ready'));
 <audio id="battleMusic" src="assets/audio/som-de-batalha.mp3" preload="auto" playsinline hidden></audio>
 <div id="assetWarning">Não foi possível carregar um ou mais assets locais do jogo.</div>
 <div id="mobileStartHint"><span>Toque para manter o jogo em tela cheia</span></div>
-<div id="accountXpHud" hidden aria-label="Nível da conta">
- <strong id="accountXpLevel">Nível 1</strong>
- <div id="accountXpTrack"><div id="accountXpFill"></div><span id="accountXpText">0 / 500 XP</span></div>
- <div id="accountXpSync" data-state="pending">Conectando ao Firebase…</div>
+<div id="accountXpHud" aria-label="Nível da conta">
+ <strong id="accountXpLevel">Nível —</strong>
+ <div id="accountXpTrack"><div id="accountXpFill"></div><span id="accountXpText">XP da conta</span></div>
+ <div id="accountXpSync" data-state="pending">Conectando à sua conta…</div>
  <div id="accountXpReward" hidden></div>
 </div>
 <div id="screenTransitionFade" aria-hidden="true"></div>
@@ -2964,7 +2965,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   </div>
 </section>
 
-<section id="gameScreen" class="screen active" style="display:none">
+<section id="gameScreen" class="screen" style="display:none">
   <div id="deathFade"></div>
   <canvas id="world"></canvas>
   <img id="warBarrierTopSprite" draggable="false" alt="">
@@ -3053,9 +3054,21 @@ window.dispatchEvent(new Event('firebase-ready'));
 const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
-  presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,
+  presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
-  async ensureAuth(){const F=await this.waitFirebase();if(F.firebaseAuth.currentUser){this.localPlayerId=F.firebaseAuth.currentUser.uid;return F.firebaseAuth.currentUser}const c=await F.signInAnonymously(F.firebaseAuth);this.localPlayerId=c.user.uid;return c.user},
+  async ensureAuth(){
+     if(this.authPromise)return this.authPromise;
+     this.authPromise=(async()=>{
+       const F=await this.waitFirebase();
+       // Wait for the persisted Google/anonymous session before considering guest sign-in.
+       if(typeof F.firebaseAuth.authStateReady==='function')await F.firebaseAuth.authStateReady();
+       let user=F.firebaseAuth.currentUser;
+       if(!user)user=(await F.signInAnonymously(F.firebaseAuth)).user;
+       this.localPlayerId=user.uid;
+       return user;
+     })();
+     try{return await this.authPromise}finally{this.authPromise=null}
+   },
   get online(){return !!this.roomId},
   get isHost(){return !!this.roomId&&this.hostUid===this.localPlayerId},
   async createRoom(snapshot){
@@ -3760,7 +3773,7 @@ setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'||!window.FirebaseBridge?.firebaseAuth?.currentUser; if(id!=='gameScreen'&&typeof refreshAccountXP==='function')refreshAccountXP(); }
+function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'; if(id!=='gameScreen'&&typeof refreshAccountXP==='function')refreshAccountXP(); }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
 
 /* ==================== TRILHA SONORA ==================== */
@@ -5179,7 +5192,27 @@ function syncFirebaseRoom(room){
  handleHostCommands(room.commands);
  if(room.status==='lobby'||room.status==='clan')updateLobbyAuthority();
 }
-async function initFirebaseAccountUI(){const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');try{await F.getRedirectResult(F.firebaseAuth)}catch(_){}F.onAuthStateChanged(F.firebaseAuth,user=>{NetworkAdapter.localPlayerId=user?.uid||null;watchAccountXP(user);if(user){const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';$('#guestLogin').style.display='none';$('#googleLogin').style.display='none';$('#saveNick').style.display='block';$('#logoutBtn').style.display='block'}else{name.textContent='Entrar';status.textContent='Escolha convidado ou Google.';$('#guestLogin').style.display='block';$('#googleLogin').style.display='block';$('#saveNick').style.display='none';$('#logoutBtn').style.display='none'}})}
+let firebaseAccountUIStarted=false;
+async function initFirebaseAccountUI(){
+ if(firebaseAccountUIStarted)return;
+ firebaseAccountUIStarted=true;
+ const F=await NetworkAdapter.waitFirebase(),status=$('#accountStatus'),name=$('#accountName'),nick=$('#nickInput');
+ F.onAuthStateChanged(F.firebaseAuth,user=>{
+   NetworkAdapter.localPlayerId=user?.uid||null;
+   watchAccountXP(user);
+   if(user){
+     const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');
+     nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';
+     $('#guestLogin').style.display='none';$('#googleLogin').style.display='none';
+     $('#saveNick').style.display='block';$('#logoutBtn').style.display='block';
+   }else{
+     name.textContent='Entrar';status.textContent='Conectando à conta…';
+     $('#guestLogin').style.display='block';$('#googleLogin').style.display='block';
+     $('#saveNick').style.display='none';$('#logoutBtn').style.display='none';
+   }
+ });
+ F.getRedirectResult(F.firebaseAuth).catch(console.error);
+}
 window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
 $('#accountButton').onclick=e=>{e.stopPropagation();$('#accountMenu').classList.toggle('open')};$('#accountMenu').onclick=e=>e.stopPropagation();document.addEventListener('click',()=>$('#accountMenu')?.classList.remove('open'));
 $('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#accountName').textContent=n};
