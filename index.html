@@ -4146,10 +4146,11 @@ function readXPLedger(uid){
  let raw=null;
  try{raw=JSON.parse(localStorage.getItem(xpLedgerKey(uid))||'null')}catch(_){}
  const confirmed=Math.max(0,Math.floor(Number(raw?.confirmed)||0));
- const pending={};
+ const pending={},settled={};
+ for(const id of Object.keys(raw?.settled||{}))if(/^m_[a-z0-9_]{12,70}$/i.test(id))settled[id]=true;
  for(const [id,entry] of Object.entries(raw?.pending||{})){
    const xp=Number(entry?.xp),match=entry?.match;
-   if(/^m_[a-z0-9_]{12,70}$/i.test(id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&match?.awards?.[uid]===xp){
+   if(/^m_[a-z0-9_]{12,70}$/i.test(id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&match?.awards?.[uid]===xp&&!settled[id]){
      pending[id]={xp,match};
    }
  }
@@ -4158,10 +4159,10 @@ function readXPLedger(uid){
  try{
    const old=JSON.parse(localStorage.getItem('rampageXpPendingV1:'+uid)||'null');
    const xp=Number(old?.awards?.[uid]);
-   if(old&&/^m_[a-z0-9_]{12,70}$/i.test(old.id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&!pending[old.id])
+   if(old&&/^m_[a-z0-9_]{12,70}$/i.test(old.id)&&Number.isInteger(xp)&&xp>=50&&xp<=400&&!pending[old.id]&&!settled[old.id])
      pending[old.id]={xp,match:old};
  }catch(_){}
- return {confirmed,pending};
+ return {confirmed,pending,settled};
 }
 function saveXPLedger(uid,ledger){
  try{localStorage.setItem(xpLedgerKey(uid),JSON.stringify(ledger));return true}
@@ -4231,8 +4232,10 @@ function mergeAccountXPServer(uid,data){
  const ledger=accountProgress.ledger;
  if(data&&typeof data==='object'){
    ledger.confirmed=Math.max(ledger.confirmed,Math.max(0,Math.floor(Number(data.totalXp)||0)));
-   for(const id of Object.keys(ledger.pending)){
-     if(Object.prototype.hasOwnProperty.call(data.awards||{},id))delete ledger.pending[id];
+   for(const id of Object.keys(data.awards||{})){
+     if(/^m_[a-z0-9_]{12,70}$/i.test(id)){
+       ledger.settled[id]=true;delete ledger.pending[id];
+     }
    }
  }
  accountProgress.serverConnected=true;accountProgress.syncError='';
@@ -4264,6 +4267,7 @@ function savePendingMatchXP(uid,result){
  const xp=Number(result?.awards?.[uid]),id=String(result?.id||'');
  if(!/^m_[a-z0-9_]{12,70}$/i.test(id)||!Number.isInteger(xp)||xp<50||xp>400)return false;
  const ledger=activeXPLedger(uid);
+ if(ledger.settled[id])return true;
  if(!ledger.pending[id])ledger.pending[id]={xp,match:result};
  const saved=saveXPLedger(uid,ledger);
  if(accountProgress.uid===uid){accountProgress.ledger=ledger;refreshAccountXP()}
@@ -4299,7 +4303,7 @@ async function syncMatchXP(uid,result){
      if(accountProgress.uid===uid)mergeAccountXPServer(uid,data);
      else{
        ledger.confirmed=Math.max(ledger.confirmed,Math.max(0,Math.floor(Number(data.totalXp)||0)));
-       delete ledger.pending[id];saveXPLedger(uid,ledger);
+       delete ledger.pending[id];ledger.settled[id]=true;saveXPLedger(uid,ledger);
      }
      try{localStorage.removeItem('rampageXpPendingV1:'+uid)}catch(_){}
    }else{
@@ -4319,6 +4323,7 @@ async function claimMatchXP(result){
  const xp=Number(result.awards[uid]);
  if(!Number.isInteger(xp)||xp<50||xp>400||!/^m_[a-z0-9_]{12,70}$/i.test(String(result.id||'')))return;
  const ledger=activeXPLedger(uid);
+ if(ledger.settled[result.id])return;
  // A new match is put in the write-ahead queue before the network request.
  if(!ledger.pending[result.id]){
    savePendingMatchXP(uid,result);
