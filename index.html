@@ -2801,6 +2801,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       </div>
       <div id="accountStatus">Firebase carregando...</div>
        <div class="small" style="margin-top:8px"><a href="FIREBASE-XP-SETUP.md" target="_blank" rel="noopener noreferrer" style="color:#ffc857">Configuração do XP na conta</a></div>
+       <button id="retryAccountXpBtn" type="button" style="width:100%;margin-top:8px">Reconectar XP da conta</button>
     </div>
   </div>
   <div class="menu-sprite-actions">
@@ -4222,7 +4223,7 @@ function acceptAccountXPSnapshot(uid,data,epoch=accountProgress.epoch){
  if(ap.uid!==uid||ap.epoch!==epoch||!ap.verified||!ap.connected)return;
  const value=Number(data?.totalXp);
  if(!Number.isSafeInteger(value)||value<0)return;
- ap.totalXp=value;ap.status='ready';ap.error='';
+ ap.totalXp=Math.max(Number(ap.totalXp)||0,value);ap.status='ready';ap.error='';
  for(const id of Object.keys(data?.awards||{})){
    ap.settled.add(id);ap.pending.delete(id);
  }
@@ -4291,6 +4292,8 @@ async function verifyAccountXP(uid,epoch){
    if(!tx.committed||!Number.isSafeInteger(Number(data?.totalXp))||Number(data?.totalXp)<0)
      throw new Error('Perfil de XP inválido ou sem permissão de escrita');
    ap.verified=true;ap.status='ready';ap.error='';ap.totalXp=Number(data.totalXp);
+   // A previously denied subscription is cancelled by RTDB; attach again after verification.
+   subscribeAccountXPProfile(uid,epoch,F);
    for(const id of Object.keys(data.awards||{})){ap.settled.add(id);ap.pending.delete(id);clearLegacyMatchAward(uid,id)}
    refreshAccountXP(true);
    // Recover only old, already-completed match receipts. No local XP balance is read.
@@ -4303,6 +4306,18 @@ async function verifyAccountXP(uid,epoch){
    ap.totalXp=null;refreshAccountXP();console.error('Firebase account XP verification:',err);
    return false;
  }finally{if(ap.uid===uid&&ap.epoch===epoch)ap.checking=false}
+}
+function subscribeAccountXPProfile(uid,epoch,F){
+ const ap=accountProgress;
+ if(ap.unsubscribe){ap.unsubscribe();ap.unsubscribe=null}
+ ap.unsubscribe=F.onValue(F.ref(F.firebaseDb,'profiles/'+uid),snap=>{
+   if(ap.uid!==uid||ap.epoch!==epoch)return;
+   acceptAccountXPSnapshot(uid,snap.val(),epoch);
+ },err=>{
+   if(ap.uid!==uid||ap.epoch!==epoch)return;
+   ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);
+   ap.totalXp=null;refreshAccountXP();console.error('Firebase XP subscription:',err);
+ });
 }
 function watchAccountXP(user){
  const ap=accountProgress;
@@ -4327,14 +4342,7 @@ function watchAccountXP(user){
      if(ap.uid!==uid||ap.epoch!==epoch)return;
      ap.connected=false;ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);ap.totalXp=null;refreshAccountXP();
    });
-   ap.unsubscribe=F.onValue(F.ref(F.firebaseDb,'profiles/'+uid),snap=>{
-     if(ap.uid!==uid||ap.epoch!==epoch)return;
-     acceptAccountXPSnapshot(uid,snap.val(),epoch);
-   },err=>{
-     if(ap.uid!==uid||ap.epoch!==epoch)return;
-     ap.verified=false;ap.status='error';ap.error=accountXPErrorMessage(err);
-     ap.totalXp=null;refreshAccountXP();console.error('Firebase XP subscription:',err);
-   });
+   subscribeAccountXPProfile(uid,epoch,F);
  }).catch(err=>{
    if(ap.uid!==uid||ap.epoch!==epoch)return;
    ap.status='error';ap.error=accountXPErrorMessage(err);refreshAccountXP();console.error(err);
@@ -5229,6 +5237,7 @@ async function initFirebaseAccountUI(){
  F.getRedirectResult(F.firebaseAuth).catch(console.error);
 }
 window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
+$('#retryAccountXpBtn').onclick=()=>{if(accountProgress.uid)void verifyAccountXP(accountProgress.uid,accountProgress.epoch)};
 $('#accountButton').onclick=e=>{e.stopPropagation();$('#accountMenu').classList.toggle('open')};$('#accountMenu').onclick=e=>e.stopPropagation();document.addEventListener('click',()=>$('#accountMenu')?.classList.remove('open'));
 $('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#accountName').textContent=n};
 $('#googleLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();try{const cred=await F.signInWithPopup(F.firebaseAuth,F.googleProvider);NetworkAdapter.localPlayerId=cred.user.uid;if(cred.user.displayName&&!localStorage.getItem('rampageNick'))localStorage.setItem('rampageNick',cred.user.displayName.slice(0,18))}catch(err){if(/popup|blocked|operation-not-supported/i.test(String(err?.code||err?.message)))await F.signInWithRedirect(F.firebaseAuth,F.googleProvider);else{$('#accountStatus').textContent='Erro no login Google.';console.error(err)}}};
