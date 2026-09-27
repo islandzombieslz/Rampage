@@ -1,7 +1,7 @@
 name: Validate Isolated PvP
 on:
   push:
-    branches: [main]
+    branches: [main, 'fix/**']
     paths:
       - 'index.html'
       - 'tests/pvp-smoke.cjs'
