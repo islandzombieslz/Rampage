@@ -348,9 +348,9 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 #entityLayer{position:absolute;inset:0;overflow:hidden;overflow:clip;pointer-events:none;z-index:2;contain:layout paint;transform:translateZ(0)}
 #entityCameraLayer,#combatCameraLayer,#golemRockLayer{position:absolute;inset:0;pointer-events:none;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #entityCameraLayer,#combatCameraLayer{will-change:auto}
-#warBarrierTopSprite,#warBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
-#warBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
-#warBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}
+#warBarrierTopSprite,#warBarrierSprite,#pvpBarrierTopSprite,#pvpBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+#warBarrierTopSprite,#pvpBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
+#warBarrierSprite,#pvpBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}
 #hud{position:absolute;inset:0;pointer-events:none;z-index:5}
 
 .entity-visual{
@@ -1108,8 +1108,10 @@ html,body{
 
 #gameScreen.spectator-mode #world,
 #gameScreen.spectator-mode #warBarrierTopSprite,
+#gameScreen.spectator-mode #pvpBarrierTopSprite,
 #gameScreen.spectator-mode #entityLayer,
-#gameScreen.spectator-mode #warBarrierSprite{
+#gameScreen.spectator-mode #warBarrierSprite,
+#gameScreen.spectator-mode #pvpBarrierSprite{
   filter:grayscale(1) blur(1.7px) contrast(.92) brightness(.78);
 }
 #gameScreen.spectator-mode #world{
@@ -1282,6 +1284,16 @@ html,body{
 @media (max-height:500px){#lobbyScreen.pvp-lobby #playerList{max-height:30vh!important}
  #lobbyScreen.pvp-lobby .pvp-player-card{min-height:63px}#lobbyScreen.pvp-lobby .pvp-player-card img{height:38px}
  #pvpHeroChoices button img{height:38px}}
+/* PvP-only vitality, round and world damage presentation. */
+#gameScreen:not(.pvp-mode) #pvpStatusHud{display:none!important}
+#gameScreen.pvp-mode #hudMain,#gameScreen.pvp-mode #hudSub,#gameScreen.pvp-mode #aliveCount{display:none!important}
+#pvpStatusHud{position:absolute;right:calc(var(--safe-right) + 9px);top:calc(var(--safe-top) + 5px);
+ z-index:25;min-width:112px;padding:7px 10px;border:1px solid #ffffff36;border-radius:10px;
+ background:#111923b8;box-shadow:0 3px 14px #0006;backdrop-filter:blur(5px);text-align:right;
+ color:#fff;font:900 clamp(12px,1.6vw,17px)/1.4 system-ui,sans-serif;text-shadow:0 1px 2px #000}
+#pvpStatusHud .pvp-health{color:#ff8589}#pvpStatusHud .pvp-shield{color:#83caff}
+#pvpRoundCounter{border-top:1px solid #ffffff38;margin-top:5px;padding-top:3px;color:#fff;font-size:13px}
+@media (pointer:coarse){#pvpStatusHud{right:calc(var(--safe-right) + 5px);top:calc(var(--safe-top) + 3px);padding:4px 7px;min-width:94px}}
 /* ===== LOGIN FIREBASE ===== */
 #accountPanel{position:absolute;top:calc(var(--safe-top) + 4px);right:var(--safe-right);z-index:50;display:flex;align-items:center;gap:8px}
 #accountButton{padding:8px 12px;min-height:38px;border-radius:12px;background:rgba(13,17,23,.84);backdrop-filter:blur(8px)}
@@ -3025,10 +3037,13 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div id="deathFade"></div>
   <canvas id="world"></canvas>
   <img id="warBarrierTopSprite" draggable="false" alt="">
+  <img id="pvpBarrierTopSprite" draggable="false" alt="">
   <div id="entityLayer"><div id="entityCameraLayer"></div></div>
   <div id="combatFxLayer"><div id="combatCameraLayer"></div><div id="golemRockLayer"></div></div>
   <img id="warBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
+  <img id="pvpBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
   <div id="hud">
+    <div id="pvpStatusHud" aria-label="Vida, escudo e rodada PvP"><div class="pvp-health">❤ <span id="pvpHP">200/200</span></div><div class="pvp-shield">◆ <span id="pvpShield">100/100</span></div><div id="pvpRoundCounter">1/2</div></div>
     <div class="hud-top">
       <div class="hud-box">
         <div id="hudMain">Rodada 1/2</div>
@@ -5915,6 +5930,10 @@ if(warBarrierTopSprite&&warBarrierSprite)warBarrierTopSprite.src=warBarrierSprit
 const warFloorImage=new Image();
 warFloorImage.decoding='async';
 warFloorImage.src='assets/arena/floor.png';
+// PvP scene handles are independent; their initial assets match Clan War.
+const pvpFloorImage=new Image();pvpFloorImage.decoding='async';pvpFloorImage.src='assets/arena/floor.png';
+const pvpBarrierSprite=$('#pvpBarrierSprite'),pvpBarrierTopSprite=$('#pvpBarrierTopSprite');
+if(pvpBarrierSprite&&pvpBarrierTopSprite)pvpBarrierTopSprite.src=pvpBarrierSprite.src;
 
 function syncWarBarrierNode(node,x,y,w,h){
  if(!node)return;
@@ -5939,6 +5958,15 @@ function syncWarArenaOverlay(left,top,zoom){
  syncWarBarrierNode(warBarrierSprite,x,y,w,h);
 }
 
+function syncPVPArenaOverlay(left,top,zoom){
+ if(!pvpBarrierSprite)return;
+ if(state.mode!=='pvp'){
+  hideWarBarrierNode(pvpBarrierTopSprite);hideWarBarrierNode(pvpBarrierSprite);return;
+ }
+ const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
+ syncWarBarrierNode(pvpBarrierTopSprite,x,y,w,h);
+ syncWarBarrierNode(pvpBarrierSprite,x,y,w,h);
+}
 function isMobileLike(){
   return matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
@@ -7084,7 +7112,7 @@ function chooseNajaEmergenceTarget(e){
    y=bestMembers.reduce((sum,t)=>sum+t.y,0)/bestMembers.length;
  }
  const b=state.mode==='pvp'?
-   {left:42,right:state.world.w-42,top:42,bottom:state.world.h-42}:warArenaBounds(e.r||36);
+   pvpArenaBounds(e.r||36):warArenaBounds(e.r||36);
  x=clamp(x,b.left,b.right);y=clamp(y,b.top,b.bottom);
  return {x,y,targetId:best.id,count:bestCount};
 }
@@ -8072,6 +8100,11 @@ function advancePVERound(message='RODADA CONCLUÍDA'){
 
 /* ==================== PVP: SEPARATE COMBAT ENGINE ====================
    Never calls War's unit AI, attack dispatch or War shop. */
+// PvP map geometry does not depend on future Clan War map changes.
+const PVP_ARENA=Object.freeze({w:1850,h:1542,inset:Object.freeze({left:270,right:270,top:275,bottom:245})});
+function pvpArenaBounds(r=0){const b=PVP_ARENA.inset;return {left:b.left+r,right:state.world.w-b.right-r,top:b.top+r,bottom:state.world.h-b.bottom-r}}
+function pvpClampEntity(e){if(state.mode!=='pvp'||!e?.alive)return;const b=pvpArenaBounds(e.r||30);e.x=clamp(e.x,b.left,b.right);e.y=clamp(e.y,b.top,b.bottom)}
+function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entities)pvpClampEntity(e)}
 const PVP_BASE=Object.freeze({hp:200,shield:100,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.70,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
@@ -8294,7 +8327,7 @@ function pvpSpawnWave(index){
  return true;
 }
 function beginPVPRound(){
- state.world.w=2200;state.world.h=1400;state.entities=[];state.particles=[];state.dragonProjectiles=[];
+ state.world.w=PVP_ARENA.w;state.world.h=PVP_ARENA.h;state.entities=[];state.particles=[];state.dragonProjectiles=[];
  warBurningEntities.clear();warFrameEnemiesByTeam.clear();
  clearEntityVisuals();
  // PvP attack GIFs last several seconds; allow time to clear the four encounters.
@@ -8306,7 +8339,7 @@ function beginPVPRound(){
  const humans=state.players.filter(p=>p.human);
  humans.forEach((p,i)=>{
    const a=i*Math.PI*2/Math.max(1,humans.length);
-   pvpBaseEntity(pvpHeroForPlayer(p),1100+Math.cos(a)*170,700+Math.sin(a)*170,p.id,p.color,p.id,false);
+   pvpBaseEntity(pvpHeroForPlayer(p),state.world.w/2+Math.cos(a)*150,state.world.h/2+Math.sin(a)*150,p.id,p.color,p.id,false);
  });
  pvpSpawnWave(0);
  pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimDelta=0;
@@ -9915,6 +9948,7 @@ function updateEntities(dt){
    constrainWarEntitiesToArena();
  }else{
    separateLivingEntities();
+   if(state.mode==='pvp')pvpClampAllEntities();
  }
  cleanupDeadEntities(now);
 }
@@ -9998,12 +10032,13 @@ function draw(){
  const floorRight=Math.min(state.world.w,right),floorBottom=Math.min(state.world.h,bottom);
  const floorW=Math.max(0,floorRight-floorLeft),floorH=Math.max(0,floorBottom-floorTop);
  if(floorW>0&&floorH>0){
-   if(state.mode==='war'&&warFloorImage.complete&&warFloorImage.naturalWidth>0){
-     ctx.drawImage(warFloorImage,
-       floorLeft/state.world.w*warFloorImage.naturalWidth,
-       floorTop/state.world.h*warFloorImage.naturalHeight,
-       floorW/state.world.w*warFloorImage.naturalWidth,
-       floorH/state.world.h*warFloorImage.naturalHeight,
+   const sceneFloor=state.mode==='pvp'?pvpFloorImage:state.mode==='war'?warFloorImage:null;
+   if(sceneFloor&&sceneFloor.complete&&sceneFloor.naturalWidth>0){
+     ctx.drawImage(sceneFloor,
+       floorLeft/state.world.w*sceneFloor.naturalWidth,
+       floorTop/state.world.h*sceneFloor.naturalHeight,
+       floorW/state.world.w*sceneFloor.naturalWidth,
+       floorH/state.world.h*sceneFloor.naturalHeight,
        floorLeft,floorTop,floorW,floorH);
    }else{
      ctx.fillStyle='#665642';
@@ -10042,11 +10077,12 @@ function draw(){
    ctx.globalAlpha=clamp(p.life*2,0,1);ctx.fillStyle=p.color;ctx.fillRect(p.x-3,p.y-3,6,6);
  });
  ctx.globalAlpha=1;
- if(state.mode!=='war'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
+ if(state.mode==='pve'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
  if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
  ctx.restore();
 
  syncWarArenaOverlay(left,top,zoom);
+ syncPVPArenaOverlay(left,top,zoom);
  const domCamera=prepareCameraComposite(left,top,zoom);
  syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncIsisPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
