@@ -62,13 +62,23 @@ assert.equal(run('pvpDamageForRange(0)'),40);
 assert.equal(run('pvpDamageForRange(112)'),25);
 assert.equal(run('pvpDamageForRange(0,true)'),100);
 assert.equal(run('pvpDamageForRange(270,true)'),80);
+assert.equal(run('PVP_ARENA.w'),1850);assert.equal(run('PVP_ARENA.h'),1542);
+assert.equal(run('pvpArenaBounds(30).left'),300);
+assert.equal(run('pvpArenaBounds(30).right'),1550);
+assert.equal(run('pvpNPCRecovery({type:"dragon"},performance.now())-performance.now()'),2000);
+assert.equal(run('pvpNPCRecovery({type:"golem",pendingGolemAttack:{endAt:performance.now()+3100}},performance.now())-performance.now()'),4200);
+assert(html.includes("state.mode==='pvp'&&e.pvpWarAI?3:POSEIDON_MELEE_ATTACKS_PER_CYCLE"),'PvP Poseidon summons after 3 normals');
+assert(html.includes('id="pvpStatusHud"')&&html.includes('id="pvpHP"')&&html.includes('id="pvpShield"'),'PvP-only vitality HUD');
+assert(html.includes("const sceneFloor=state.mode==='pvp'?pvpFloorImage"),'independent PvP floor');
+assert(html.includes('id="pvpBarrierSprite"'),'independent PvP barrier');
+assert(html.includes('drawPVPDamageNumbers(ctx,renderFrameNow)'),'floating PvP damage overlay');
 assert.equal(run('pvpCameraZoom(1920,1080)'),1.8);
 mobile=true;assert(run('pvpCameraZoom(850,390)')<1.8);
 
 const hero=run('pvpBaseEntity(PVP_HERO_BY_ID.warrior,500,500,"u1","#aaa","u1",false)');
 const foe=run('pvpBaseEntity({...PVP_ENEMY_HEROES.naja,id:"naja"},595,500,"pvp-enemy","#f77",null,true)');
 assert.equal(hero.maxHp,200);assert.equal(hero.maxShield,100);assert.equal(hero.speed,195);
-assert.equal(foe.maxHp,100);assert.equal(foe.maxShield,50);assert.equal(foe.speed,97.5);
+assert.equal(foe.maxHp,150);assert.equal(foe.maxShield,100);assert.equal(foe.speed,117);
 assert.equal(foe.damage,20);assert.equal(foe.controlled,false);
 assert(run('pvpBasicAttack(state.entities[0])'));
 assert.equal(damageCalls.length,1);assert(damageCalls[0].damage>=25&&damageCalls[0].damage<=40);
@@ -144,6 +154,27 @@ for(let wave=1;wave<4;wave++){
  }
 }
 assert.equal(run('PVP_ENEMY_WAVES.length'),4);
+state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
+ {id:'npc_1',name:'NPC 1',human:false,pvpHero:'king',color:'#e3b341'},
+ {id:'npc_2',name:'NPC 2',human:false,pvpHero:'mage',color:'#3fb950'}];
+net.hostUid='u1';run('beginPVPRound()');
+assert.equal(state.world.w,1850);assert.equal(state.world.h,1542);
+const allied=state.entities.filter(e=>e.pvpAllyBot);
+assert.deepEqual(allied.map(e=>e.type),['king','mage']);
+assert(allied.every(e=>e.team==='u1'&&e.maxHp===200&&e.maxShield===100&&e.speed===195&&!e.pvpWarAI));
+assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
+run('updatePVP(.016)');
+state.pvpDamageSeq=0;state.pvpDamageEvents=[];
+run('recordPVPDamage(state.entities[0],15)');
+assert.equal(state.pvpDamageEvents[0].amount,15);
+assert.equal(state.pvpDamageEvents[0].serial,1);
+const drawing=[];
+const paint={save(){},restore(){},strokeText:(...a)=>drawing.push(a),fillText(){}};
+ctx.paint=paint;run('drawPVPDamageNumbers(paint,performance.now()+500)');
+assert.equal(drawing[0][0],'-15');
+run('drawPVPDamageNumbers(paint,performance.now()+1100)');
+assert.equal(drawing.length,1,'damage text expires after one second');
+console.log('PvP isolated arena, allied NPCs, NPC recovery, Poseidon and damage text: PASS');
 console.log('PvP real NPC dispatcher, dragon takeoff, remote state and sequential enemy groups: PASS');
 console.log('PvP hero registry, independent stats, mage specials, summons, power damage, mobile camera: PASS');
 
