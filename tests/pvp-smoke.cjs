@@ -161,7 +161,7 @@ state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
 net.hostUid='u1';run('beginPVPRound()');
 assert.equal(state.world.w,1850);assert.equal(state.world.h,1542);
 const allied=state.entities.filter(e=>e.pvpAllyBot);
-assert.deepEqual(allied.map(e=>e.type),['king','mage']);
+assert.deepEqual([...allied.map(e=>e.type)],['king','mage']);
 assert(allied.every(e=>e.team==='u1'&&e.maxHp===200&&e.maxShield===100&&e.speed===195&&!e.pvpWarAI));
 assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
 run('updatePVP(.016)');
