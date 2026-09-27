@@ -89,7 +89,18 @@ async function main(){
    await page.locator('#createRoomBtn').click();
    await page.locator('#lobbyScreen.active').waitFor({timeout:12000});
    assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card').count(),16,'four-by-four PvP lobby grid');
-   await page.locator('#playerList .pvp-player-card.mine').click();
+   try{
+     await page.locator('#playerList .pvp-player-card.mine').click({timeout:12000});
+   }catch(err){
+     const debug=await page.evaluate(()=>({
+       cards:[...document.querySelectorAll('#playerList .pvp-player-card')].map(e=>({class:e.className,text:e.textContent})).slice(0,4),
+       lobby:document.querySelector('#lobbyScreen')?.className,
+       status:document.querySelector('#accountXpSync')?.textContent,
+       roomCode:document.querySelector('#roomCode')?.textContent
+     }));
+     console.error('PvP lobby diagnostics:',debug,'Page errors:',errors);
+     throw err;
+   }
    await page.locator('#pvpPicker:not([hidden])').waitFor();
    await page.locator('#pvpHeroChoices button').filter({hasText:'Mago do Egito'}).first().click();
    await page.locator('#pvpHeroConfirm').click();
