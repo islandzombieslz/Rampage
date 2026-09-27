@@ -63,6 +63,7 @@ assert.equal(run('pvpDamageForRange(112)'),25);
 assert.equal(run('pvpDamageForRange(0,true)'),100);
 assert.equal(run('pvpDamageForRange(270,true)'),80);
 assert.equal(run('PVP_ARENA.w'),1850);assert.equal(run('PVP_ARENA.h'),1542);
+state.world.w=1850;state.world.h=1542;
 assert.equal(run('pvpArenaBounds(30).left'),300);
 assert.equal(run('pvpArenaBounds(30).right'),1550);
 assert.equal(run('pvpNPCRecovery({type:"dragon"},performance.now())-performance.now()'),2000);
@@ -71,7 +72,7 @@ assert(html.includes("state.mode==='pvp'&&e.pvpWarAI?3:POSEIDON_MELEE_ATTACKS_PE
 assert(html.includes('id="pvpStatusHud"')&&html.includes('id="pvpHP"')&&html.includes('id="pvpShield"'),'PvP-only vitality HUD');
 assert(html.includes("const sceneFloor=state.mode==='pvp'?pvpFloorImage"),'independent PvP floor');
 assert(html.includes('id="pvpBarrierSprite"'),'independent PvP barrier');
-assert(html.includes('drawPVPDamageNumbers(ctx,renderFrameNow)'),'floating PvP damage overlay');
+assert(html.includes('drawPVPDamageNumbers(pvpDamageCtx,renderFrameNow)'),'foreground PvP damage overlay');
 assert.equal(run('pvpCameraZoom(1920,1080)'),1.8);
 mobile=true;assert(run('pvpCameraZoom(850,390)')<1.8);
 
