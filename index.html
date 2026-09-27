@@ -3592,6 +3592,7 @@ const state = {
   round:1, running:false, phase:'idle', timeLeft:0, prepLeft:45,
   matchId:null,matchStats:{},matchResult:null,warGoalSerial:0,warGoalEvents:[],warGoalSurvivalSecond:0,
   entities:[], particles:[], lastWaveAt:0, roundScores:{},
+   pvpDamageSeq:0,pvpDamageEvents:[],
   camera:{x:0,y:0,zoom:1,targetX:0,targetY:0,targetZoom:1,intro:false,introStart:0,introDuration:3000,manual:false,velX:0,velY:0},
   world:{w:2200,h:1400}, nextId:1,
   fps:60, fpsFrames:0, fpsLast:performance.now(), hudLast:0,
@@ -4787,6 +4788,8 @@ function serializeGame(){
        }
        return out;
      });
+ const pvpDamageEvents=state.mode==='pvp'?(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS)
+   .map(h=>({serial:h.serial,targetId:h.targetId,x:h.x,y:h.y,amount:h.amount,remainingMs:Math.max(0,PVP_DAMAGE_TEXT_MS-(now-h.at))})):[];
  const dragonProjectiles=(state.dragonProjectiles||[]).map(p=>({
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0,
@@ -4794,7 +4797,7 @@ function serializeGame(){
  }));
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles,
    matchId:state.matchId,matchResult:state.matchResult,matchStats:state.matchStats,
-   warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents};
+   warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents,pvpDamageEvents};
 }
 
 const REMOTE_WAR_RENDER_DELAY_MS=160;
@@ -4856,7 +4859,7 @@ function applyRemoteGame(game){
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
- if(game.matchId&&game.matchId!==state.matchId){state.matchResult=null;state.warGoalSerial=0;state.warGoalEvents=[];clearWarGoalToasts()}
+ if(game.matchId&&game.matchId!==state.matchId){state.matchResult=null;state.warGoalSerial=0;state.warGoalEvents=[];pvpRemoteDamageSeen=0;state.pvpDamageEvents=[];clearWarGoalToasts()}
  state.matchId=game.matchId||state.matchId;
  if(game.matchResult)state.matchResult=game.matchResult;
  if(game.matchStats&&typeof game.matchStats==='object')state.matchStats=game.matchStats;
@@ -4867,6 +4870,17 @@ function applyRemoteGame(game){
    state.warGoalEvents=game.warGoalEvents;
  }
  if(game.matchResult)claimMatchXP(game.matchResult).catch(console.error);
+ if(state.mode==='pvp'&&Array.isArray(game.pvpDamageEvents)){
+  const list=state.pvpDamageEvents||(state.pvpDamageEvents=[]);
+  for(const hit of game.pvpDamageEvents){
+   const serial=Number(hit.serial)||0;
+   if(serial<=pvpRemoteDamageSeen)continue;
+   pvpRemoteDamageSeen=serial;
+   const remaining=clamp(Number(hit.remainingMs)||0,0,PVP_DAMAGE_TEXT_MS);
+   if(remaining>0)list.push({...hit,serial,at:remoteNow-(PVP_DAMAGE_TEXT_MS-remaining)});
+  }
+  if(list.length>90)list.splice(0,list.length-90);
+ }
  if(Array.isArray(game.entities)){
    remotePreviousEntities.clear();
    for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
@@ -6525,6 +6539,9 @@ function applyCombatHit(target,attacker,amount,options={}){
  }
  const afterDurability=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
  const actualDamage=Math.max(0,beforeDurability-afterDurability);
+ // PVP-ONLY DAMAGE TEXT: shield and HP hits use actual durability removed.
+ if(state.mode==='pvp'&&actualDamage>0&&attacker.team!==target.team)recordPVPDamage(target,actualDamage);
+ // END PVP-ONLY DAMAGE TEXT
  if(actualDamage>0&&attacker.team&&attacker.team!==target.team){
    if(state.mode==='war')addWarDamageProgress(attacker.team,actualDamage);
    recordMatchDamage(attacker,actualDamage);
@@ -8118,6 +8135,31 @@ const PVP_ENEMY_WAVES=Object.freeze([
  {name:'GOLEM',units:[['golem',1]]}
 ]);
 let pvpNpcSequence=0,pvpLastWave=-1,pvpNextWaveAt=0,pvpLastEnemyClan='warriors';
+let pvpRemoteDamageSeen=0;
+const PVP_DAMAGE_TEXT_MS=1000;
+function recordPVPDamage(target,amount){
+ if(state.mode!=='pvp'||!target||!(amount>0))return;
+ const list=state.pvpDamageEvents||(state.pvpDamageEvents=[]);
+ list.push({serial:++state.pvpDamageSeq,targetId:target.id,x:target.x,y:target.y,
+  amount:Math.round(amount*10)/10,at:performance.now()});
+ if(list.length>90)list.splice(0,list.length-90);
+}
+function drawPVPDamageNumbers(ctx,now){
+ if(state.mode!=='pvp')return;
+ for(const hit of state.pvpDamageEvents||[]){
+  const t=(now-hit.at)/PVP_DAMAGE_TEXT_MS;
+  if(t<0||t>=1)continue;
+  const alpha=Math.min(1,t/.12,(1-t)/.43);
+  const offset=((hit.serial%5)-2)*8;
+  ctx.save();ctx.globalAlpha=clamp(alpha,0,1);
+  ctx.font='900 22px system-ui, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.lineWidth=4;ctx.strokeStyle='#110a0bea';ctx.fillStyle='#ffdf9f';
+  const value='-'+hit.amount;
+  ctx.strokeText(value,hit.x+offset,hit.y-64-48*t);
+  ctx.fillText(value,hit.x+offset,hit.y-64-48*t);ctx.restore();
+ }
+}
+
 let pvpVisualLast=0,pvpAttackTargetId=null;
 const pvpFlameImages={};
 function pvpCameraZoom(w,h){
@@ -8380,6 +8422,7 @@ function pvpSpawnWave(index){
 function beginPVPRound(){
  state.world.w=PVP_ARENA.w;state.world.h=PVP_ARENA.h;state.entities=[];state.particles=[];state.dragonProjectiles=[];
  warBurningEntities.clear();warFrameEnemiesByTeam.clear();
+ state.pvpDamageEvents=[];
  clearEntityVisuals();
  // PvP attack GIFs last several seconds; allow time to clear the four encounters.
  state.pvpRoundDuration=Math.max(state.pveTime,180);
@@ -8406,7 +8449,7 @@ function beginPVPRound(){
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
- beginMatchTracking();state.round=1;state.phase='combat';state.running=true;
+ beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
  beginPVPRound();
@@ -8492,6 +8535,7 @@ function updatePVP(dt){
    e.pvpSpecialReadyAt=now+10000;e.pvpSpecialWindowMs=10000;
  }
  pvpExpireSummons(now);
+ state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
  state.timeLeft-=dt;
  const enemiesAlive=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
  if(enemiesAlive)pvpNextWaveAt=0;
@@ -10143,7 +10187,7 @@ function draw(){
  });
  ctx.globalAlpha=1;
  if(state.mode==='pve'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
- if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
+ if(state.mode==='pvp'){drawPVPEffects(ctx,renderFrameNow);drawPVPDamageNumbers(ctx,renderFrameNow)}
  ctx.restore();
 
  syncWarArenaOverlay(left,top,zoom);
