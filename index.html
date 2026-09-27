@@ -5621,6 +5621,11 @@ function renderPVPPlayers(humans,npcs){
    card.append(nick,img,ready);grid.appendChild(card);
    if(mine)card.onclick=()=>openPVPCharacterPicker();
  }
+ for(let i=humans.length+npcs.length;i<16;i++){
+   const blank=document.createElement('div');blank.className='pvp-player-card empty';
+   blank.setAttribute('aria-hidden','true');
+   blank.style.opacity='.22';grid.appendChild(blank);
+ }
  const count=$('#npcCountVal');if(count)count.textContent=npcs.length;
  const hint=$('#participantLimitHint');if(hint)hint.textContent='PvP: escolha seu herói e confirme. Grade de até 4 × 4 cards; máximo de 10 participantes.';
  updatePVPLobbyAuthority();
@@ -8207,6 +8212,11 @@ function pvpTickPower(e,now,steer=0){
  }
 }
 function pvpExpireSummons(now){
+ for(const minion of [...state.entities]){
+   if(!minion.alive||minion.pvpSummonerId==null)continue;
+   const owner=state.entities.find(e=>e.id===minion.pvpSummonerId);
+   if(!owner?.alive||now>=owner.pvpSpecialReadyAt)startEntityDeath(minion);
+ }
  for(const owner of state.entities){
    if(!owner.pvpSummonedIds?.length)continue;
    if(owner.alive&&now<owner.pvpSpecialReadyAt)continue;
