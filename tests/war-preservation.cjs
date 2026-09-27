@@ -19,8 +19,12 @@ for(const [name,a,b,checksum,size] of expected){
  const i=js.indexOf(a),j=js.indexOf(b,i+a.length);
  assert(i>=0&&j>i,'missing '+name);
  const actual=js.slice(i,j);
- assert.equal(actual.length,size,name+' source length differs from pre-PvP War baseline');
- assert.equal(hash(actual),checksum,name+' changed unexpectedly');
+ // Ignore only the explicitly mode-gated PvP NPC balance branch. The original
+ // damage function must otherwise match the recorded Clan War baseline byte-for-byte.
+ const preserved=name==='combat damage'?actual.replace(/\n \/\/ PVP-ONLY NPC DAMAGE:[\s\S]*?\n \/\/ END PVP-ONLY NPC DAMAGE/,''):actual;
+ if(name==='combat damage')assert.notEqual(preserved,actual,'expected isolated PvP NPC branch');
+ assert.equal(preserved.length,size,name+' source length differs from pre-PvP War baseline');
+ assert.equal(hash(preserved),checksum,name+' changed unexpectedly');
 }
 assert(html.includes('#lobbyScreen.war-lobby>.card{'));
 assert(html.includes('assets/ui/mestre-da-guerra-menu.png'));
