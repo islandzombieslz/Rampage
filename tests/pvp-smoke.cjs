@@ -41,6 +41,13 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
 });
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
 vm.runInContext(section('const PVP_BASE=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
+const warCalls=[];
+ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
+ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
+ctx.warBurningEntities=new Set();
+ctx.rebuildWarEntityIdMap=()=>new Map(state.entities.map(e=>[e.id,e]));
+ctx.updateDragonProjectiles=()=>{};
+ctx.updateDragonBurns=()=>{};
 const run=expr=>vm.runInContext(expr,ctx);
 const heroes=run('PVP_HEROES'),base=run('PVP_BASE');
 assert.equal(heroes.length,8);
@@ -108,6 +115,35 @@ assert(html.includes("state.mode==='pvp'?pvpCameraZoom(vw,vh):1.80"));
 assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
 assert(html.includes("if(state.mode==='pvp')syncPVPPowerEffects("),'animated mage power');
+// Wave staging and the actual War AI dispatch are PvP-only.
+assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs must use real War GIF states');
+assert(html.includes("if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now))"),'real NPC attack state must reach remote peers');
+assert(html.includes('updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);'),'PvP projectiles and burns must simulate');
+assert(html.includes("state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode"),'NPC damage needs PvP-only tuning');
+state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'}];
+run('beginPVPRound()');
+assert.equal(state.pvpRoundDuration,180);
+assert.equal(run('pvpLastWave'),0);
+assert.deepEqual(state.entities.filter(e=>e.team==='pvp-enemy').map(e=>e.type),['dragon','dragon']);
+assert(state.entities.filter(e=>e.type==='dragon').every(e=>e.dragonFlightState==='takeoff'));
+run('updatePVP(.016)');
+assert(warCalls.includes('dragon'),'PvP NPC invokes the real NPC AI dispatcher');
+for(let wave=1;wave<4;wave++){
+ state.entities.filter(e=>e.team==='pvp-enemy').forEach(e=>e.alive=false);
+ run('updatePVP(.016)');
+ assert.equal(run('pvpLastWave'),wave-1,'next group waits for its delay');
+ now+=1250;run('updatePVP(.016)');
+ assert.equal(run('pvpLastWave'),wave);
+ const kinds=state.entities.filter(e=>e.alive&&e.team==='pvp-enemy').map(e=>e.type);
+ const expected=[['poseidon','seahorse','seahorse','seahorse','seahorse','seahorse'],['anubis','naja'],['golem']][wave-1];
+ assert.deepEqual(kinds,expected,'wave '+wave+' composition and no previous enemies');
+ if(wave===1){
+   const poseidon=state.entities.find(e=>e.alive&&e.type==='poseidon');
+   assert(state.entities.filter(e=>e.alive&&e.type==='seahorse').every(e=>e.waterSummonerId===poseidon.id));
+ }
+}
+assert.equal(run('PVP_ENEMY_WAVES.length'),4);
+console.log('PvP real NPC dispatcher, dragon takeoff, remote state and sequential enemy groups: PASS');
 console.log('PvP hero registry, independent stats, mage specials, summons, power damage, mobile camera: PASS');
 
 async function testPVPReadyLobby(){
