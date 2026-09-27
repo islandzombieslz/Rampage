@@ -8063,7 +8063,7 @@ let pvpVisualLast=0,pvpAttackTargetId=null;
 const pvpFlameImages={};
 function pvpCameraZoom(w,h){
  // The desktop camera is unchanged. Smaller screens see substantially more arena.
- if(!isMobileLike())return 1.80;
+ if(!isMobileLike()&&Math.min(w,h)>=650)return 1.80;
  return clamp(Math.max(.73,Math.min(w/790,h/480)*1.1),.82,1.23);
 }
 function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
