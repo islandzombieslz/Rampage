@@ -1285,7 +1285,8 @@ html,body{
  #lobbyScreen.pvp-lobby .pvp-player-card{min-height:63px}#lobbyScreen.pvp-lobby .pvp-player-card img{height:38px}
  #pvpHeroChoices button img{height:38px}}
 /* PvP-only vitality, round and world damage presentation. */
-#gameScreen:not(.pvp-mode) #pvpStatusHud{display:none!important}
+#gameScreen:not(.pvp-mode) #pvpStatusHud,#gameScreen:not(.pvp-mode) #pvpDamageCanvas{display:none!important}
+#pvpDamageCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;touch-action:none}
 #gameScreen.pvp-mode #hudMain,#gameScreen.pvp-mode #hudSub,#gameScreen.pvp-mode #aliveCount{display:none!important}
 #pvpStatusHud{position:absolute;right:calc(var(--safe-right) + 9px);top:calc(var(--safe-top) + 5px);
  z-index:25;min-width:112px;padding:7px 10px;border:1px solid #ffffff36;border-radius:10px;
@@ -3042,6 +3043,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div id="combatFxLayer"><div id="combatCameraLayer"></div><div id="golemRockLayer"></div></div>
   <img id="warBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
   <img id="pvpBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
+  <canvas id="pvpDamageCanvas" aria-hidden="true"></canvas>
   <div id="hud">
     <div id="pvpStatusHud" aria-label="Vida, escudo e rodada PvP"><div class="pvp-health">❤ <span id="pvpHP">200/200</span></div><div class="pvp-shield">◆ <span id="pvpShield">100/100</span></div><div id="pvpRoundCounter">1/2</div></div>
     <div class="hud-top">
@@ -5934,6 +5936,7 @@ $('#startWarBtn').onclick=async()=>{
 
 /* ==================== CANVAS ==================== */
 const canvas=$('#world'), ctx=canvas.getContext('2d');
+const pvpDamageCanvas=$('#pvpDamageCanvas'),pvpDamageCtx=pvpDamageCanvas.getContext('2d');
 const landscapeRoot=document.getElementById('landscapeRoot');
 const mobileStartHint=document.getElementById('mobileStartHint');
 const assetWarning=document.getElementById('assetWarning');
@@ -6140,6 +6143,9 @@ function resize(){
   canvas.style.height=h+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.imageSmoothingEnabled=true;
+  pvpDamageCanvas.width=canvas.width;pvpDamageCanvas.height=canvas.height;
+  pvpDamageCanvas.style.width=w+'px';pvpDamageCanvas.style.height=h+'px';
+  pvpDamageCtx.setTransform(dpr,0,0,dpr,0,0);
   if(state.mode==='war'){
     if(!isMobileLike() && !state.camera.manual){
       // Keep the complete arena in view after F11 or desktop window resize.
@@ -10188,8 +10194,14 @@ function draw(){
  });
  ctx.globalAlpha=1;
  if(state.mode==='pve'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
- if(state.mode==='pvp'){drawPVPEffects(ctx,renderFrameNow);drawPVPDamageNumbers(ctx,renderFrameNow)}
+ if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
  ctx.restore();
+ // PvP numbers use a dedicated foreground canvas: never hidden behind sprites.
+ pvpDamageCtx.clearRect(0,0,vw,vh);
+ if(state.mode==='pvp'){
+  pvpDamageCtx.save();pvpDamageCtx.scale(zoom,zoom);pvpDamageCtx.translate(-left,-top);
+  drawPVPDamageNumbers(pvpDamageCtx,renderFrameNow);pvpDamageCtx.restore();
+ }
 
  syncWarArenaOverlay(left,top,zoom);
  syncPVPArenaOverlay(left,top,zoom);
