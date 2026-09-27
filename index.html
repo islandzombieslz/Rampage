@@ -4725,6 +4725,8 @@ function serializeGame(){
    ? state.entities.map(e=>serializeWarEntityForNetwork(e,now))
    : state.entities.map(e=>{
        const out={...e,targetId:e.target?.id??e.targetId??null};
+       // NPC attack timelines are serialized relatively for remote PvP GIFs.
+       if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now));
        delete out.target;
        if(state.mode==='pvp'){
          out.pvpSpecialLocked=e.pvpSpecialReadyAt>=1e13;
@@ -4746,7 +4748,7 @@ function serializeGame(){
            impactRemainingMs:Math.max(0,out.pendingKingSpecial.damageAt-now)
          };
        }
-       if(out.pendingGolemAttack){
+       if(out.pendingGolemAttack&&!e.pvpWarAI){
          out.pendingGolemAttack={
            ...out.pendingGolemAttack,
            serial:Number(out.pendingGolemAttack.serial)||Number(out.golemAttackSerial)||0,
@@ -4759,7 +4761,7 @@ function serializeGame(){
          delete out.dragonTakeoffEndAt;
          delete out.dragonTakeoffStartedAt;
        }
-       if(out.pendingDragonAttack){
+       if(out.pendingDragonAttack&&!e.pvpWarAI){
          out.pendingDragonAttack={...out.pendingDragonAttack,remainingMs:Math.max(0,out.pendingDragonAttack.endAt-now)};
        }
        if(out.dragonBurnUntil){
@@ -5607,7 +5609,8 @@ const PVP_ENEMY_HEROES=Object.freeze({
  poseidon:{name:'Poseidon',type:'poseidon',card:'assets/water/poseidon/card.png',clan:'water'},
  anubis:{name:'Anubis',type:'anubis',card:'assets/egypt/anubis/card.png',clan:'egypt'},
  golem:{name:'Golem',type:'golem',card:'assets/ui/war-shop/card-golem-guerreiro.png',clan:'warriors'},
- dragon:{name:'Dragão',type:'dragon',card:'assets/ui/war-shop/card-dragao-guerreiro.png',clan:'warriors'}
+ dragon:{name:'Dragão',type:'dragon',card:'assets/ui/war-shop/card-dragao-guerreiro.png',clan:'warriors'},
+ seahorse:{name:'Cavalo-marinho',type:'seahorse',card:'assets/water/seahorse/card.png',clan:'water'}
 });
 let pvpPickerDraft='warrior',pvpStartInFlight=false;
 function pvpAllPlayersConfirmed(){
@@ -6459,6 +6462,18 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(isisSpecialProtected(target))return;
  if(isisBlessingProtected(target))return;
  if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker,target))return;
+ // PVP-ONLY NPC DAMAGE: same War animations, PvP minion damage and knockback.
+ if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
+   const distance=Math.hypot(target.x-attacker.x,target.y-attacker.y);
+   const periodic=options.knockForce===0;
+   const special=attacker.pendingGolemAttack?.kind==='special'||
+     attacker.pendingNajaAttack?.kind==='special'||attacker.pendingWaterAttack?.kind==='wave';
+   amount=periodic?Math.min(PVP_BASE.damageMax*.5,Math.max(0,Number(amount)||0)*.5):
+     pvpDamageForRange(distance,special,.5);
+   options={...options,knockForce:Math.min(PVP_BASE.knockForce,options.knockForce??PVP_BASE.knockForce),
+     knockTime:Math.min(PVP_BASE.knockTime,options.knockTime??PVP_BASE.knockTime),shake:0};
+ }
+ // END PVP-ONLY NPC DAMAGE
  const beforeShield=Math.max(0,Number(target.shield)||0);
  const beforeDurability=beforeShield+Math.max(0,Number(target.hp)||0);
 
@@ -7224,12 +7239,14 @@ function spawnPoseidonSeahorses(e,p){
  for(const unit of state.entities){
    if(unit.alive&&unit.type==='seahorse'&&unit.waterSummoned&&unit.waterSummonerId===e.id&&unit.team===e.team)alive++;
  }
- const missing=Math.max(0,POSEIDON_SUMMON_COUNT-alive);
+ const summonLimit=state.mode==='pvp'&&e.pvpWarAI?5:POSEIDON_SUMMON_COUNT;
+ const missing=Math.max(0,summonLimit-alive);
  const ox=p.originX??e.x,oy=p.originY??e.y,base=(Number(p.serial)||0)*.39;
  for(let i=0;i<missing;i++){
-   const a=base+i*Math.PI*2/POSEIDON_SUMMON_COUNT,r=72+((alive+i)%2)*15;
-   spawnSeahorse(clamp(ox+Math.cos(a)*r,45,state.world.w-45),
+   const a=base+i*Math.PI*2/summonLimit,r=72+((alive+i)%2)*15;
+   const horse=spawnSeahorse(clamp(ox+Math.cos(a)*r,45,state.world.w-45),
      clamp(oy+Math.sin(a)*r,45,state.world.h-45),e.team,e.color,e.id);
+   if(state.mode==='pvp'&&e.pvpWarAI)pvpConfigureWarMinion(horse);
  }
 }
 function waterWavePosition(p,now){
@@ -8058,7 +8075,14 @@ const PVP_BASE=Object.freeze({hp:200,shield:100,speed:195,damageMin:25,damageMax
  meleeRange:112,meleeCooldown:.70,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
 const pvpControls={selected:'attack',action:'attack',targetId:null,aimDelta:0};
-let pvpNpcSequence=0,pvpLastWave=0,pvpLastEnemyClan='warriors';
+// In PvP, the next enemy group enters only after the current group is defeated.
+const PVP_ENEMY_WAVES=Object.freeze([
+ {name:'DRAGÕES',units:[['dragon',2]]},
+ {name:'POSEIDON E CAVALOS-MARINHOS',units:[['poseidon',1],['seahorse',5]]},
+ {name:'ANUBIS E NAJA',units:[['anubis',1],['naja',1]]},
+ {name:'GOLEM',units:[['golem',1]]}
+]);
+let pvpNpcSequence=0,pvpLastWave=-1,pvpNextWaveAt=0,pvpLastEnemyClan='warriors';
 let pvpVisualLast=0,pvpAttackTargetId=null;
 const pvpFlameImages={};
 function pvpCameraZoom(w,h){
@@ -8074,7 +8098,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.damage=PVP_BASE.damageMax*(minion?.5:1);e.speed=PVP_BASE.speed*(minion?.5:1);
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
  e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
- e.pvpMode=true;e.pvpMinion=!!minion;e.pvpHero=hero.id||hero.type;
+ e.pvpMode=true;e.pvpMinion=!!minion;e.pvpWarAI=!!minion;e.pvpHero=hero.id||hero.type;
  e.pvpSpecialReadyAt=hero.type==='mage'?
    (hero.clan==='egypt'?performance.now()+10000:1e14):0;
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
@@ -8087,6 +8111,14 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  state.entities.push(e);return e;
 }
 function pvpHeroForPlayer(p){return PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0]}
+function pvpConfigureWarMinion(e){
+ // Normalize seahorses generated by the existing Poseidon AI only in PvP.
+ if(!e||state.mode!=='pvp')return e;
+ e.hp=e.maxHp=PVP_BASE.hp*.5;e.shield=e.maxShield=PVP_BASE.shield*.5;
+ e.speed=PVP_BASE.speed*.5;e.damage=PVP_BASE.damageMax*.5;
+ e.pvpMode=true;e.pvpMinion=true;e.pvpWarAI=true;e.pvpHero=e.type;
+ return e;
+}
 function pvpSpawnNPC(heroId=null,owner=null){
  const id=heroId||PVP_ENEMY_HERO_IDS[(pvpNpcSequence++)%PVP_ENEMY_HERO_IDS.length];
  const hero=PVP_ENEMY_HEROES[id]||PVP_ENEMY_HEROES.naja;
@@ -8096,6 +8128,7 @@ function pvpSpawnNPC(heroId=null,owner=null){
  const y=clamp((owner?.y??cy)+Math.sin(theta)*dist,70,state.world.h-70);
  const e=pvpBaseEntity({...hero,id},x,y,owner?.team||'pvp-enemy',owner?.color||'#fb6772',owner?.ownerId||null,true);
  if(owner){e.egyptSummoned=true;e.egyptSummonerId=owner.id;e.pvpSummonerId=owner.id}
+ if(e.type==='dragon')beginDragonTakeoff(e);
  return e;
 }
 function pvpNearestEnemy(e,preferred=null){
