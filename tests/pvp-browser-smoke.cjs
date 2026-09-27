@@ -12,13 +12,14 @@ const firebaseStub=String.raw`
  const parts=path=>String(path).split('/').filter(Boolean);
  function read(path){return parts(path).reduce((obj,key)=>obj?.[key],database)??null}
  function snapshotValue(path){return path==='.info/connected'?true:path==='.info/serverTimeOffset'?0:read(path)}
+ function snapshot(path){const value=snapshotValue(path);return {val:()=>value,exists:()=>value!==null}}
  function write(path,value){
    const tokens=parts(path);let current=database;
    for(let i=0;i<tokens.length-1;i++)current=current[tokens[i]]??={};
    if(!tokens.length)return;
    if(value===null)delete current[tokens.at(-1)];
    else current[tokens.at(-1)]=value;
-   queueMicrotask(()=>{for(const listener of [...subscriptions])try{listener.cb({val:()=>snapshotValue(listener.path)})}catch(e){console.error(e)}});
+   queueMicrotask(()=>{for(const listener of [...subscriptions])try{listener.cb(snapshot(listener.path))}catch(e){console.error(e)}});
  }
  const F={
   firebaseAuth:{currentUser:user,authStateReady:async()=>{}},firebaseDb:{},
@@ -33,7 +34,7 @@ const firebaseStub=String.raw`
   remove:async path=>write(path,null),
   onDisconnect:()=>({remove:async()=>{}}),
   onValue:(path,cb)=>{const listener={path,cb};subscriptions.add(listener);
-    queueMicrotask(()=>cb({val:()=>snapshotValue(path)}));
+    queueMicrotask(()=>cb(snapshot(path)));
     return()=>subscriptions.delete(listener);
   },
   runTransaction:async(path,fn)=>{
