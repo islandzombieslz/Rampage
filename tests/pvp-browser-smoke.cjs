@@ -64,8 +64,21 @@ async function main(){
  page.on('pageerror',err=>errors.push(err.message));
  try{
    await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>!document.body.classList.contains('booting'),{timeout:55000});
-   await page.waitForFunction(()=>document.querySelector('#accountXpSync')?.textContent==='XP salvo na conta',{timeout:15000});
+   await page.waitForFunction(()=>!document.body.classList.contains('booting'),null,{timeout:55000});
+   try{
+     await page.waitForFunction(()=>document.querySelector('#accountXpSync')?.textContent==='XP salvo na conta',null,{timeout:15000});
+   }catch(err){
+     const status=await page.evaluate(()=>({
+       booting:document.body.classList.contains('booting'),
+       xp:document.querySelector('#accountXpSync')?.textContent,
+       account:document.querySelector('#accountStatus')?.textContent,
+       firebase:document.querySelector('#firebaseStatus')?.textContent,
+       name:document.querySelector('#accountName')?.textContent,
+       auth:window.FirebaseBridge?.firebaseAuth?.currentUser?.uid
+     }));
+     console.error('Browser startup diagnostics:',status,'Page errors:',errors);
+     throw err;
+   }
    await page.locator('#createBtn').click();
    await page.locator('#modeScreen.active').waitFor({timeout:8000});
    await page.locator('.mode-card[data-mode="pvp"]').click();
