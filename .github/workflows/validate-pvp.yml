@@ -8,6 +8,14 @@ on:
       - 'tests/war-preservation.cjs'
       - 'tests/pvp-browser-smoke.cjs'
       - '.github/workflows/validate-pvp.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'tests/pvp-smoke.cjs'
+      - 'tests/war-preservation.cjs'
+      - 'tests/pvp-browser-smoke.cjs'
+      - '.github/workflows/validate-pvp.yml'
   workflow_dispatch:
 permissions:
   contents: read
