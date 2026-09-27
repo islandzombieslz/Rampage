@@ -1,0 +1,21 @@
+name: Validate Isolated PvP
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'tests/pvp-smoke.cjs'
+      - 'tests/war-preservation.cjs'
+      - '.github/workflows/validate-pvp.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PvP mechanics and UI regression
+        run: node tests/pvp-smoke.cjs
+      - name: Ensure core War mechanics are unchanged
+        run: node tests/war-preservation.cjs
