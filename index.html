@@ -7083,7 +7083,8 @@ function chooseNajaEmergenceTarget(e){
    x=bestMembers.reduce((sum,t)=>sum+t.x,0)/bestMembers.length;
    y=bestMembers.reduce((sum,t)=>sum+t.y,0)/bestMembers.length;
  }
- const b=warArenaBounds(e.r||36);
+ const b=state.mode==='pvp'?
+   {left:42,right:state.world.w-42,top:42,bottom:state.world.h-42}:warArenaBounds(e.r||36);
  x=clamp(x,b.left,b.right);y=clamp(y,b.top,b.bottom);
  return {x,y,targetId:best.id,count:bestCount};
 }
@@ -8294,7 +8295,7 @@ function pvpSpawnWave(index){
 }
 function beginPVPRound(){
  state.world.w=2200;state.world.h=1400;state.entities=[];state.particles=[];state.dragonProjectiles=[];
- warBurningEntities.clear();
+ warBurningEntities.clear();warFrameEnemiesByTeam.clear();
  clearEntityVisuals();
  // PvP attack GIFs last several seconds; allow time to clear the four encounters.
  state.pvpRoundDuration=Math.max(state.pveTime,180);
