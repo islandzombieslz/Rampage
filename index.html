@@ -8269,26 +8269,36 @@ function pvpExpireSummons(now){
  }
 }
 function pvpBotAction(e,dt){
- if(!e.alive||e.knockTime>0||e.pvpPowerUntil>performance.now()){e.moving=false;return}
- const target=pvpNearestEnemy(e);if(!target){e.moving=false;return}
- const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
- e.heading=Math.atan2(dy,dx);e.facing=dx<0?-1:1;
- const ranged=e.type==='poseidon'||e.type==='anubis'||e.type==='dragon';
- const range=ranged?205:PVP_BASE.meleeRange*.7;
- if(d>range){
-   e.x=clamp(e.x+dx/d*e.speed*dt,35,state.world.w-35);
-   e.y=clamp(e.y+dy/d*e.speed*dt,35,state.world.h-35);e.moving=true;
- }else{
-   e.moving=false;
-   if(ranged&&e.attackCooldown<=0){
-     e.attackCooldown=.7;e.attackSerial++;e.pvpShotUntil=performance.now()+290;e.pvpShotTargetId=target.id;
-     pvpCombatHit(target,e,pvpDamageForRange(d,false,.5));
-   }else if(!ranged)pvpBasicAttack(e);
+ if(!e.alive)return;
+ // Reuse actual War AI and its timed GIFs; keep PvP stats, teams and waves isolated.
+ aiFight(e,dt,null,state.entities);
+}
+function pvpSpawnWave(index){
+ const wave=PVP_ENEMY_WAVES[index];if(!wave)return false;
+ let poseidon=null;
+ for(const [type,count] of wave.units){
+   for(let i=0;i<count;i++){
+     const npc=pvpSpawnNPC(type);
+     if(type==='poseidon')poseidon=npc;
+     if(type==='seahorse'&&poseidon){
+       const angle=i*Math.PI*2/count;
+       npc.x=clamp(poseidon.x+Math.cos(angle)*90,45,state.world.w-45);
+       npc.y=clamp(poseidon.y+Math.sin(angle)*90,45,state.world.h-45);
+       npc.waterSummoned=true;npc.waterSummonerId=poseidon.id;
+     }
+   }
  }
+ pvpLastWave=index;pvpNextWaveAt=0;
+ flash('PVP • ONDA '+(index+1)+'/'+PVP_ENEMY_WAVES.length+' • '+wave.name,1.4);
+ return true;
 }
 function beginPVPRound(){
  state.world.w=2200;state.world.h=1400;state.entities=[];state.particles=[];state.dragonProjectiles=[];
- clearEntityVisuals();state.timeLeft=state.pveTime;pvpLastWave=0;
+ warBurningEntities.clear();
+ clearEntityVisuals();
+ // PvP attack GIFs last several seconds; allow time to clear the four encounters.
+ state.pvpRoundDuration=Math.max(state.pveTime,180);
+ state.timeLeft=state.pvpRoundDuration;pvpLastWave=-1;pvpNextWaveAt=0;
  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
  $('#gameScreen').classList.remove('spectator-mode');
  const deathFade=$('#deathFade');if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}
@@ -8297,12 +8307,8 @@ function beginPVPRound(){
    const a=i*Math.PI*2/Math.max(1,humans.length);
    pvpBaseEntity(pvpHeroForPlayer(p),1100+Math.cos(a)*170,700+Math.sin(a)*170,p.id,p.color,p.id,false);
  });
- const npcs=state.players.filter(p=>!p.human);
- for(const npc of npcs)pvpSpawnNPC(npc.pvpHero);
- const cfg=difficultyConfig[state.difficulty];
- for(let i=0;i<Math.max(1,cfg.initial);i++)pvpSpawnNPC();
+ pvpSpawnWave(0);
  pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimDelta=0;
- flash('PVP • RODADA '+state.round,1.1);
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
@@ -8345,8 +8351,8 @@ function endPVPRound(){
  if(winnerId==='enemy'&&npcAlive.length)pvpLastEnemyClan=npcAlive[0].clan;
  if(winnerId&&winnerId!=='enemy'){
    const p=state.players.find(p=>p.id===winnerId);if(p)p.score=(p.score||0)+1;
-   const stat=matchStatsFor(winnerId);stat.wonRounds++;stat.victorySeconds+=state.pveTime-Math.max(0,state.timeLeft);
-   stat.victoryTimeLimit+=state.pveTime;
+   const stat=matchStatsFor(winnerId);stat.wonRounds++;stat.victorySeconds+=(state.pvpRoundDuration||state.pveTime)-Math.max(0,state.timeLeft);
+   stat.victoryTimeLimit+=(state.pvpRoundDuration||state.pveTime);
  }
  if(state.round>=state.rounds){
    const best=Math.max(...humans.map(p=>p.score||0));
@@ -8363,6 +8369,8 @@ function endPVPRound(){
 function updatePVP(dt){
  if(state.phase!=='combat')return;
  const now=performance.now();
+ const entityById=rebuildWarEntityIdMap();
+ updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
  for(const e of state.entities){
    if(!e.alive)continue;
    if(e.ownerId&&!e.pvpMinion){
@@ -8384,14 +8392,18 @@ function updatePVP(dt){
  }
  pvpExpireSummons(now);
  state.timeLeft-=dt;
- const cfg=difficultyConfig[state.difficulty];
- const elapsed=Math.max(0,state.pveTime-state.timeLeft),wave=Math.floor(elapsed/cfg.every);
- if(wave>pvpLastWave){pvpLastWave=wave;for(let i=0;i<cfg.wave;i++)pvpSpawnNPC()}
+ const enemiesAlive=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
+ if(enemiesAlive)pvpNextWaveAt=0;
+ else if(pvpLastWave<PVP_ENEMY_WAVES.length-1){
+   if(!pvpNextWaveAt)pvpNextWaveAt=now+1200;
+   else if(now>=pvpNextWaveAt)pvpSpawnWave(pvpLastWave+1);
+ }
  const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
  const humans=state.players.filter(p=>p.human).length;
  const aliveNPCs=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
  if(state.timeLeft<=0||aliveHeroes.length===0||
-    (humans>1&&aliveHeroes.length===1)||(humans===1&&!aliveNPCs))endPVPRound();
+    (humans>1&&aliveHeroes.length===1)||
+    (humans===1&&!aliveNPCs&&pvpLastWave===PVP_ENEMY_WAVES.length-1))endPVPRound();
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
@@ -11285,7 +11297,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }
    }
 
-   if(state.mode==='pvp'&&e.pvpMode){
+   if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI){
       const special=(Number(e.pvpSpecialVisualUntil)||0)>localNow;
       const melee=(Number(e.pvpMeleeVisualUntil)||0)>localNow;
       const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
