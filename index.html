@@ -8472,9 +8472,10 @@ function endPVPRound(){
  state.phase='between';state.running=false;
  const humans=state.players.filter(p=>p.human),aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
  const humanAlive=aliveHeroes.filter(e=>humans.some(p=>p.id===e.ownerId));
+ const alliedAlive=aliveHeroes.filter(e=>e.pvpAllyBot);
  const npcAlive=state.entities.filter(e=>e.alive&&e.team==='pvp-enemy');
  let winnerId=null;
- if(!humanAlive.length)winnerId='enemy';
+ if(!humanAlive.length)winnerId=alliedAlive.length?(humans.find(p=>p.id===alliedAlive[0].team)?.id||'enemy'):'enemy';
  else if(humans.length===1)winnerId=humanAlive[0].ownerId;
  else if(humanAlive.length===1)winnerId=humanAlive[0].ownerId;
  else{
