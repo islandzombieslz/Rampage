@@ -40,7 +40,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
 });
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
-vm.runInContext(section('const PVP_BASE=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
+vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
 ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
 ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
