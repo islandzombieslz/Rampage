@@ -7387,8 +7387,9 @@ function updateWaterAttackState(e,now,dt){
  if(now>=Number(p.endAt)){
    if(e.type==='poseidon'){
      if(p.kind==='normal'){
-       e.poseidonNormalCount=Math.min(POSEIDON_MELEE_ATTACKS_PER_CYCLE,(Number(e.poseidonNormalCount)||0)+1);
-       if(e.poseidonPhase==='melee'&&e.poseidonNormalCount>=POSEIDON_MELEE_ATTACKS_PER_CYCLE)e.poseidonPhase='summon';
+       const meleeLimit=state.mode==='pvp'&&e.pvpWarAI?3:POSEIDON_MELEE_ATTACKS_PER_CYCLE;
+       e.poseidonNormalCount=Math.min(meleeLimit,(Number(e.poseidonNormalCount)||0)+1);
+       if(e.poseidonPhase==='melee'&&e.poseidonNormalCount>=meleeLimit)e.poseidonPhase='summon';
      }else if(p.kind==='wave'){
        e.poseidonWaveCount=(Number(e.poseidonWaveCount)||0)+1;
        if(e.poseidonWaveCount>=(Number(e.poseidonWaveGoal)||3)){
@@ -7435,7 +7436,7 @@ function aiFightPoseidon(e,dt,forcedTeam,preparedCandidates=null){
    e.moving=false;return;
  }
  if(phase==='melee'){
-   if((Number(e.poseidonNormalCount)||0)>=POSEIDON_MELEE_ATTACKS_PER_CYCLE){
+   if((Number(e.poseidonNormalCount)||0)>=(state.mode==='pvp'&&e.pvpWarAI?3:POSEIDON_MELEE_ATTACKS_PER_CYCLE)){
      e.poseidonPhase='summon';
    }else{
      if(d<=POSEIDON_NORMAL_RANGE-8){
