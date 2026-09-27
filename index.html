@@ -1270,6 +1270,9 @@ html,body{
 #pvpCombatHud button.unavailable{opacity:.45;filter:grayscale(1)}
 #pvpCombatHud button.unavailable .pvp-hud-symbol{font-size:22px}
 #gameScreen.pvp-mode #attackBtn{right:calc(var(--safe-right) + 5px);bottom:calc(var(--safe-bottom) + 7px)}
+#gameScreen.pvp-mode #touchControls{bottom:calc(var(--safe-bottom) + 80px)}
+#gameScreen.pvp-mode .mage-staff.pvp-staff-strike{animation:pvpStaffStrike .31s ease-out}
+@keyframes pvpStaffStrike{0%{transform:rotate(-35deg)}55%{transform:rotate(46deg)}100%{transform:rotate(0deg)}}
 @media (max-height:500px){#lobbyScreen.pvp-lobby #playerList{max-height:30vh!important}
  #lobbyScreen.pvp-lobby .pvp-player-card{min-height:63px}#lobbyScreen.pvp-lobby .pvp-player-card img{height:38px}
  #pvpHeroChoices button img{height:38px}}
@@ -9657,8 +9660,9 @@ function updateSpectatorTransition(now){
       s.transitioning=false;
       s.active=true;
 
-      const ally=state.entities.find(e=>e.alive&&e.team==='players'&&!e.controlled)
-        || state.entities.find(e=>e.alive&&e.team==='players');
+      const ally=state.mode==='pvp'
+        ? state.entities.find(e=>e.alive&&e.ownerId&&!e.pvpMinion&&!e.controlled)
+        : state.entities.find(e=>e.alive&&e.team==='players'&&!e.controlled)||state.entities.find(e=>e.alive&&e.team==='players');
       s.targetId=ally?.id||null;
 
       $('#gameScreen').classList.add('spectator-mode');
@@ -9675,7 +9679,7 @@ function updateSpectatorTransition(now){
   if(s.active){
     const target=state.entities.find(e=>e.id===s.targetId&&e.alive);
     if(!target){
-      const next=state.entities.find(e=>e.alive&&e.team==='players');
+      const next=state.mode==='pvp'?state.entities.find(e=>e.alive&&e.ownerId&&!e.pvpMinion):state.entities.find(e=>e.alive&&e.team==='players');
       s.targetId=next?.id||null;
     }
   }
@@ -9835,10 +9839,10 @@ function draw(){
    if(s.transitioning){
      // Durante queda/piscada, câmera continua presa no corpo do próprio player.
      focus=state.entities.find(e=>e.id===s.deathEntityId)
-       || state.entities.find(e=>e.alive&&e.team==='players');
+       || (state.mode==='pvp'?state.entities.find(e=>e.alive&&e.ownerId&&!e.pvpMinion):state.entities.find(e=>e.alive&&e.team==='players'));
    }else if(s.active){
      focus=state.entities.find(e=>e.id===s.targetId&&e.alive)
-       || state.entities.find(e=>e.alive&&e.team==='players');
+       || (state.mode==='pvp'?state.entities.find(e=>e.alive&&e.ownerId&&!e.pvpMinion):state.entities.find(e=>e.alive&&e.team==='players'));
    }else{
      focus=state.entities.find(e=>e.controlled&&e.alive)
        || state.entities.find(e=>e.alive&&e.team==='players')
@@ -11083,7 +11087,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    const visualMoving=entityVisualMoving(el,e,localNow);
 
    // PVE: contorno fino seguindo exatamente a silhueta/transparência do GIF.
-   const pveSilhouette=state.mode==='pve';
+   const pveSilhouette=state.mode==='pve'||state.mode==='pvp';
    if(el._pveSilhouette!==pveSilhouette){
      el._pveSilhouette=pveSilhouette;
      el.classList.toggle('pve-silhouette',pveSilhouette);
@@ -11201,7 +11205,32 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      }
    }
 
-   if(e.type==='poseidon'||e.type==='seahorse'){
+   if(state.mode==='pvp'&&e.pvpMode){
+      const special=(Number(e.pvpSpecialVisualUntil)||0)>localNow;
+      const melee=(Number(e.pvpMeleeVisualUntil)||0)>localNow;
+      const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
+      const desired=special&&el._gifKeys?.special?'special':
+        melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
+      setEntitySpriteState(el,desired);
+      if(special&&el._mageSpecial&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+        el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
+        restartGif(el._mageSpecial,el._gifKeys?.special,e.pvpSpecialSerial);
+      }
+      if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
+        el.dataset.pvpAttackSerial=String(e.attackSerial||0);
+        const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
+        if(attackImage)restartGif(attackImage,attackKey,e.attackSerial);
+      }
+      if(e.type==='mage'&&el._mageStaff&&el.dataset.pvpStaffSerial!==String(e.attackSerial||0)){
+        el.dataset.pvpStaffSerial=String(e.attackSerial||0);
+        if(e.attackSerial>0){
+          el._mageStaff.classList.remove('pvp-staff-strike');
+          void el._mageStaff.offsetWidth;
+          el._mageStaff.classList.add('pvp-staff-strike');
+        }
+      }
+      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=special?'hidden':'visible';
+    }else if(e.type==='poseidon'||e.type==='seahorse'){
       const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
       const kind=active?p.kind:null;
       const desired=active?(kind==='wave'?(localNow<Number(p.bodyEndAt)?'waveCast':'idle'):kind==='summon'?'summonCast':'attack'):(visualMoving?'walk':'idle');
