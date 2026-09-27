@@ -5558,6 +5558,104 @@ function renderWarLobbySettings(){
   const rounds=$('#roundsVal2');if(rounds)rounds.textContent=state.rounds;
   const gems=$('#gemsVal');if(gems)gems.textContent=normalizeWarStartingGems(state.gems);
 }
+/* ==================== PVP: LOBBY AND HERO SELECTION ====================
+   This registry and its functions are never called by mode='war'. */
+const PVP_HEROES=Object.freeze([
+ {id:'warrior',name:'Guerreiro',type:'warrior',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-guerreiros.png',power:false,special:false},
+ {id:'egyptWarrior',name:'Guerreiro do Egito',type:'warrior',clan:'egypt',variant:'male',card:'assets/egypt/warrior/card.png',power:false,special:false},
+ {id:'mage',name:'Mago Guerreiro',type:'mage',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
+ {id:'mageFemale',name:'Maga Guerreira',type:'mage',clan:'warriors',variant:'female',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
+ {id:'egyptMage',name:'Mago do Egito',type:'mage',clan:'egypt',variant:'male',card:'assets/egypt/mage/card.png',power:true,special:true},
+ {id:'egyptMageFemale',name:'Maga do Egito',type:'mage',clan:'egypt',variant:'female',card:'assets/egypt/mage/card.png',power:true,special:true},
+ {id:'brown',name:'Guerreira Marrom',type:'brownWarrior',clan:'warriors',variant:'female',card:'assets/ui/war-shop/card-guerreira-marrom.png',power:false,special:true},
+ {id:'king',name:'Rei Guerreiro',type:'king',clan:'warriors',variant:'male',card:'assets/king/card.png',power:false,special:true}
+]);
+const PVP_HERO_BY_ID=Object.freeze(Object.fromEntries(PVP_HEROES.map(hero=>[hero.id,hero])));
+const PVP_ENEMY_HERO_IDS=Object.freeze(['naja','poseidon','anubis','golem','dragon']);
+const PVP_ENEMY_HEROES=Object.freeze({
+ naja:{name:'Naja',type:'naja',card:'assets/egypt/naja/card.png',clan:'egypt'},
+ poseidon:{name:'Poseidon',type:'poseidon',card:'assets/water/poseidon/card.png',clan:'water'},
+ anubis:{name:'Anubis',type:'anubis',card:'assets/egypt/anubis/card.png',clan:'egypt'},
+ golem:{name:'Golem',type:'golem',card:'assets/ui/war-shop/card-golem-guerreiro.png',clan:'warriors'},
+ dragon:{name:'Dragão',type:'dragon',card:'assets/ui/war-shop/card-dragao-guerreiro.png',clan:'warriors'}
+});
+let pvpPickerDraft='warrior',pvpStartInFlight=false;
+function pvpAllPlayersConfirmed(){
+ const humans=state.players.filter(p=>p.human);
+ return humans.length>0&&humans.every(p=>p.pvpConfirmed&&PVP_HERO_BY_ID[p.pvpHero]);
+}
+function renderPVPPlayers(humans,npcs){
+ const grid=$('#playerList');grid.replaceChildren();
+ for(const p of [...humans,...npcs]){
+   const hero=p.human?(PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0]):(PVP_ENEMY_HEROES[p.pvpHero]||PVP_ENEMY_HEROES.naja);
+   const mine=p.human&&p.id===NetworkAdapter.localPlayerId;
+   const card=document.createElement(mine?'button':'div');
+   if(mine)card.type='button';
+   card.className='pvp-player-card'+(mine?' mine':'')+(p.pvpConfirmed?' confirmed':'');
+   const nick=document.createElement('span');nick.className='pvp-name';nick.textContent=p.name;
+   const img=document.createElement('img');img.src=hero.card;img.alt=hero.name;img.draggable=false;img.loading='lazy';
+   const ready=document.createElement('span');ready.className='pvp-ready';
+   ready.textContent=p.human?(p.pvpConfirmed?'✓ Confirmado':mine?'Toque para escolher':'Escolhendo…'):'NPC • '+hero.name;
+   card.append(nick,img,ready);grid.appendChild(card);
+   if(mine)card.onclick=()=>openPVPCharacterPicker();
+ }
+ const count=$('#npcCountVal');if(count)count.textContent=npcs.length;
+ const hint=$('#participantLimitHint');if(hint)hint.textContent='PvP: escolha seu herói e confirme. Grade de até 4 × 4 cards; máximo de 10 participantes.';
+ updatePVPLobbyAuthority();
+}
+function openPVPCharacterPicker(){
+ if(state.mode!=='pvp'||state.running)return;
+ const me=localPlayer();if(!me?.human||me.id!==NetworkAdapter.localPlayerId)return;
+ pvpPickerDraft=PVP_HERO_BY_ID[me.pvpHero]?me.pvpHero:'warrior';
+ const list=$('#pvpHeroChoices');list.replaceChildren();
+ for(const hero of PVP_HEROES){
+   const choice=document.createElement('button');choice.type='button';choice.className=hero.id===pvpPickerDraft?'selected':'';
+   const img=document.createElement('img');img.src=hero.card;img.alt='';img.loading='lazy';
+   const name=document.createElement('span');name.textContent=hero.name;
+   choice.append(img,name);choice.onclick=()=>{
+     pvpPickerDraft=hero.id;
+     for(const b of list.children)b.classList.toggle('selected',b===choice);
+   };
+   list.appendChild(choice);
+ }
+ $('#pvpPicker').hidden=false;
+}
+async function commitPVPCharacterPicker(){
+ if(state.mode!=='pvp'||!PVP_HERO_BY_ID[pvpPickerDraft])return;
+ const F=await NetworkAdapter.waitFirebase(),uid=F.firebaseAuth.currentUser?.uid;
+ if(!uid||uid!==NetworkAdapter.localPlayerId||!NetworkAdapter.roomId)return;
+ const btn=$('#pvpHeroConfirm');if(btn.disabled)return;
+ btn.disabled=true;
+ try{
+   await F.update(F.ref(F.firebaseDb,'rooms/'+NetworkAdapter.roomId+'/players/'+uid),{
+     pvpHero:pvpPickerDraft,pvpConfirmed:true
+   });
+   const mine=state.players.find(p=>p.id===uid);
+   if(mine){mine.pvpHero=pvpPickerDraft;mine.pvpConfirmed=true}
+   $('#pvpPicker').hidden=true;renderPlayers();
+   if(NetworkAdapter.isHost&&state.players.filter(p=>p.human).length===1)await launchPVP();
+ }catch(err){console.error('PvP character confirmation:',err);flash('Não foi possível confirmar o herói.',1.5)}
+ finally{btn.disabled=false}
+}
+$('#pvpHeroConfirm').onclick=()=>commitPVPCharacterPicker();
+function updatePVPLobbyAuthority(){
+ if(state.mode!=='pvp')return;
+ const button=$('#lobbyContinue'),ready=pvpAllPlayersConfirmed(),host=NetworkAdapter.isHost;
+ button.disabled=!host||!ready||pvpStartInFlight;
+ button.textContent=!ready?'Aguardando confirmações…':!host?'Aguardando anfitrião…':'Iniciar PvP';
+ $$('[data-target="npcs"]').forEach(b=>b.disabled=!host);
+}
+async function launchPVP(){
+ if(state.mode!=='pvp'||pvpStartInFlight||!NetworkAdapter.isHost||!pvpAllPlayersConfirmed())return false;
+ pvpStartInFlight=true;
+ try{
+   startPVP();
+   NetworkAdapter.roomStatus='playing';
+   await NetworkAdapter.pushState(serializeGame());
+   return true;
+ }catch(err){console.error('Start PvP:',err);flash('Falha ao iniciar PvP.',2);return false}
+ finally{pvpStartInFlight=false}
+}
 function setLobbySkin(mode=state.mode){
   const lobby=$('#lobbyScreen');
   if(!lobby)return;
