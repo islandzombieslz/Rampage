@@ -106,9 +106,12 @@ async function main(){
    await page.locator('#pvpHeroConfirm').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
+   await page.locator('#pvpCombatHud [data-pvp-action="power"]').click();
+   await page.locator('#attackBtn').click();
+   await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, menu->config->room, 4x4 cards, mage selection, solo PvP start and HUD');
+   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage power cast and HUD');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
