@@ -1235,6 +1235,12 @@ html,body{
 
 
 /* ===== PvP ONLY: hero grid and selectable combat deck ===== */
+#lobbyScreen.pvp-lobby .lobby-content{overflow:visible!important}
+#lobbyScreen.pvp-lobby #pvpPicker:not([hidden]){
+ position:absolute;left:0;right:0;top:0;bottom:0;z-index:11;max-width:none;
+ margin:0;display:flex;flex-direction:column;overflow:auto;
+ background:#111a24f5;box-shadow:0 0 22px #000d}
+#lobbyScreen.pvp-lobby #pvpHeroChoices{flex:1;min-height:0;max-height:none;overflow-y:auto}
 #lobbyScreen.pvp-lobby #playerList{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
  gap:7px!important;align-items:stretch;max-height:min(39vh,220px)!important;overflow:auto!important;padding:4px!important}
 #lobbyScreen.pvp-lobby .pvp-player-card{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;
@@ -1709,7 +1715,8 @@ html,body{
   background-repeat:no-repeat !important;
   background-size:contain !important;
 }
-#lobbyScreen.pve-lobby>.card{
+#lobbyScreen.pve-lobby>.card,
+#lobbyScreen.pvp-lobby>.card{
   background-image:url("assets/ui/pvp-menu.png") !important;
 }
 #lobbyScreen.war-lobby>.card{
@@ -2877,7 +2884,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div class="mode-menu-shell">
     <div class="mode-grid">
       <button class="mode-card selected" data-mode="pvp" type="button" aria-label="PvP">
-        <img src="assets/ui/botao-pvp.png" alt="Players vs Inimigos" draggable="false" loading="lazy" decoding="async">
+        <img src="assets/ui/botao-pvp.png" alt="PvP" draggable="false" loading="lazy" decoding="async">
       </button>
       <button class="mode-card" data-mode="war" type="button" aria-label="Mestre da Guerra">
         <img src="assets/ui/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false" loading="lazy" decoding="async">
@@ -5436,7 +5443,7 @@ $('#configureBtn').onclick=async()=>{
     return;
   }
   $('#pveConfig').style.display='grid';
-  $('#configTitle').textContent='Configurar Players vs Inimigos';
+  $('#configTitle').textContent=state.mode==='pvp'?'Configurar PvP':'Configurar Players vs Inimigos';
   const configScreen=$('#configScreen');
   configScreen.classList.add('pve-config');
   configScreen.classList.remove('war-config');
@@ -5541,7 +5548,7 @@ async function createCurrentRoom(btn){
     const res=await NetworkAdapter.createRoom(roomSnapshot);
     state.roomCode=res.code;
     $('#roomCode').textContent=res.code;
-    $('#lobbyModeTitle').textContent=state.mode==='pve'?'Players vs Inimigos':'Mestre da Guerra';
+    $('#lobbyModeTitle').textContent=state.mode==='war'?'Mestre da Guerra':state.mode==='pvp'?'PvP':'Players vs Inimigos';
     setLobbySkin(state.mode);
     renderWarLobbySettings();
     renderPlayers();
@@ -5567,7 +5574,7 @@ $('#confirmJoin').onclick=async()=>{
       state.mode=joinedMode;
       state.roomCode=code;
       $('#roomCode').textContent=code;
-      $('#lobbyModeTitle').textContent=joinedMode==='pve'?'Players vs Inimigos':'Mestre da Guerra';
+      $('#lobbyModeTitle').textContent=joinedMode==='war'?'Mestre da Guerra':joinedMode==='pvp'?'PvP':'Players vs Inimigos';
       setLobbySkin(joinedMode);
       navigateScreen('lobbyScreen');
     }else $('#joinError').textContent=res.reason==='full'?'Sala cheia.':res.reason==='started'?'A partida já começou.':'Sala não encontrada.';
