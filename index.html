@@ -8376,6 +8376,31 @@ function updatePVPHUD(){
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
  }
 }
+const pvpFlameNodes=new Map();
+function syncPVPPowerEffects(left,top,zoom){
+ if(state.mode!=='pvp')return;
+ const layer=combatCameraLayer,now=renderFrameNow||performance.now(),active=new Set();
+ for(const e of state.entities){
+   if(!e.alive||e.type!=='mage'||!(e.pvpPowerUntil>now))continue;
+   active.add(e.id);
+   let img=pvpFlameNodes.get(e.id);
+   if(!img){
+     img=document.createElement('img');img.className='mage-power-normal pvp-flame-gif';
+     img.draggable=false;img.decoding='async';layer.appendChild(img);pvpFlameNodes.set(e.id,img);img.dataset.serial='-1';
+   }
+   const serial=String(e.pvpPowerSerial||0),key=e.clan==='egypt'?'egyptMagePower':'magePower';
+   if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,key,serial)}
+   const angle=e.pvpAimAngle||e.heading||0;
+   const ox=e.x+Math.cos(angle)*30,oy=e.y-13;
+   img.style.left=((ox-left)*zoom)+'px';img.style.top=((oy-top)*zoom)+'px';
+   img.style.width=305*zoom+'px';img.style.height=105*zoom+'px';
+   img.style.transform='translateY(-50%) rotate('+angle+'rad)';
+   img.style.visibility='visible';
+ }
+ for(const [id,img] of pvpFlameNodes)if(!active.has(id)){
+   releaseGifObjectUrl(img);img.remove();pvpFlameNodes.delete(id);
+ }
+}
 const PVP_FIRE_IMAGES={};
 function pvpFlameImage(e){
  const key=e.clan==='egypt'?'egypt':'warrior';
@@ -8399,9 +8424,8 @@ function drawPVPEffects(ctx,now){
    if(!e.alive)continue;
    if(e.pvpPowerUntil>now){
      ctx.save();ctx.translate(e.x,e.y-13);ctx.rotate(e.pvpAimAngle||e.heading||0);
-     const img=pvpFlameImage(e);
-     if(img.complete&&img.naturalWidth)ctx.drawImage(img,25,-60,305,105);
-     else{ctx.fillStyle='#f97a17a0';ctx.fillRect(25,-23,305,46)}
+     // The actual animated GIF is rendered by syncPVPPowerEffects on the DOM layer.
+     ctx.fillStyle='#f97a1733';ctx.fillRect(25,-23,305,46);
      ctx.restore();
    }
    if(e.pvpSpecialVisualUntil>now){
@@ -9972,6 +9996,7 @@ function draw(){
  syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncMagePowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ if(state.mode==='pvp')syncPVPPowerEffects(domCamera.left,domCamera.top,domCamera.zoom);
  syncWaterWaveEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
 }
@@ -11229,9 +11254,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
       const desired=special&&el._gifKeys?.special?'special':
         melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
       setEntitySpriteState(el,desired);
-      if(special&&el._mageSpecial&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
         el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-        restartGif(el._mageSpecial,el._gifKeys?.special,e.pvpSpecialSerial);
+        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
+        if(specialImage)restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial);
       }
       if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
         el.dataset.pvpAttackSerial=String(e.attackSerial||0);
@@ -11476,6 +11502,8 @@ function clearEntityVisuals(){
  }
  for(const img of waterWaveNodes.values())releaseGifObjectUrl(img);
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
+ for(const img of pvpFlameNodes.values()){releaseGifObjectUrl(img);img.remove()}
+ pvpFlameNodes.clear();
  for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of isisPowerNodes.values())releaseGifObjectUrl(img);
