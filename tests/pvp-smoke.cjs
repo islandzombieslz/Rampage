@@ -45,6 +45,7 @@ const warCalls=[];
 ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
 ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
 ctx.warBurningEntities=new Set();
+ctx.warFrameEnemiesByTeam=new Map();
 ctx.rebuildWarEntityIdMap=()=>new Map(state.entities.map(e=>[e.id,e]));
 ctx.updateDragonProjectiles=()=>{};
 ctx.updateDragonBurns=()=>{};
@@ -124,7 +125,7 @@ state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'}]
 run('beginPVPRound()');
 assert.equal(state.pvpRoundDuration,180);
 assert.equal(run('pvpLastWave'),0);
-assert.deepEqual(state.entities.filter(e=>e.team==='pvp-enemy').map(e=>e.type),['dragon','dragon']);
+assert.deepEqual([...state.entities.filter(e=>e.team==='pvp-enemy').map(e=>e.type)],['dragon','dragon']);
 assert(state.entities.filter(e=>e.type==='dragon').every(e=>e.dragonFlightState==='takeoff'));
 run('updatePVP(.016)');
 assert(warCalls.includes('dragon'),'PvP NPC invokes the real NPC AI dispatcher');
@@ -136,7 +137,7 @@ for(let wave=1;wave<4;wave++){
  assert.equal(run('pvpLastWave'),wave);
  const kinds=state.entities.filter(e=>e.alive&&e.team==='pvp-enemy').map(e=>e.type);
  const expected=[['poseidon','seahorse','seahorse','seahorse','seahorse','seahorse'],['anubis','naja'],['golem']][wave-1];
- assert.deepEqual(kinds,expected,'wave '+wave+' composition and no previous enemies');
+ assert.deepEqual([...kinds],expected,'wave '+wave+' composition and no previous enemies');
  if(wave===1){
    const poseidon=state.entities.find(e=>e.alive&&e.type==='poseidon');
    assert(state.entities.filter(e=>e.alive&&e.type==='seahorse').every(e=>e.waterSummonerId===poseidon.id));
