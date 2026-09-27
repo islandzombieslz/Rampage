@@ -45,6 +45,7 @@ const warCalls=[];
 ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
 ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
 ctx.warBurningEntities=new Set();
+ctx.warFrameEnemiesByTeam=new Map();
 ctx.rebuildWarEntityIdMap=()=>new Map(state.entities.map(e=>[e.id,e]));
 ctx.updateDragonProjectiles=()=>{};
 ctx.updateDragonBurns=()=>{};
