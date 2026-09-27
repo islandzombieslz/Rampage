@@ -8391,6 +8391,11 @@ function updatePVP(dt){
      pvpTickPower(e,now,input.pvpAimDelta);
    }else pvpBotAction(e,dt);
  }
+ // Real NPC attacks bypass pvpCombatHit; arm the mage on shield break too.
+ for(const e of state.entities)if(e.alive&&e.type==='mage'&&e.clan==='warriors'&&
+   e.pvpMode&&e.shield<=0&&e.pvpSpecialReadyAt>=1e13){
+   e.pvpSpecialReadyAt=now+10000;e.pvpSpecialWindowMs=10000;
+ }
  pvpExpireSummons(now);
  state.timeLeft-=dt;
  const enemiesAlive=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
@@ -9297,12 +9302,13 @@ function beginDragonTakeoff(e){
            target.dragonBurnSerial=(target.dragonBurnSerial||0)+1;
            target.dragonBurnStartedAt=now;target.dragonBurnUntil=now+DRAGON_BURN_DURATION_MS;
            target.dragonBurnNextTick=now+DRAGON_BURN_TICK_MS;target.dragonBurnSourceId=source?.id??null;target.dragonBurnSourceTeam=source?.team??null;
+           target.dragonBurnSourcePvpWarAI=!!source?.pvpWarAI;
            target.dragonBurnSourceX=source?.x??target.x;target.dragonBurnSourceY=source?.y??target.y;
            target.dragonBurnFlameCount=2+(target.dragonBurnSerial%2);
            warBurningEntities.add(target);
           }
           function dragonBurnAttacker(target,entityById=warEntityById){
-           return entityById.get(target.dragonBurnSourceId)||{id:'dragon-burn',type:'dragon',team:target.dragonBurnSourceTeam??null,x:Number(target.dragonBurnSourceX)||target.x,y:Number(target.dragonBurnSourceY)||target.y,heading:0,lastCombatAt:0};
+           return entityById.get(target.dragonBurnSourceId)||{id:'dragon-burn',type:'dragon',team:target.dragonBurnSourceTeam??null,x:Number(target.dragonBurnSourceX)||target.x,y:Number(target.dragonBurnSourceY)||target.y,heading:0,lastCombatAt:0,pvpWarAI:!!target.dragonBurnSourcePvpWarAI};
           }
           function updateDragonBurns(now,entityById=warEntityById){
            for(const target of warBurningEntities){
