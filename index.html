@@ -5488,7 +5488,8 @@ function applyStepperButton(b){
         name:'NPC '+(npcCount+1),
         human:false,
         color:COLORS[idx%COLORS.length],
-        clan:'warriors'
+        clan:'warriors',
+        ...(state.mode==='pvp'?{pvpHero:PVP_ENEMY_HERO_IDS[npcCount%PVP_ENEMY_HERO_IDS.length],pvpConfirmed:true}:{})
       });
     }
 
