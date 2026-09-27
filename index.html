@@ -4498,6 +4498,8 @@ function makeMatchResult(winnerId){
 }
 function matchResultMessage(result,uid){
  if(!result)return 'PARTIDA ENCERRADA';
+ if(result.mode==='pvp'&&result.winnerId==='enemy')
+   return 'Você foi derrotado, clã: '+clanLabel(result.winnerClan)+' venceu!';
  if(result.mode==='pve'){
    if(result.winnerId==='players')return Number(result.humanCount)>1?'A partida acabou, os jogadores venceram!':'Você venceu!';
    return Number(result.humanCount)>1?'A partida acabou, os inimigos venceram!':'Você foi derrotado, clã: Inimigos venceu!';
@@ -4714,6 +4716,16 @@ function serializeGame(){
    : state.entities.map(e=>{
        const out={...e,targetId:e.target?.id??e.targetId??null};
        delete out.target;
+       if(state.mode==='pvp'){
+         out.pvpSpecialLocked=e.pvpSpecialReadyAt>=1e13;
+         out.pvpSpecialRemainingMs=out.pvpSpecialLocked?0:Math.max(0,(Number(e.pvpSpecialReadyAt)||0)-now);
+         out.pvpPowerRemainingMs=Math.max(0,(Number(e.pvpPowerUntil)||0)-now);
+         out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
+         out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
+         out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
+         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;
+         delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
+       }
        if(out.pendingMageAttack){
          out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
        }
@@ -4838,7 +4850,14 @@ function applyRemoteGame(game){
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
      const netHistory=appendRemotePositionSample(old,toX,toY,remoteNow);
-     const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,netHistory,target:null,controlled:e.ownerId===NetworkAdapter.localPlayerId};
+     const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,netHistory,target:null,controlled:!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId};
+     if(state.mode==='pvp'){
+       out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
+       out.pvpPowerUntil=localNow+Math.max(0,Number(out.pvpPowerRemainingMs)||0);
+       out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
+       out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
+       out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
+     }
      const isisImmuneRemaining=Math.max(0,Number(out.isisDamageImmuneRemainingMs)||0);
      out.isisDamageImmuneUntil=localNow+isisImmuneRemaining;
      delete out.isisDamageImmuneRemainingMs;
@@ -9922,6 +9941,7 @@ function draw(){
  });
  ctx.globalAlpha=1;
  if(state.mode!=='war'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
+ if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
  ctx.restore();
 
  syncWarArenaOverlay(left,top,zoom);
