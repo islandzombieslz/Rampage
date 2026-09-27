@@ -7968,7 +7968,14 @@ function attackControlled(){
 function getLocalMovement(){
  let dx=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0),dy=(keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0);
  if(joystick.active){dx=joystick.x;dy=joystick.y}
- const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}return {dx,dy,attackSeq:NetworkAdapter.attackSeq};
+ const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}
+ const input={dx,dy,attackSeq:NetworkAdapter.attackSeq};
+ if(state.mode==='pvp'){
+   input.pvpAction=pvpControls.action;
+   input.pvpTargetId=pvpControls.targetId;
+   input.pvpAimDelta=pvpControls.aimDelta;
+ }
+ return input;
 }
 function sendLocalPVEInput(force=false){
  if(!NetworkAdapter.online||(state.mode!=='pve'&&state.mode!=='pvp')||!state.running)return;
@@ -8021,7 +8028,7 @@ let pvpVisualLast=0,pvpAttackTargetId=null;
 const pvpFlameImages={};
 function pvpCameraZoom(w,h){
  // The desktop camera is unchanged. Smaller screens see substantially more arena.
- if(!isMobileLike()&&Math.min(w,h)>650)return 1.80;
+ if(!isMobileLike())return 1.80;
  return clamp(Math.max(.73,Math.min(w/790,h/480)*1.1),.82,1.23);
 }
 function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
@@ -8031,14 +8038,16 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.shield=e.maxShield=PVP_BASE.shield*(minion?.5:1);
  e.damage=PVP_BASE.damageMax*(minion?.5:1);e.speed=PVP_BASE.speed*(minion?.5:1);
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
- e.ownerId=ownerId;e.controlled=ownerId===NetworkAdapter.localPlayerId;
+ e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
  e.pvpMode=true;e.pvpMinion=!!minion;e.pvpHero=hero.id||hero.type;
  e.pvpSpecialReadyAt=hero.type==='mage'?
    (hero.clan==='egypt'?performance.now()+10000:1e14):0;
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
+ e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
  e.pvpPowerUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
- e.pvpLastAttackSeq=0;e.attackCooldown=0;e.pvpShotUntil=0;
+ e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
+ e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
  state.entities.push(e);return e;
 }
@@ -8077,7 +8086,7 @@ function pvpCombatHit(target,source,damage){
  const oldShield=target.shield;
  applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
  if(oldShield>0&&target.shield<=0&&target.type==='mage'&&target.clan==='warriors'&&
-    target.pvpSpecialReadyAt>=1e13)target.pvpSpecialReadyAt=performance.now()+10000;
+    target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
 }
 function pvpBasicAttack(e){
  if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
@@ -8110,7 +8119,7 @@ function pvpSpecialAttack(e){
  if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
  e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+1500;
- e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.attackCooldown=.7;
+ e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.pvpSpecialWindowMs=e.pvpSpecialDuration;e.attackCooldown=.7;
  if(e.type==='mage'&&e.clan==='egypt'){
    // Exactly two autonomous Anubis; this special deals no direct damage.
    for(let i=0;i<2;i++){
@@ -8317,7 +8326,7 @@ function updatePVPHUD(){
  for(const button of $$('#pvpCombatHud [data-pvp-action]')){
    const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
    const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):0;
-   const duration=me?.pvpSpecialDuration||20000;
+   const duration=me?.pvpSpecialWindowMs||20000;
    button.disabled=!me||!available;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
