@@ -8354,7 +8354,11 @@ function updatePVP(dt){
  const cfg=difficultyConfig[state.difficulty];
  const elapsed=Math.max(0,state.pveTime-state.timeLeft),wave=Math.floor(elapsed/cfg.every);
  if(wave>pvpLastWave){pvpLastWave=wave;for(let i=0;i<cfg.wave;i++)pvpSpawnNPC()}
- if(!state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId)||state.timeLeft<=0)endPVPRound();
+ const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
+ const humans=state.players.filter(p=>p.human).length;
+ const aliveNPCs=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
+ if(state.timeLeft<=0||aliveHeroes.length===0||
+    (humans>1&&aliveHeroes.length===1)||(humans===1&&!aliveNPCs))endPVPRound();
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
