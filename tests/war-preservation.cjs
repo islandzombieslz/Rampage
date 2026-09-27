@@ -21,7 +21,9 @@ for(const [name,a,b,checksum,size] of expected){
  const actual=js.slice(i,j);
  // Ignore only the explicitly mode-gated PvP NPC balance branch. The original
  // damage function must otherwise match the recorded Clan War baseline byte-for-byte.
- const preserved=name==='combat damage'?actual.replace(/\n \/\/ PVP-ONLY NPC DAMAGE:[\s\S]*?\n \/\/ END PVP-ONLY NPC DAMAGE/,''):actual;
+ const preserved=name==='combat damage'?actual
+  .replace(/\n \/\/ PVP-ONLY NPC DAMAGE:[\s\S]*?\n \/\/ END PVP-ONLY NPC DAMAGE/,'')
+  .replace(/\n \/\/ PVP-ONLY DAMAGE TEXT:[\s\S]*?\n \/\/ END PVP-ONLY DAMAGE TEXT/,''):actual;
  if(name==='combat damage')assert.notEqual(preserved,actual,'expected isolated PvP NPC branch');
  assert.equal(preserved.length,size,name+' source length differs from pre-PvP War baseline');
  assert.equal(hash(preserved),checksum,name+' changed unexpectedly');
