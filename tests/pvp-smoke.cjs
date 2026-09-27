@@ -109,3 +109,42 @@ assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
 assert(html.includes("if(state.mode==='pvp')syncPVPPowerEffects("),'animated mage power');
 console.log('PvP hero registry, independent stats, mage specials, summons, power damage, mobile camera: PASS');
+
+async function testPVPReadyLobby(){
+ state.running=false;state.phase='idle';
+ state.players=[
+   {id:'u1',name:'Alice',human:true,pvpHero:'warrior',pvpConfirmed:false,color:'#abc'},
+   {id:'u2',name:'Beto',human:true,pvpHero:'king',pvpConfirmed:false,color:'#def'}
+ ];
+ const grid=node('#playerList');
+ grid.children=[];grid.replaceChildren=function(){this.children=[]};grid.appendChild=function(child){this.children.push(child)};
+ ctx.localPlayer=()=>state.players.find(p=>p.id===net.localPlayerId);
+ ctx.renderPlayers=()=>{};
+ const updates=[];
+ net.roomId='TEST';net.isHost=true;
+ net.waitFirebase=async()=>({
+   firebaseAuth:{currentUser:{uid:'u1'}},firebaseDb:{},
+   ref:(_db,path)=>path,
+   update:async (path,data)=>{updates.push({path,data})}
+ });
+ assert.equal(run('pvpAllPlayersConfirmed()'),false);
+ run('renderPVPPlayers(state.players,[])');
+ assert.equal(grid.children.length,16,'PvP grid has four by four slots');
+ assert.equal(grid.children[0].className.includes('mine'),true);
+ run('openPVPCharacterPicker()');
+ assert.equal(node('#pvpPicker').hidden,false);
+ run("pvpPickerDraft='egyptMage'");
+ await run('commitPVPCharacterPicker()');
+ assert.equal(updates.length,1);
+ assert.equal(updates[0].path,'rooms/TEST/players/u1');
+ assert.equal(updates[0].data.pvpHero,'egyptMage');
+ assert.equal(updates[0].data.pvpConfirmed,true);
+ assert.equal(state.players[0].pvpConfirmed,true);
+ assert.equal(state.players[0].pvpHero,'egyptMage');
+ assert.equal(run('pvpAllPlayersConfirmed()'),false,'wait for other human');
+ state.players[1].pvpConfirmed=true;
+ assert.equal(run('pvpAllPlayersConfirmed()'),true);
+ console.log('PvP 4x4 grid, own-card hero confirmation and all-player readiness: PASS');
+}
+testPVPReadyLobby().catch(e=>{console.error(e);process.exitCode=1});
+
