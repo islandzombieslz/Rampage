@@ -8010,6 +8010,396 @@ function advancePVERound(message='RODADA CONCLUÍDA'){
   },2000);
 }
 
+/* ==================== PVP: SEPARATE COMBAT ENGINE ====================
+   Never calls War's unit AI, attack dispatch or War shop. */
+const PVP_BASE=Object.freeze({hp:200,shield:100,speed:195,damageMin:25,damageMax:40,
+ meleeRange:133,meleeCooldown:.70,knockForce:95,knockTime:.10,
+ specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
+const pvpControls={selected:'attack',action:'attack',targetId:null,aimDelta:0};
+let pvpNpcSequence=0,pvpLastWave=0,pvpLastEnemyClan='warriors';
+let pvpVisualLast=0,pvpAttackTargetId=null;
+const pvpFlameImages={};
+function pvpCameraZoom(w,h){
+ // The desktop camera is unchanged. Smaller screens see substantially more arena.
+ if(!isMobileLike()&&Math.min(w,h)>650)return 1.80;
+ return clamp(Math.max(.73,Math.min(w/790,h/480)*1.1),.82,1.23);
+}
+function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
+ const e=entityBase(hero.type,x,y,team,color);
+ e.variant=hero.variant||'male';e.clan=hero.clan||'warriors';
+ e.hp=e.maxHp=PVP_BASE.hp*(minion?.5:1);
+ e.shield=e.maxShield=PVP_BASE.shield*(minion?.5:1);
+ e.damage=PVP_BASE.damageMax*(minion?.5:1);e.speed=PVP_BASE.speed*(minion?.5:1);
+ e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
+ e.ownerId=ownerId;e.controlled=ownerId===NetworkAdapter.localPlayerId;
+ e.pvpMode=true;e.pvpMinion=!!minion;e.pvpHero=hero.id||hero.type;
+ e.pvpSpecialReadyAt=hero.type==='mage'?
+   (hero.clan==='egypt'?performance.now()+10000:1e14):0;
+ e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
+ e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
+ e.pvpPowerUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpLastAttackSeq=0;e.attackCooldown=0;e.pvpShotUntil=0;
+ e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
+ state.entities.push(e);return e;
+}
+function pvpHeroForPlayer(p){return PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0]}
+function pvpSpawnNPC(heroId=null,owner=null){
+ const id=heroId||PVP_ENEMY_HERO_IDS[(pvpNpcSequence++)%PVP_ENEMY_HERO_IDS.length];
+ const hero=PVP_ENEMY_HEROES[id]||PVP_ENEMY_HEROES.naja;
+ const theta=Math.random()*Math.PI*2,cx=state.world.w/2,cy=state.world.h/2;
+ const dist=owner?75:Math.max(350,Math.min(state.world.w,state.world.h)*.37);
+ const x=clamp((owner?.x??cx)+Math.cos(theta)*dist,70,state.world.w-70);
+ const y=clamp((owner?.y??cy)+Math.sin(theta)*dist,70,state.world.h-70);
+ const e=pvpBaseEntity({...hero,id},x,y,owner?.team||'pvp-enemy',owner?.color||'#fb6772',owner?.ownerId||null,true);
+ if(owner){e.egyptSummoned=true;e.egyptSummonerId=owner.id;e.pvpSummonerId=owner.id}
+ return e;
+}
+function pvpNearestEnemy(e,preferred=null){
+ if(preferred!=null){
+   const target=state.entities.find(t=>t.id===Number(preferred)&&t.alive&&t.team!==e.team);
+   if(target)return target;
+ }
+ let nearest=null,best=Infinity;
+ for(const t of state.entities){
+   if(!t.alive||t===e||t.team===e.team)continue;
+   const d=(t.x-e.x)**2+(t.y-e.y)**2;
+   if(d<best){nearest=t;best=d}
+ }
+ return nearest;
+}
+function pvpDamageForRange(distance,special=false,multiplier=1){
+ const near=special?PVP_BASE.specialMax:PVP_BASE.damageMax;
+ const far=special?PVP_BASE.specialMin:PVP_BASE.damageMin;
+ return (far+(near-far)*clamp(1-distance/(special?270:PVP_BASE.meleeRange),0,1))*multiplier;
+}
+function pvpCombatHit(target,source,damage){
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
+ const oldShield=target.shield;
+ applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
+ if(oldShield>0&&target.shield<=0&&target.type==='mage'&&target.clan==='warriors'&&
+    target.pvpSpecialReadyAt>=1e13)target.pvpSpecialReadyAt=performance.now()+10000;
+}
+function pvpBasicAttack(e){
+ if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ const now=performance.now();
+ e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
+ e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
+ e.pvpMeleeVisualUntil=now+360;
+ let target=pvpNearestEnemy(e);
+ // Player and minion swings use the same immediate basic attack speed and reach.
+ if(target){
+   const distance=Math.hypot(target.x-e.x,target.y-e.y);
+   e.heading=Math.atan2(target.y-e.y,target.x-e.x);
+   if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
+   if(distance<=PVP_BASE.meleeRange+target.r*.36){
+     pvpCombatHit(target,e,pvpDamageForRange(distance,false,e.pvpMinion?.5:1));
+   }
+ }
+ return true;
+}
+function pvpCastPower(e,targetId){
+ if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ const target=pvpNearestEnemy(e,targetId);if(!target)return false;
+ const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
+ e.pvpPowerUntil=now+2500;e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
+ e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
+ e.heading=angle;e.facing=target.x<e.x?-1:1;
+ return true;
+}
+function pvpSpecialAttack(e){
+ if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||performance.now()<e.pvpSpecialReadyAt)return false;
+ const now=performance.now();
+ e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+1500;
+ e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.attackCooldown=.7;
+ if(e.type==='mage'&&e.clan==='egypt'){
+   // Exactly two autonomous Anubis; this special deals no direct damage.
+   for(let i=0;i<2;i++){
+     const summon=pvpSpawnNPC('anubis',e);summon.x=clamp(e.x+(i?76:-76),40,state.world.w-40);
+     summon.y=clamp(e.y+46,40,state.world.h-40);
+     e.pvpSummonedIds.push(summon.id);
+   }
+ }else{
+   for(const t of state.entities){
+     if(!t.alive||t.team===e.team)continue;
+     const distance=Math.hypot(t.x-e.x,t.y-e.y);
+     if(distance>265+t.r*.25)continue;
+     pvpCombatHit(t,e,pvpDamageForRange(distance,true,e.pvpMinion?.5:1));
+   }
+   if(e.type==='mage'){
+     for(const ally of state.entities)if(ally.alive&&ally.team===e.team&&Math.hypot(ally.x-e.x,ally.y-e.y)<265){
+       const before=ally.hp;ally.hp=Math.min(ally.maxHp,ally.hp+25);
+       if(ally.hp>before)ally.regenSerial=(ally.regenSerial||0)+1;
+     }
+   }
+ }
+ return true;
+}
+function pvpHandleAction(e,action,targetId){
+ if(!e?.alive)return false;
+ if(action==='special')return pvpSpecialAttack(e);
+ if(action==='power')return pvpCastPower(e,targetId);
+ return pvpBasicAttack(e);
+}
+function pvpTriggerAttack(override=null){
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat')return;
+ const action=override||pvpControls.selected;
+ if(action==='special'&&!pvpCanSpecial(pvpLocalHero()))return;
+ if(action==='power'&&!pvpCanPower(pvpLocalHero()))return;
+ pvpControls.action=action;NetworkAdapter.attackSeq++;
+ const me=pvpLocalHero();
+ if(NetworkAdapter.online&&!NetworkAdapter.isHost){sendLocalPVEInput(true);return}
+ if(me){me.pvpLastAttackSeq=NetworkAdapter.attackSeq;pvpHandleAction(me,action,pvpControls.targetId)}
+}
+function pvpLocalHero(){
+ return state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&e.alive&&!e.pvpMinion)||null;
+}
+function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&performance.now()>=e.pvpSpecialReadyAt)}
+function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power)}
+function pvpTickPower(e,now,steer=0){
+ if(!e.pvpPowerUntil||now>=e.pvpPowerUntil){e.pvpPowerUntil=0;return}
+ const target=pvpNearestEnemy(e,e.pvpAimTarget);
+ if(target&&target.id===e.pvpAimTarget){
+   const angle=Math.atan2(target.y-e.y,target.x-e.x);
+   // Assisted aim tracks the selected enemy, with limited lateral steering.
+   e.pvpAimAngle=angle+clamp(Number(steer)||0,-1,1)*.27;
+ }
+ e.heading=e.pvpAimAngle;e.facing=Math.cos(e.heading)<0?-1:1;
+ while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil){
+   const a=e.pvpAimAngle,ox=e.x+Math.cos(a)*30,oy=e.y-13;
+   const bx=ox+Math.cos(a)*305,by=oy+Math.sin(a)*305;
+   for(const t of state.entities){
+     if(!t.alive||t.team===e.team)continue;
+     if(distanceToSegment(t.x,t.y,ox,oy,bx,by)<=47+t.r*.33)
+       pvpCombatHit(t,e,PVP_BASE.fireDamage);
+   }
+   e.pvpPowerNextTick+=PVP_BASE.fireTick;
+ }
+}
+function pvpExpireSummons(now){
+ for(const owner of state.entities){
+   if(!owner.pvpSummonedIds?.length)continue;
+   if(owner.alive&&now<owner.pvpSpecialReadyAt)continue;
+   for(const id of owner.pvpSummonedIds){
+     const minion=state.entities.find(e=>e.id===id);
+     if(minion?.alive)startEntityDeath(minion);
+   }
+   owner.pvpSummonedIds=[];
+ }
+}
+function pvpBotAction(e,dt){
+ if(!e.alive||e.knockTime>0||e.pvpPowerUntil>performance.now()){e.moving=false;return}
+ const target=pvpNearestEnemy(e);if(!target){e.moving=false;return}
+ const dx=target.x-e.x,dy=target.y-e.y,d=Math.hypot(dx,dy)||1;
+ e.heading=Math.atan2(dy,dx);e.facing=dx<0?-1:1;
+ const ranged=e.type==='poseidon'||e.type==='anubis'||e.type==='dragon';
+ const range=ranged?205:PVP_BASE.meleeRange*.7;
+ if(d>range){
+   e.x=clamp(e.x+dx/d*e.speed*dt,35,state.world.w-35);
+   e.y=clamp(e.y+dy/d*e.speed*dt,35,state.world.h-35);e.moving=true;
+ }else{
+   e.moving=false;
+   if(ranged&&e.attackCooldown<=0){
+     e.attackCooldown=.7;e.attackSerial++;e.pvpShotUntil=performance.now()+290;e.pvpShotTargetId=target.id;
+     pvpCombatHit(target,e,pvpDamageForRange(d,false,.5));
+   }else if(!ranged)pvpBasicAttack(e);
+ }
+}
+function beginPVPRound(){
+ state.world.w=2200;state.world.h=1400;state.entities=[];state.particles=[];state.dragonProjectiles=[];
+ clearEntityVisuals();state.timeLeft=state.pveTime;pvpLastWave=0;
+ state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
+ $('#gameScreen').classList.remove('spectator-mode');
+ const deathFade=$('#deathFade');if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}
+ const humans=state.players.filter(p=>p.human);
+ humans.forEach((p,i)=>{
+   const a=i*Math.PI*2/Math.max(1,humans.length);
+   pvpBaseEntity(pvpHeroForPlayer(p),1100+Math.cos(a)*170,700+Math.sin(a)*170,p.id,p.color,p.id,false);
+ });
+ const npcs=state.players.filter(p=>!p.human);
+ for(const npc of npcs)pvpSpawnNPC(npc.pvpHero);
+ const cfg=difficultyConfig[state.difficulty];
+ for(let i=0;i<Math.max(1,cfg.initial);i++)pvpSpawnNPC();
+ pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimDelta=0;
+ flash('PVP • RODADA '+state.round,1.1);
+}
+function startPVP(){
+ if(state.mode!=='pvp')return;
+ beginMatchTracking();state.round=1;state.phase='combat';state.running=true;
+ state.players.forEach(p=>{p.score=0});
+ navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
+ beginPVPRound();
+}
+function pvpResult(winnerId){
+ const humans=state.players.filter(p=>p.human),winner=state.players.find(p=>p.id===winnerId);
+ const pvp=humans.length>1,awards={};
+ for(const player of humans){
+   if(winnerId!==player.id){awards[player.id]=50;continue}
+   const stats=matchStatsFor(player.id),damage=clamp(stats.damage/1200,0,1);
+   const speed=stats.victoryTimeLimit?clamp(1-stats.victorySeconds/stats.victoryTimeLimit,0,1):0;
+   const low=pvp?200:100,high=pvp?400:200;
+   awards[player.id]=Math.round(low+(high-low)*(.7*damage+.3*speed));
+ }
+ return {id:state.matchId,mode:'pvp',winnerId:winnerId||null,winnerName:winner?.name||'',
+   winnerClan:winner?.clan||pvpLastEnemyClan,pvp,humanCount:humans.length,awards};
+}
+function endPVPRound(){
+ if(state.phase!=='combat')return;
+ state.phase='between';state.running=false;
+ const humans=state.players.filter(p=>p.human),aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
+ const humanAlive=aliveHeroes.filter(e=>humans.some(p=>p.id===e.ownerId));
+ const npcAlive=state.entities.filter(e=>e.alive&&e.team==='pvp-enemy');
+ let winnerId=null;
+ if(!humanAlive.length)winnerId='enemy';
+ else if(humans.length===1)winnerId=humanAlive[0].ownerId;
+ else if(humanAlive.length===1)winnerId=humanAlive[0].ownerId;
+ else{
+   let best=-Infinity;
+   for(const hero of humanAlive){
+     const stat=matchStatsFor(hero.ownerId),score=stat.damage+(hero.hp+hero.shield)*.5;
+     if(score>best+.001){best=score;winnerId=hero.ownerId}
+     else if(Math.abs(score-best)<=.001)winnerId=null;
+   }
+ }
+ if(winnerId==='enemy'&&npcAlive.length)pvpLastEnemyClan=npcAlive[0].clan;
+ if(winnerId&&winnerId!=='enemy'){
+   const p=state.players.find(p=>p.id===winnerId);if(p)p.score=(p.score||0)+1;
+   const stat=matchStatsFor(winnerId);stat.wonRounds++;stat.victorySeconds+=state.pveTime-Math.max(0,state.timeLeft);
+   stat.victoryTimeLimit+=state.pveTime;
+ }
+ if(state.round>=state.rounds){
+   const best=Math.max(...humans.map(p=>p.score||0));
+   const leaders=humans.filter(p=>(p.score||0)===best);
+   const champion=best>0&&leaders.length===1?leaders[0].id:winnerId==='enemy'?'enemy':null;
+   finishGame('',pvpResult(champion));return;
+ }
+ flash(winnerId==='enemy'?'NPCS VENCERAM':winnerId?'RODADA VENCIDA':'EMPATE',1.4);
+ setTimeout(()=>{
+   if(state.mode!=='pvp'||state.phase!=='between')return;
+   state.round++;state.phase='combat';state.running=true;beginPVPRound();
+ },1800);
+}
+function updatePVP(dt){
+ if(state.phase!=='combat')return;
+ const now=performance.now();
+ for(const e of state.entities){
+   if(!e.alive)continue;
+   if(e.ownerId&&!e.pvpMinion){
+     if(e.knockTime>0){e.moving=false;continue}
+     const input=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+     let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
+     if(len>1){dx/=len;dy/=len}
+     if(dx||dy){
+       e.x=clamp(e.x+dx*e.speed*dt,35,state.world.w-35);
+       e.y=clamp(e.y+dy*e.speed*dt,35,state.world.h-35);
+       e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
+     }else e.moving=false;
+     const seq=Number(input.attackSeq)||0;
+     if(seq>e.pvpLastAttackSeq){
+       e.pvpLastAttackSeq=seq;pvpHandleAction(e,input.pvpAction||'attack',input.pvpTargetId);
+     }
+     pvpTickPower(e,now,input.pvpAimDelta);
+   }else pvpBotAction(e,dt);
+ }
+ pvpExpireSummons(now);
+ state.timeLeft-=dt;
+ const cfg=difficultyConfig[state.difficulty];
+ const elapsed=Math.max(0,state.pveTime-state.timeLeft),wave=Math.floor(elapsed/cfg.every);
+ if(wave>pvpLastWave){pvpLastWave=wave;for(let i=0;i<cfg.wave;i++)pvpSpawnNPC()}
+ if(!state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId)||state.timeLeft<=0)endPVPRound();
+}
+function updatePVPHUD(){
+ const me=pvpLocalHero(),now=performance.now();
+ const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
+ perfSetText(hudMainPerfEl,state.round+'/'+state.rounds);
+ perfSetText(hudSubPerfEl,'⚔ '+aliveHeroes.length+'  💀 '+state.entities.filter(e=>e.alive&&e.team==='pvp-enemy').length);
+ perfSetText(timerPerfEl,fmt(state.timeLeft));perfSetText(aliveCountPerfEl,'');
+ const hero=PVP_HERO_BY_ID[me?.pvpHero]||PVP_HEROES[0];
+ for(const button of $$('#pvpCombatHud [data-pvp-action]')){
+   const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
+   const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):0;
+   const duration=me?.pvpSpecialDuration||20000;
+   button.disabled=!me||!available;
+   button.classList.toggle('unavailable',!available);
+   button.classList.toggle('active',pvpControls.selected===action);
+   button.classList.toggle('cooling',available&&remaining>0&&remaining<1e10);
+   const symbol=button.querySelector('.pvp-hud-symbol'),cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
+   if(symbol)symbol.textContent=available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
+   if(cooldown)cooldown.textContent=!available?'':remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
+   if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
+ }
+}
+const PVP_FIRE_IMAGES={};
+function pvpFlameImage(e){
+ const key=e.clan==='egypt'?'egypt':'warrior';
+ if(!PVP_FIRE_IMAGES[key]){
+   const image=new Image();image.src=key==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
+   PVP_FIRE_IMAGES[key]=image;
+ }
+ return PVP_FIRE_IMAGES[key];
+}
+function drawPVPEffects(ctx,now){
+ if(state.mode!=='pvp')return;
+ const me=pvpLocalHero();
+ if(me&&pvpControls.selected==='power'){
+   const target=pvpNearestEnemy(me,pvpControls.targetId);
+   if(target){ctx.save();ctx.strokeStyle='#ffe06d';ctx.lineWidth=3;ctx.beginPath();
+     ctx.arc(target.x,target.y,Math.max(28,target.r+12),0,Math.PI*2);
+     ctx.moveTo(target.x-42,target.y);ctx.lineTo(target.x-23,target.y);
+     ctx.moveTo(target.x+23,target.y);ctx.lineTo(target.x+42,target.y);ctx.stroke();ctx.restore()}
+ }
+ for(const e of state.entities){
+   if(!e.alive)continue;
+   if(e.pvpPowerUntil>now){
+     ctx.save();ctx.translate(e.x,e.y-13);ctx.rotate(e.pvpAimAngle||e.heading||0);
+     const img=pvpFlameImage(e);
+     if(img.complete&&img.naturalWidth)ctx.drawImage(img,25,-60,305,105);
+     else{ctx.fillStyle='#f97a17a0';ctx.fillRect(25,-23,305,46)}
+     ctx.restore();
+   }
+   if(e.pvpSpecialVisualUntil>now){
+     ctx.save();ctx.globalAlpha=clamp((e.pvpSpecialVisualUntil-now)/1500,0,1)*.7;
+     ctx.strokeStyle=e.clan==='egypt'?'#d8b967':'#ffe7b6';ctx.lineWidth=6;
+     ctx.beginPath();ctx.arc(e.x,e.y,90+(1-(e.pvpSpecialVisualUntil-now)/1500)*150,0,Math.PI*2);ctx.stroke();ctx.restore();
+   }
+   if(e.pvpShotUntil>now){
+     const t=state.entities.find(t=>t.id===e.pvpShotTargetId);
+     if(t){ctx.save();ctx.strokeStyle=e.type==='poseidon'?'#70dfff':'#ffc96a';ctx.lineWidth=5;
+       ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(t.x,t.y);ctx.stroke();ctx.restore()}
+   }
+ }
+}
+$$('#pvpCombatHud [data-pvp-action]').forEach(button=>button.onclick=()=>{
+ if(state.mode!=='pvp'||!state.running||button.disabled)return;
+ const action=button.dataset.pvpAction;
+ if(action==='special'){pvpControls.selected='special';pvpTriggerAttack('special');pvpControls.selected='attack'}
+ else{pvpControls.selected=action;if(action==='power')pvpControls.targetId=pvpNearestEnemy(pvpLocalHero())?.id??null}
+ updatePVPHUD();
+});
+$('#gameScreen').addEventListener('pointerdown',event=>{
+ if(state.mode!=='pvp'||pvpControls.selected!=='power'||!state.running)return;
+ if(event.target.closest?.('#attackBtn,#touchControls,#pvpCombatHud,button,input,select'))return;
+ const me=pvpLocalHero();if(!me)return;
+ let target=null;
+ const node=event.target.closest?.('.entity-visual');
+ if(node)target=state.entities.find(e=>e.id===Number(node.dataset.entityId)&&e.alive&&e.team!==me.team);
+ if(!target){
+   const pt=screenPointToGame(event.clientX,event.clientY);
+   const x=state.camera.x+pt.x/state.camera.zoom,y=state.camera.y+pt.y/state.camera.zoom;
+   target=state.entities.find(e=>e.alive&&e.team!==me.team&&Math.hypot(e.x-x,e.y-y)<e.r+32);
+ }
+ if(!target)return;
+ event.stopPropagation();event.preventDefault();
+ if(pvpControls.targetId===target.id)pvpTriggerAttack('power');
+ else pvpControls.targetId=target.id;
+},true);
+$('#gameScreen').addEventListener('pointermove',event=>{
+ if(state.mode!=='pvp'||!state.running||!pvpLocalHero()?.pvpPowerUntil||!event.buttons)return;
+ const pt=screenPointToGame(event.clientX,event.clientY),me=pvpLocalHero();
+ const x=state.camera.x+pt.x/state.camera.zoom,y=state.camera.y+pt.y/state.camera.zoom;
+ const desired=Math.atan2(y-me.y,x-me.x),base=me.pvpAimAngle||me.heading;
+ pvpControls.aimDelta=clamp(Math.atan2(Math.sin(desired-base),Math.cos(desired-base))/.27,-1,1);
+},true);
+
 /* ==================== PVE ==================== */
 function startPVE(){
  beginMatchTracking();state.round=1;state.roundScores={};state.phase='combat';state.running=true;state.entities=[];state.particles=[];
