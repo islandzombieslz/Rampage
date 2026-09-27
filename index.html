@@ -8391,6 +8391,7 @@ function pvpBotAction(e,dt){
 }
 function pvpAllyBotAction(e,dt){
  if(!e?.alive)return;
+ if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
  const t=pvpNearestEnemy(e);if(!t){e.moving=false;return}
