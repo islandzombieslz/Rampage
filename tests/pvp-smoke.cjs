@@ -51,7 +51,7 @@ assert.equal(base.hp,200);assert.equal(base.shield,100);
 assert.equal(base.damageMin,25);assert.equal(base.damageMax,40);
 assert.equal(base.meleeCooldown,.70);assert.equal(base.specialCooldown,20000);
 assert.equal(run('pvpDamageForRange(0)'),40);
-assert.equal(run('pvpDamageForRange(133)'),25);
+assert.equal(run('pvpDamageForRange(112)'),25);
 assert.equal(run('pvpDamageForRange(0,true)'),100);
 assert.equal(run('pvpDamageForRange(270,true)'),80);
 assert.equal(run('pvpCameraZoom(1920,1080)'),1.8);
