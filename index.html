@@ -8953,12 +8953,12 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
        img.style.visibility='hidden';continue;
      }
      stopGif(img);
-     img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
+     img.className=(key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special')+' pvp-special-effect';
      restartGif(img,key,serial);
      img.dataset.serial=serial;
      // Like War, a cast has one fixed body/power timeline. Do not extend
      // it every frame or on a delayed snapshot; stop before frame zero repeats.
-     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200));
+     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200)-45);
      pvpSpecialFxPlayedSerial.set(e.id,serialNumber);
    }
    if(now>=Math.min(img._visualEndAt,end)-PVP_GIF_END_MARGIN_MS){
@@ -8972,7 +8972,10 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      const progress=clamp(1-(end-now)/duration,0,1);
      const egypt=e.clan==='egypt',grow=egypt?(.96+progress*.02):(.90+progress*.30);
      size=MAGE_SPECIAL_RADIUS*2*zoom*grow*(egypt? .50:1);
-     alpha=Math.min(clamp(progress/.16,0,1),clamp((1-progress)/.22,0,1));
+     // Keep the power fully opaque during the action; fade only at its
+   // actual beginning/end, rather than dimming it for long GIF percentages.
+   const started=Number(e.pvpSpecialFxStartedAt)||end-duration;
+   alpha=Math.min(clamp((now-started)/180,0,1),clamp((end-now)/220,0,1));
    }else size=(key==='kingPower'?430:190)*zoom;
    img.style.left=x+'px';img.style.top=y+'px';
    img.style.width=size+'px';img.style.height=size+'px';
