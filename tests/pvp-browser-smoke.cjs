@@ -67,7 +67,10 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const ally=state.entities.find(e=>e.pvpAllyBot&&e.pvpHero==='mageFemale');
    const img=ally&&pvpSpecialFxNodes.get(ally.id);
    return {serial:ally?.pvpSpecialSerial||0,src:!!img?.hasAttribute('src'),
-     played:ally?pvpSpecialFxPlayedSerial.get(ally.id):null};
+     played:ally?pvpSpecialFxPlayedSerial.get(ally.id):null,
+     opacity:Number(img?.style.opacity||0),loaded:!!img?.naturalWidth,
+     loading:!!img?.classList.contains('pvp-gif-loading'),
+     currentUrl:img?.getAttribute('src')||''};
  },
  expireAndReplayWarriorFx(){
    const ally=state.entities.find(e=>e.pvpAllyBot&&e.pvpHero==='mageFemale');
@@ -77,7 +80,29 @@ const pvpTestHook=`window.__pvpBrowserTest={
    ally.pvpSpecialFxUntil=performance.now()+1000;
    syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
    return !!pvpSpecialFxNodes.get(ally.id);
+ }, },
+ dragonFirstHit(){
+   const hero=pvpLocalHero();
+   if(!hero?.alive)return {armed:false,shot:false};
+   const dragon=state.entities.find(e=>e.alive&&e.type==='dragon')||pvpSpawnNPC('dragon');
+   dragon.pvpDragonFirstHitSeen=false;dragon.pvpDragonRetaliatePending=false;
+   dragon.pendingDragonAttack=null;dragon.dragonFlightState='takeoff';
+   dragon.dragonTakeoffEndAt=performance.now()+180;dragon.knockTime=.12;
+   const before=state.dragonProjectiles.length;
+   pvpCombatHit(dragon,hero,12);
+   const armed=dragon.pvpDragonRetaliatePending===true;
+   dragon.dragonTakeoffEndAt=performance.now()-1;
+   pvpBotAction(dragon,.016);
+   return {armed,shot:state.dragonProjectiles.length===before+1,
+     correctSource:state.dragonProjectiles.some(p=>p.sourceId===dragon.id),
+     cleared:dragon.pvpDragonRetaliatePending===false};
+ },
+ missingSprites(){
+   return [...document.querySelectorAll('#entityLayer img,#combatFxLayer img')]
+     .filter(img=>!img.hasAttribute('src')&&getComputedStyle(img).visibility!=='hidden')
+     .length;
  }
+
 };`;
 const testHTML=original.replace(/<script type="module">[\s\S]*?<\/script>/,()=>'<script>'+firebaseStub+'</script>')
  .replace('/* ==================== PVE ==================== */',pvpTestHook+'\n/* ==================== PVE ==================== */');
@@ -88,6 +113,10 @@ const server=http.createServer((req,res)=>{
    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(testHTML);return;
  }
  if(name==='/sw.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.end('self.addEventListener("install",()=>self.skipWaiting());');return}
+ // Exercise the one-time canonical fallback when a cache-busted GIF fails.
+ if(name==='/assets/mage/poder-mago-especial.gif'&&new URL(req.url,'http://127.0.0.1').searchParams.has('gifStart')){
+   res.writeHead(404);res.end('test-only cache-buster failure');return;
+ }
  if(/\.(gif|png|webp|jpg|jpeg|svg)$/i.test(name)){res.writeHead(200,{'Content-Type':'image/gif'});res.end(gif);return}
  if(/\.(mp3|wav|ogg)$/i.test(name)){res.writeHead(200,{'Content-Type':'audio/mpeg'});res.end(Buffer.alloc(0));return}
  res.writeHead(404);res.end();
@@ -165,12 +194,19 @@ async function main(){
    const firstFx=await page.evaluate(()=>window.__pvpBrowserTest.warriorFx());
    assert.equal(firstFx.serial,1,'Warrior special serial');
    assert.equal(firstFx.src,true,'Warrior power GIF starts behind the mage');
+   assert.equal(firstFx.opacity,1,'Warrior special GIF remains fully bright between short fades');
+   assert(firstFx.loaded&&!firstFx.loading,'PvP canonical retry finishes decoding before showing the image');
+   assert(!firstFx.currentUrl.includes('gifStart='),'failed unique URL retries the cached canonical GIF');
+   assert.equal(await page.evaluate(()=>window.__pvpBrowserTest.missingSprites()),0,'stopped sprites cannot paint broken image icons');
+   const dragon=await page.evaluate(()=>window.__pvpBrowserTest.dragonFirstHit());
+   assert.deepEqual(dragon,{armed:true,shot:true,correctSource:true,cleared:true},
+     'first incoming hit must produce a real dragon projectile even during takeoff');
    const replayed=await page.evaluate(()=>window.__pvpBrowserTest.expireAndReplayWarriorFx());
    assert.equal(replayed,false,'spent PvP special never recreates its GIF on a late snapshot');
    assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas and no GIF replay');
+   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas, first-hit dragon ball, decoded image fallback and no GIF replay');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
