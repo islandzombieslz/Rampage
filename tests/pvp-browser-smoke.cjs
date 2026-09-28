@@ -55,8 +55,8 @@ const pvpTestHook=`window.__pvpBrowserTest={castEgyptianSpecial(){
  hero.pvpSpecialReadyAt=performance.now()-1;
  return pvpSpecialAttack(hero);
 }};`;
-const testHTML=original.replace(/<script type="module">[\\s\\S]*?<\\/script>/,()=>'<script>'+firebaseStub+'</script>')
- .replace('/* ==================== PVE ==================== */',pvpTestHook+'\\n/* ==================== PVE ==================== */');
+const testHTML=original.replace(/<script type="module">[\s\S]*?<\/script>/,()=>'<script>'+firebaseStub+'</script>')
+ .replace('/* ==================== PVE ==================== */',pvpTestHook+'\n/* ==================== PVE ==================== */');
 assert.notEqual(testHTML,original);
 const server=http.createServer((req,res)=>{
  const name=new URL(req.url,'http://127.0.0.1').pathname;
