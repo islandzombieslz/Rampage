@@ -235,7 +235,7 @@ let fxRestarts=0,fxStops=0;
 ctx.restartGif=(image,key,serial)=>{image._src='gif';fxRestarts++;return true};
 ctx.stopGif=image=>{if(image._src){image._src='';fxStops++}};
 ctx.entityCameraLayer={appendChild(){}};ctx.combatCameraLayer={appendChild(){}};ctx.renderFrameNow=now;
-vm.runInContext(section('const pvpFlameNodes=new Map()', 'const PVP_FIRE_IMAGES={}'),ctx);
+// PvP effect maps/functions were already loaded with the isolated PvP section.
 royal.pvpSpecialFxUntil=now+3000;
 run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxRestarts,1);
