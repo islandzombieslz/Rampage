@@ -106,7 +106,8 @@ async function main(){
      throw err;
    }
    await page.locator('#pvpPicker:not([hidden])').waitFor();
-   await page.locator('#pvpHeroChoices button').filter({hasText:'Mago do Egito'}).first().click();
+   assert.equal(await page.locator('#pvpHeroChoices button').count(),3,'PvP offers exactly three heroes');
+   await page.locator('#pvpHeroChoices button').filter({hasText:'Maga do Egito'}).first().click();
    await page.locator('#pvpHeroConfirm').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
