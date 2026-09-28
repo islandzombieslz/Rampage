@@ -8369,6 +8369,18 @@ function pvpExpireSummons(now){
    owner.pvpSummonedIds=[];
  }
 }
+// Reuse per-team target arrays during a PvP frame rather than scanning all units
+// independently for each ally/NPC. Target eligibility and attack AI are unchanged.
+const pvpFrameTargetLists=new Map(),pvpFrameLiving=[];
+function pvpRebuildTargets(){
+ pvpFrameTargetLists.clear();pvpFrameLiving.length=0;
+ for(const e of state.entities)if(e.alive)pvpFrameLiving.push(e);
+ for(const e of pvpFrameLiving)if(!pvpFrameTargetLists.has(e.team))pvpFrameTargetLists.set(e.team,[]);
+ for(const [team,targets] of pvpFrameTargetLists){
+  for(const e of pvpFrameLiving)if(e.team!==team)targets.push(e);
+ }
+}
+function pvpTargetsFor(e){return pvpFrameTargetLists.get(e.team)||state.entities}
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
  if(e.type==='golem')return e.golemAttackSerial||0;
@@ -8395,7 +8407,7 @@ function pvpBotAction(e,dt){
   }
  }
  // Keep War's AI and timed GIFs intact; PvP controls recovery between attacks.
- aiFight(e,dt,null,state.entities);
+ aiFight(e,dt,null,pvpTargetsFor(e));
  if(pvpNPCSerial(e)!==before){
   e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
   if(e.type==='dragon'){
@@ -8409,7 +8421,13 @@ function pvpAllyBotAction(e,dt){
  if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
- const t=pvpNearestEnemy(e);if(!t){e.moving=false;return}
+ let t=null,best=Infinity;
+ for(const candidate of pvpTargetsFor(e)){
+  if(!candidate.alive||candidate===e)continue;
+  const dx=candidate.x-e.x,dy=candidate.y-e.y,ds=dx*dx+dy*dy;
+  if(ds<best){best=ds;t=candidate}
+ }
+ if(!t){e.moving=false;return}
  const dx=t.x-e.x,dy=t.y-e.y,d=Math.hypot(dx,dy)||1;
  e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>3)e.facing=dx<0?-1:1;
  const mage=e.type==='mage',range=mage?210:105;
@@ -8529,6 +8547,7 @@ function endPVPRound(){
 function updatePVP(dt){
  if(state.phase!=='combat')return;
  const now=performance.now();
+ pvpRebuildTargets();
  const entityById=rebuildWarEntityIdMap();
  updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
  for(const e of state.entities){
