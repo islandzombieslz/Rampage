@@ -198,6 +198,55 @@ ctx.paint=paint;run('drawPVPDamageNumbers(paint,performance.now()+500)');
 assert.equal(drawing[0][0],'-15');
 run('drawPVPDamageNumbers(paint,performance.now()+1100)');
 assert.equal(drawing.length,1,'damage text expires after one second');
+// Regression: one special serial triggers exactly one action and one complete GIF.
+run('pvpGifFullDurationMs.set("kingSpecial",1200);pvpGifFullDurationMs.set("kingPower",900)');
+const royal=run('pvpBaseEntity(PVP_HERO_BY_ID.king,500,500,"u1","#e3b341","royal",false)');
+const started=now;
+assert(run('pvpSpecialAttack(state.entities.find(e=>e.id==='+royal.id+'))'));
+assert.equal(royal.pvpSpecialSerial,1);
+assert.equal(royal.pvpActionUntil,started+1200);
+assert.equal(run('pvpSpecialAttack(state.entities.find(e=>e.id==='+royal.id+'))'),false,'no repeated special during action');
+assert.equal(royal.pvpSpecialSerial,1);
+now+=700;royal.attackCooldown=0;
+assert.equal(run('pvpBasicAttack(state.entities.find(e=>e.id==='+royal.id+'))'),false,'basic cannot interrupt special');
+now+=501;
+assert(run('pvpBasicAttack(state.entities.find(e=>e.id==='+royal.id+'))'),'basic resumes after complete special');
+assert.equal(royal.pvpSpecialSerial,1,'normal attack does not retrigger special');
+
+let visualStops=0;
+const visual={_src:'gif',closest:()=>element,hasAttribute:()=>!!visual._src,removeAttribute(){this._src=''}};
+const element={_pvpGifCycle:null,classList:{contains:()=>false}};
+ctx.fakePvpImage=visual;ctx.fakePvpElement=element;
+ctx.stopGif=image=>{if(image._src){visualStops++;image._src=''}};
+run('pvpGifFullDurationMs.set("kingSpecial",1000)');
+run('pvpRememberGifCycle(fakePvpImage,"kingSpecial",7)');
+assert.equal(run('pvpPreserveGifState(fakePvpElement,"idle")'),'special');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),false,'new attack cannot restart a GIF mid-cycle');
+now+=976;
+assert.equal(run('pvpPreserveGifState(fakePvpElement,"special")'),'idle','spent serial cannot remain in special');
+assert.equal(visualStops,1,'GIF is stopped exactly once before its second loop');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),true,'new action may start after one full cycle');
+assert.equal(run('pvpPreserveGifState(fakePvpElement,"special")'),'idle','stale pending special cannot revive same GIF');
+assert.equal(visualStops,1);
+
+// PvP FX nodes are retained after playback until the ability window ends, preventing
+// the same serial from being re-created or replayed by a delayed network snapshot.
+let fxRestarts=0,fxStops=0;
+ctx.restartGif=(image,key,serial)=>{image._src='gif';fxRestarts++;return true};
+ctx.stopGif=image=>{if(image._src){image._src='';fxStops++}};
+ctx.entityCameraLayer={appendChild(){}};ctx.combatCameraLayer={appendChild(){}};ctx.renderFrameNow=now;
+// PvP effect maps/functions were already loaded with the isolated PvP section.
+royal.pvpSpecialFxUntil=now+3000;
+run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+assert.equal(fxRestarts,1);
+now+=880;ctx.renderFrameNow=now;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+assert.equal(fxStops,1);
+now+=200;ctx.renderFrameNow=now;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+assert.equal(fxRestarts,1,'spent special FX serial must not replay while its window remains active');
+royal.pvpSpecialSerial++;royal.pvpSpecialFxUntil=now+3000;
+run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+assert.equal(fxRestarts,2,'a genuinely new activation plays a new effect');
+console.log('PvP serial-based special, action lock, one-shot body and effect GIFs: PASS');
 console.log('PvP isolated arena, allied NPCs, NPC recovery, Poseidon and damage text: PASS');
 console.log('PvP real NPC dispatcher, dragon takeoff, remote state and sequential enemy groups: PASS');
 console.log('PvP hero registry, independent stats, mage specials, summons, power damage, mobile camera: PASS');

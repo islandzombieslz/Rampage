@@ -4769,12 +4769,13 @@ function serializeGame(){
          out.pvpSpecialLocked=e.pvpSpecialReadyAt>=1e13;
          out.pvpSpecialRemainingMs=out.pvpSpecialLocked?0:Math.max(0,(Number(e.pvpSpecialReadyAt)||0)-now);
          out.pvpPowerRemainingMs=Math.max(0,(Number(e.pvpPowerUntil)||0)-now);
+          out.pvpActionRemainingMs=Math.max(0,(Number(e.pvpActionUntil)||0)-now);
           out.pvpPowerVisualRemainingMs=Math.max(0,(Number(e.pvpPowerVisualUntil)||0)-now);
           out.pvpSpecialFxRemainingMs=Math.max(0,(Number(e.pvpSpecialFxUntil)||0)-now);
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
-         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
+         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
        }
        if(out.pendingMageAttack){
@@ -4918,6 +4919,7 @@ function applyRemoteGame(game){
      if(state.mode==='pvp'){
        out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
        out.pvpPowerUntil=localNow+Math.max(0,Number(out.pvpPowerRemainingMs)||0);
+        out.pvpActionUntil=localNow+Math.max(0,Number(out.pvpActionRemainingMs)||0);
         out.pvpPowerVisualUntil=localNow+Math.max(0,Number(out.pvpPowerVisualRemainingMs)||0);
         out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
@@ -6803,6 +6805,7 @@ function restartGif(img,keyOrSrc,serial=0){
  if(!img)return;
  const key=ASSETS[keyOrSrc]?keyOrSrc:Object.keys(ASSETS).find(k=>ASSETS[k]===keyOrSrc);
  const src=key?ASSETS[key]:keyOrSrc;
+ if(state.mode==='pvp'&&key&&!pvpMayRestartGif(img,key,serial))return false;
  if(key)img.dataset.assetKey=key;
  releaseGifObjectUrl(img);
  img.removeAttribute('src');
@@ -8225,7 +8228,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
  e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
- e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
@@ -8279,18 +8282,40 @@ const PVP_GIF_STATES=Object.freeze({
 function pvpFullGifDuration(key,fallback=3000){
  return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
 }
+// A GIF is a playback of one action serial, not the action state itself.
+// When it finishes, remove src BEFORE the browser loops to frame zero.
+const PVP_GIF_END_MARGIN_MS=25;
+function pvpMayRestartGif(img,key,serial){
+ const el=img?.closest?.('.entity-visual'),cycle=el?._pvpGifCycle;
+ if(!cycle||cycle.img!==img||cycle.key!==key)return true;
+ // Allow the existing one-time image-load retry if the sprite never decoded.
+ if(img.complete&&img.naturalWidth===0)return true;
+ if(!cycle.done&&performance.now()<cycle.until-PVP_GIF_END_MARGIN_MS)return false;
+ return true;
+}
 function pvpRememberGifCycle(img,key,serial){
  const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
  const el=img.closest?.('.entity-visual');if(!el)return;
  const now=performance.now(),duration=pvpFullGifDuration(key,3000);
- el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration};
+ el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration,done:false};
 }
 function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
- const cycle=el._pvpGifCycle;
- if(cycle&&cycle.until>performance.now()&&
-   (desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly')&&
-   cycle.img?.hasAttribute('src'))return cycle.state;
+ const cycle=el._pvpGifCycle;if(!cycle)return desired;
+ const now=performance.now();
+ if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
+ // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
+ const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
+ if(!cycle.done&&(now>=cycle.until-PVP_GIF_END_MARGIN_MS||underground)){
+  cycle.done=true;stopGif(cycle.img);
+ }
+ if(cycle.done){
+  // The same pending attack/late network snapshot must never show or restart a spent GIF.
+  if(desired===cycle.state)return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  return desired;
+ }
+ if(desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly'||
+    (cycle.state==='special'&&desired==='attack'))return cycle.state;
  return desired;
 }
 function pvpDamageForRange(distance,special=false,multiplier=1){
@@ -8306,7 +8331,7 @@ function pvpCombatHit(target,source,damage){
     target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
 }
 function pvpBasicAttack(e){
- if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const now=performance.now();
  e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
  e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
@@ -8324,11 +8349,12 @@ function pvpBasicAttack(e){
  return true;
 }
 function pvpCastPower(e,targetId){
- if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const target=pvpNearestEnemy(e,targetId);if(!target)return false;
  const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
  e.pvpPowerUntil=now+2500;
  e.pvpPowerVisualUntil=now+Math.max(2500,pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000));
+ e.pvpActionUntil=e.pvpPowerVisualUntil;
  e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
  e.heading=angle;e.facing=target.x<e.x?-1:1;
@@ -8340,10 +8366,22 @@ function pvpSpecialEffectKey(e){
  if(e.type==='mage')return e.clan==='egypt'?'egyptMagePowerSpecial':'magePowerSpecial';
  return null;
 }
+function pvpBodySpecialKey(e){
+ if(e.type==='king')return 'kingSpecial';
+ if(e.type==='brownWarrior')return 'brownSpecial';
+ if(e.type==='mage'){
+  const egypt=e.clan==='egypt',female=e.variant==='female';
+  return egypt?(female?'egyptFemaleMageSpecial':'egyptMageSpecial'):(female?'femaleMageSpecial':'mageSpecial');
+ }
+ return null;
+}
 function pvpSpecialAttack(e){
- if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||performance.now()<e.pvpSpecialReadyAt)return false;
+ if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||e.attackCooldown>0||
+    e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
- e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+1500;
+ const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
+ e.pvpActionUntil=now+bodyDuration;
+ e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+bodyDuration;
  e.pvpSpecialFxUntil=now+Math.max(1500,pvpFullGifDuration(pvpSpecialEffectKey(e),3200));
  e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.pvpSpecialWindowMs=e.pvpSpecialDuration;e.attackCooldown=.7;
  if(e.type==='mage'&&e.clan==='egypt'){
@@ -8389,8 +8427,10 @@ function pvpTriggerAttack(override=null){
 function pvpLocalHero(){
  return state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&e.alive&&!e.pvpMinion)||null;
 }
-function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&performance.now()>=e.pvpSpecialReadyAt)}
-function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power)}
+function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&e.attackCooldown<=0&&
+  performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
+function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.attackCooldown<=0&&
+  performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
 function pvpTickPower(e,now,steer=0){
  if(!e.pvpPowerUntil||now>=e.pvpPowerUntil){e.pvpPowerUntil=0;return}
  const target=pvpNearestEnemy(e,e.pvpAimTarget);
@@ -8486,6 +8526,7 @@ function pvpAllyBotAction(e,dt){
  if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
+ if(e.pvpActionUntil>now){e.moving=false;return}
  let t=null,best=Infinity;
  for(const candidate of pvpTargetsFor(e)){
   if(!candidate.alive||candidate===e)continue;
@@ -8670,8 +8711,9 @@ function updatePVPHUD(){
  const hero=PVP_HERO_BY_ID[me?.pvpHero]||PVP_HEROES[0];
  for(const button of $$('#pvpCombatHud [data-pvp-action]')){
    const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
-   const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):0;
-   const duration=me?.pvpSpecialWindowMs||20000;
+   const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):
+     action==='power'?Math.max(0,(me?.pvpPowerVisualUntil||0)-now):0;
+   const duration=action==='power'?pvpFullGifDuration(me?.clan==='egypt'?'egyptMagePower':'magePower',3000):(me?.pvpSpecialWindowMs||20000);
    button.disabled=!me||!available;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
@@ -8696,7 +8738,14 @@ function syncPVPPowerEffects(left,top,zoom){
      img.draggable=false;img.decoding='async';layer.appendChild(img);pvpFlameNodes.set(e.id,img);img.dataset.serial='-1';
    }
    const serial=String(e.pvpPowerSerial||0),key=e.clan==='egypt'?'egyptMagePower':'magePower';
-   if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,key,serial)}
+   if(img.dataset.serial!==serial){
+    img.dataset.serial=serial;restartGif(img,key,serial);
+    img._visualEndAt=now+pvpFullGifDuration(key,3000);
+   }
+   if(now>=Number(img._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
+    // Power damage retains its original tick window; only the GIF ends.
+    stopGif(img);img.style.visibility='hidden';continue;
+   }
    const angle=e.pvpAimAngle||e.heading||0;
    const ox=e.x+Math.cos(angle)*30,oy=e.y-13;
    img.style.left=((ox-left)*zoom)+'px';img.style.top=((oy-top)*zoom)+'px';
@@ -8714,8 +8763,14 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
  const now=renderFrameNow||performance.now(),active=pvpSpecialFxActiveIds;active.clear();
  for(const e of state.entities){
   const key=pvpSpecialEffectKey(e),previous=pvpSpecialFxNodes.get(e.id);
-  if(!key)continue;
+  const serial=String(e.pvpSpecialSerial||0);
+  if(!e.alive||!key||serial==='0')continue;
   if(!(e.pvpSpecialFxUntil>now||previous?._visualEndAt>now))continue;
+  if(previous&&previous.dataset.serial===serial&&
+     now>=Number(previous._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
+   // Keep the consumed serial until its window closes; never recreate/reloop it.
+   stopGif(previous);previous.style.visibility='hidden';active.add(e.id);continue;
+  }
   const x=(e.x-left)*zoom,y=(e.y-top)*zoom,pad=280*zoom;
   if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
    if(previous){active.add(e.id);previous.style.visibility='hidden'}
@@ -8725,7 +8780,6 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
   let img=previous;
   if(!img){img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
    entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img)}
-  const serial=String(e.pvpSpecialSerial||0);
   if(img.dataset.serial!==serial){
    img.dataset.serial=serial;
    img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
@@ -11226,6 +11280,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
+         if(state.mode==='pvp'&&el._pvpGifCycle?.img===img&&el._pvpGifCycle.done)return;
          restartGif(img,original,Date.now());
        },350);
      }else if(assetWarning){
@@ -11603,8 +11658,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    }
 
    if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI){
-      const special=(Number(e.pvpSpecialVisualUntil)||0)>localNow;
-      const melee=(Number(e.pvpMeleeVisualUntil)||0)>localNow;
+      const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
+      const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
       const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
       const desired=special&&el._gifKeys?.special?'special':
         melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
@@ -11627,7 +11682,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
           el._mageStaff.classList.add('pvp-staff-strike');
         }
       }
-      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=special?'hidden':'visible';
+      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
+        (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
     }else if(e.type==='poseidon'||e.type==='seahorse'){
       const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
       const kind=active?p.kind:null;
