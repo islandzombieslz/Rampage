@@ -187,7 +187,10 @@ const hardPoseidon=run('pvpBaseEntity({...PVP_ENEMY_HEROES.poseidon,id:"poseidon
 assert.equal(hardPoseidon.maxHp,375);assert.equal(hardPoseidon.maxShield,325);assert.equal(hardPoseidon.pvpDamageBonus,25);
 state.difficulty='easy';
 assert(html.includes("state.mode==='pvp'?180:120"),'PvP-only lower snapshot frequency');
-assert(html.includes("if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
+assert(html.includes("desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
+assert(html.includes("img.pvp-gif-loading")&&html.includes("img:not([src])"),'PvP hides unloaded sprites');
+assert(html.includes("return String(cycle.serial)!==String(serial)"),'same serial never replays; new cast can start');
+assert(html.includes("alpha=Math.min(clamp((now-started)/180"),'PvP special power is not dimmed for most of its duration');
 assert(html.includes("state.mode==='pvp'&&stateName==='anubisRanged'"),'Anubis ranged GIF visible in PvP');
 assert(html.includes("syncPVPSpecialEffects(domCamera.left"),'PvP ally special effect layer');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
