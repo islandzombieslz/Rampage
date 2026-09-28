@@ -8443,7 +8443,14 @@ function pvpTriggerAttack(override=null){
  NetworkAdapter.attackSeq++;
  const me=pvpLocalHero();
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){sendLocalPVEInput(true);return}
- if(me){me.pvpLastAttackSeq=NetworkAdapter.attackSeq;pvpHandleAction(me,action,pvpControls.targetId)}
+ if(me){
+   me.pvpLastAttackSeq=NetworkAdapter.attackSeq;
+   try{pvpHandleAction(me,action,pvpControls.targetId)}
+   catch(err){
+     pvpReportError('ação local',err);
+     me.pvpPowerUntil=0;me.pvpPowerVisualUntil=0;me.pvpActionUntil=0;me.pvpSpecialFxUntil=0;
+   }
+ }
 }
 function pvpLocalHero(){
  return state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&e.alive&&!e.pvpMinion)||null;
@@ -8725,6 +8732,7 @@ function updatePVP(dt){
  updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
  for(const e of state.entities){
    if(!e.alive)continue;
+   try{
    if(e.pvpAllyBot){pvpAllyBotAction(e,dt)}
    else if(e.ownerId&&!e.pvpMinion){
      if(e.knockTime>0){e.moving=false;continue}
@@ -8743,6 +8751,12 @@ function updatePVP(dt){
      }
      pvpTickPower(e,now,input.pvpAimAngle);
    }else pvpBotAction(e,dt);
+   }catch(err){
+     pvpReportError('entidade '+e.type,err);
+     // Do not let an invalid effect or one NPC abort the entire PvP match.
+     e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpActionUntil=0;
+     e.pvpSpecialFxUntil=0;e.moving=false;
+   }
  }
  // Real NPC attacks bypass pvpCombatHit; arm the mage on shield break too.
  for(const e of state.entities)if(e.alive&&e.type==='mage'&&e.clan==='warriors'&&
