@@ -4817,7 +4817,8 @@ function serializeGame(){
  const dragonProjectiles=(state.dragonProjectiles||[]).map(p=>({
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0,
-   kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED
+   kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED,
+    ...(state.mode==='pvp'?{pvpHit:!!p.pvpHit}:{})
  }));
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles,
    matchId:state.matchId,matchResult:state.matchResult,matchStats:state.matchStats,
@@ -4878,7 +4879,7 @@ function applyRemoteGame(game){
  // Um pouco maior que o intervalo observado: o proximo snapshot normalmente chega
  // antes do tween terminar, evitando a micro-parada entre pacotes sem prever fisica.
  const remoteInterpMs=clamp(remoteGapMs*1.18,105,190);
- const firstFrame=$('#gameScreen').style.display==='none';
+ const firstFrame=(game.mode==='pvp'||state.mode==='pvp')?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
@@ -5251,6 +5252,12 @@ function applyRemoteGame(game){
    $('#shop').classList.remove('open');
    beginWarCameraIntro();
    flash(`PREPARAÇÃO • RODADA ${state.round}`,1.3);
+ }
+ if(state.mode==='pvp'&&!firstFrame&&Number(state.round)!==previousRound&&state.phase==='combat'){
+  state.particles=[];clearEntityVisuals();
+  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
+  $('#gameScreen').classList.remove('spectator-mode');
+  const fade=$('#deathFade');if(fade){fade.classList.remove('fade-in','fade-out');fade.style.opacity='0'}
  }
  if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}
  if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){
@@ -8206,6 +8213,14 @@ function drawPVPDamageNumbers(ctx,now){
  }
 }
 
+let pvpLastErrorReportAt=-Infinity;
+function pvpReportError(stage,err){
+ const now=performance.now();
+ if(now-pvpLastErrorReportAt<3000)return;
+ pvpLastErrorReportAt=now;
+ console.error('PvP '+stage+':',err);
+ flash('PvP: recuperando quadro.',1.1);
+}
 let pvpVisualLast=0,pvpAttackTargetId=null;
 const pvpFlameImages={};
 function pvpCameraZoom(w,h){
@@ -8550,6 +8565,17 @@ function pvpBotAction(e,dt){
     e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,next);
   }
  }
+ // PvP dragons retain a retaliatory shot while briefly staggered by hits.
+ if(e.type==='dragon'&&e.knockTime>0&&e.dragonFlightState==='flying'&&now>=next&&
+    (!e.pendingDragonAttack||now>=e.pendingDragonAttack.endAt)){
+   const target=pvpNearestEnemy(e),distance=target?Math.hypot(target.x-e.x,target.y-e.y):Infinity;
+   if(target&&distance<=285&&launchDragonFireball(e,target,{emergency:distance<DRAGON_CLOSE_RANGE})){
+     e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
+     e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,e.pvpNpcNextAttackAt);
+     e.dragonCloseShotAt=e.pvpNpcNextAttackAt;
+     return;
+   }
+ }
  // Keep War's AI and timed GIFs intact; PvP controls recovery between attacks.
  aiFight(e,dt,null,pvpTargetsFor(e));
  if(pvpNPCSerial(e)!==before){
@@ -8564,7 +8590,7 @@ function pvpAllyBotAction(e,dt){
  if(!e?.alive)return;
  if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
- if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
+ if(e.pvpPowerUntil>now){pvpTickPower(e,now,null);e.moving=false;return}
  if(e.pvpActionUntil>now){e.moving=false;return}
  let t=null,best=Infinity;
  for(const candidate of pvpTargetsFor(e)){
@@ -8691,6 +8717,7 @@ function endPVPRound(){
  },1800);
 }
 function updatePVP(dt){
+ try{
  if(state.phase!=='combat')return;
  const now=performance.now();
  pvpRebuildTargets();
@@ -8737,6 +8764,7 @@ function updatePVP(dt){
  if(state.timeLeft<=0||aliveHeroes.length===0||
     (humans>1&&aliveHeroes.length===1)||
     (humans===1&&!aliveNPCs&&pvpLastWave===PVP_ENEMY_WAVES.length-1))endPVPRound();
+ }catch(err){pvpReportError('simulação',err)}
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
@@ -9727,7 +9755,12 @@ function beginDragonTakeoff(e){
           function updateDragonProjectiles(dt,entityById=warEntityById){
            const now=performance.now(),list=state.dragonProjectiles||[];
            for(let i=list.length-1;i>=0;i--){
-             const p=list[i],candidate=entityById.get(p.targetId);
+             const p=list[i];
+             if(state.mode==='pvp'&&p.kind==='dragon'&&p.pvpHit){
+               if(now>=Number(p.pvpVisualUntil||0))list.splice(i,1);
+               continue;
+             }
+             const candidate=entityById.get(p.targetId);
              const target=candidate&&candidate.alive&&candidate.team!==p.team?candidate:null;
              if(target){p.targetX=target.x;p.targetY=target.y}
              const tx=Number(p.targetX),ty=Number(p.targetY);
@@ -9743,6 +9776,10 @@ function beginDragonTakeoff(e){
                  const impactDamage=Number.isFinite(Number(p.damage))?Number(p.damage):DRAGON_FIREBALL_DAMAGE;
                  applyCombatHit(target,source,impactDamage,{knockForce:105,knockTime:.06,tilt:6,allowFlying:true});
                  if(p.burn!==false&&target.alive)igniteDragonBurn(target,source);
+               }
+               if(state.mode==='pvp'&&p.kind==='dragon'){
+                 p.pvpHit=true;p.pvpVisualUntil=now+400;
+                 continue;
                }
                list.splice(i,1);continue;
              }
@@ -10200,23 +10237,34 @@ function loop(now){
  }
  // Timers de golpe, knockback e remoção dos mortos continuam mesmo
  // durante transições de rodada/fim de jogo.
- if(authoritative){updateEntities(dt);updateParticles(dt)}
+ if(authoritative){
+   if(state.mode==='pvp'){
+     try{updateEntities(dt);updateParticles(dt)}catch(err){pvpReportError('entidades',err)}
+   }else{updateEntities(dt);updateParticles(dt)}
+ }
  updateWarCameraIntro(now);
  updateWarCameraInertia(dt);
  updateSpectatorTransition(now);
  updateGolemRockEffects(now);
- draw();
+ if(state.mode==='pvp'){
+   try{draw()}catch(err){pvpReportError('desenho',err);try{resetCameraComposite()}catch(_){}}
+ }else draw();
  updateLayeredBattleSfx(now);
 
  const networkPushInterval=state.mode==='pvp'?180:120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
-   NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
+   if(state.mode==='pvp'){
+     try{NetworkAdapter.pushState(serializeGame()).catch(err=>pvpReportError('rede',err)).finally(()=>NetworkAdapter.pushing=false)}
+     catch(err){NetworkAdapter.pushing=false;pvpReportError('snapshot',err)}
+   }else NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
  }
 
  // HUD não precisa atualizar 60 vezes por segundo.
  if(now-state.hudLast>100){
-   updateHUD();
+   if(state.mode==='pvp'){
+     try{updateHUD()}catch(err){pvpReportError('HUD',err)}
+   }else updateHUD();
    state.hudLast=now;
  }
 
