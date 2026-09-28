@@ -39,7 +39,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
 });
-vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map();',ctx);
+vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175;',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
