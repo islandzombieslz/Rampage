@@ -8434,10 +8434,16 @@ function pvpNPCSerial(e){
  return e.attackSerial||0;
 }
 function pvpNPCRecovery(e,now){
- // PvP-only pause after the real attack animation finishes.
- if(e.type==='dragon')return now+2000;
+ // PvP waits for the complete GIF before the next attack; War remains unchanged.
  const pending=e.pendingGolemAttack||e.pendingNajaAttack||e.pendingWaterAttack||e.pendingAnubisAttack||e.pendingMageAttack;
- return Math.max(now,Number(pending?.endAt)||now)+(e.type==='seahorse'?850:1100);
+ const kind=pending?.kind;
+ const key=e.type==='dragon'?'dragonAttack':e.type==='golem'?(kind==='special'?'golemSpecial':'golemAttack'):
+   e.type==='naja'?(kind==='special'?'najaSpecialFinal':'najaAttack'):
+   e.type==='poseidon'?(kind==='wave'?'poseidonWaveCast':kind==='summon'?'poseidonSummonCast':'poseidonNormal'):
+   e.type==='seahorse'?'seahorseAttack':e.type==='anubis'?(kind==='ranged'?'anubisRangedAttack':'anubisMeleeAttack'):null;
+ const fullVisual=key?pvpFullGifDuration(key,e.type==='dragon'?2000:3000):0;
+ if(e.type==='dragon')return now+Math.max(2000,fullVisual);
+ return Math.max(now,Number(pending?.endAt)||now,now+fullVisual)+(e.type==='seahorse'?850:1100);
 }
 function pvpBotAction(e,dt){
  if(!e.alive)return;
