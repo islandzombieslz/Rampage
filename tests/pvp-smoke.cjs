@@ -44,6 +44,7 @@ vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySki
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
 ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
+ctx.updateDragonState=e=>{if(e.dragonFlightState==='takeoff'&&now>=e.dragonTakeoffEndAt)e.dragonFlightState='flying';if(e.pendingDragonAttack&&now>=e.pendingDragonAttack.endAt)e.pendingDragonAttack=null};
 ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
 ctx.warBurningEntities=new Set();
 ctx.warFrameEnemiesByTeam=new Map();
@@ -187,7 +188,10 @@ const hardPoseidon=run('pvpBaseEntity({...PVP_ENEMY_HEROES.poseidon,id:"poseidon
 assert.equal(hardPoseidon.maxHp,375);assert.equal(hardPoseidon.maxShield,325);assert.equal(hardPoseidon.pvpDamageBonus,25);
 state.difficulty='easy';
 assert(html.includes("state.mode==='pvp'?180:120"),'PvP-only lower snapshot frequency');
-assert(html.includes("if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
+assert(html.includes("desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
+assert(html.includes("img.pvp-gif-loading")&&html.includes("img:not([src])"),'PvP hides unloaded sprites');
+assert(html.includes("return String(cycle.serial)!==String(serial)"),'same serial never replays; new cast can start');
+assert(html.includes("alpha=Math.min(clamp((now-started)/180"),'PvP special power is not dimmed for most of its duration');
 assert(html.includes("state.mode==='pvp'&&stateName==='anubisRanged'"),'Anubis ranged GIF visible in PvP');
 assert(html.includes("syncPVPSpecialEffects(domCamera.left"),'PvP ally special effect layer');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
@@ -238,14 +242,15 @@ assert(run('pvpBasicAttack(state.entities.find(e=>e.id==='+royal.id+'))'),'basic
 assert.equal(royal.pvpSpecialSerial,1,'normal attack does not retrigger special');
 
 let visualStops=0;
-const visual={_src:'gif',closest:()=>element,hasAttribute:()=>!!visual._src,removeAttribute(){this._src=''}};
+const visual={_src:'gif',closest:()=>element,classList:{contains:()=>false},hasAttribute:()=>!!visual._src,removeAttribute(){this._src=''}};
 const element={_pvpGifCycle:null,classList:{contains:()=>false}};
 ctx.fakePvpImage=visual;ctx.fakePvpElement=element;
 ctx.stopGif=image=>{if(image._src){visualStops++;image._src=''}};
 run('pvpGifFullDurationMs.set("kingSpecial",1000)');
 run('pvpRememberGifCycle(fakePvpImage,"kingSpecial",7)');
 assert.equal(run('pvpPreserveGifState(fakePvpElement,"idle")'),'special');
-assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),false,'new attack cannot restart a GIF mid-cycle');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),true,'new cast can replace a prior special GIF without waiting for its deadline');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",7)'),false,'the same cast cannot replay its GIF');
 now+=976;
 assert.equal(run('pvpPreserveGifState(fakePvpElement,"special")'),'idle','spent serial cannot remain in special');
 assert.equal(visualStops,1,'GIF is stopped exactly once before its second loop');
