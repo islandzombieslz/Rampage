@@ -13,7 +13,7 @@ const nodes=new Map();
 function node(key){if(!nodes.has(key))nodes.set(key,{
  style:{},dataset:{},classList:{add(){},remove(){},toggle(){}},
  addEventListener(){},querySelector(){return null},replaceChildren(){},append(){},appendChild(){},remove(){},
- setAttribute(){},children:[],hidden:false,disabled:false
+ setAttribute(){},hasAttribute(name){return name==='src'&&!!this._src},children:[],hidden:false,disabled:false
  });return nodes.get(key)}
 const net={localPlayerId:'u1',remoteInputs:{},attackSeq:0,online:false,isHost:true,sendInput(){}};
 const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
@@ -39,7 +39,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
 });
-vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175;',ctx);
+vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175; const MAGE_SPECIAL_RADIUS=215;',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
@@ -267,9 +267,27 @@ now+=880;ctx.renderFrameNow=now;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxStops,1);
 now+=200;ctx.renderFrameNow=now;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxRestarts,1,'spent special FX serial must not replay while its window remains active');
+// Long PvP specials must not create a negative Canvas radius.
+const oldEntities=state.entities;
+state.entities=[royal];royal.pvpSpecialVisualUntil=now+4000;royal.pvpSpecialBodyDuration=4000;
+royal.pvpSpecialOriginX=royal.x;royal.pvpSpecialOriginY=royal.y;
+let canvasSaveCount=0;const drawnRadii=[];
+ctx.effectCtx={save(){canvasSaveCount++},restore(){canvasSaveCount--},beginPath(){},
+ arc(x,y,r){assert(r>=0&&Number.isFinite(r),'PvP special radius must be finite/nonnegative');drawnRadii.push(r)},
+ stroke(){},translate(){},rotate(){},fillRect(){},moveTo(){},lineTo(){}};
+run('drawPVPEffects(effectCtx,performance.now())');
+assert(drawnRadii.some(r=>r>=90&&r<=240),'long special draws its area circle');
+assert.equal(canvasSaveCount,0,'PvP visuals restore Canvas state');
+state.entities=oldEntities;royal.pvpSpecialVisualUntil=0;
 royal.pvpSpecialSerial++;royal.pvpSpecialFxUntil=now+3000;
 run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxRestarts,2,'a genuinely new activation plays a new effect');
+royal.pvpSpecialFxUntil=now-1;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+const alreadyPlayed=royal.pvpSpecialSerial;
+royal.pvpSpecialFxUntil=now+400; // stale network snapshot for the same cast
+run('syncPVPSpecialEffects(0,0,1,2000,1600)');
+assert.equal(fxRestarts,2,'late snapshot cannot replay an already spent GIF');
+assert.equal(run('pvpSpecialFxPlayedSerial.get('+royal.id+')'),alreadyPlayed);
 console.log('PvP serial-based special, action lock, one-shot body and effect GIFs: PASS');
 console.log('PvP isolated arena, allied NPCs, NPC recovery, Poseidon and damage text: PASS');
 console.log('PvP real NPC dispatcher, dragon takeoff, remote state and sequential enemy groups: PASS');
