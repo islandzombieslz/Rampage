@@ -39,7 +39,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
 });
-vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map();',ctx);
+vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175;',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
@@ -53,6 +53,8 @@ ctx.updateDragonBurns=()=>{};
 const run=expr=>vm.runInContext(expr,ctx);
 const heroes=run('PVP_HEROES'),base=run('PVP_BASE');
 assert.equal(heroes.length,8);
+assert.deepEqual(Array.from(run('PVP_SELECTABLE_HEROES'),h=>h.id),['warrior','mageFemale','egyptMageFemale']);
+assert.equal(run('PVP_SELECTABLE_BY_ID.king'),undefined);
 for(const h of heroes)assert(h.card.startsWith('assets/')&&h.name&&h.id);
 assert.equal(new Set(heroes.map(h=>h.id)).size,8);
 assert.equal(run('PVP_ENEMY_HERO_IDS.length'),5);
@@ -115,13 +117,23 @@ assert.equal(egypt.pvpSpecialDuration,30000);
 const power=run('pvpBaseEntity(PVP_HERO_BY_ID.egyptMage,400,1000,"u4","#e0c","u4",false)');
 const victim=run('pvpBaseEntity({...PVP_ENEMY_HEROES.golem,id:"golem"},585,1000,"pvp-enemy","#f77",null,true)');
 assert(run('pvpCastPower(state.entities.find(e=>e.id==='+power.id+'),'+victim.id+')'));
-now+=1;
+now+=110;
+const fullFlameMask={width:160,height:55,data:new Uint8ClampedArray(160*55*4).fill(255)};
+ctx.pvpReadFlameAlpha=()=>fullFlameMask;
 const shieldBefore=victim.shield;
 run('pvpTickPower(state.entities.find(e=>e.id==='+power.id+'),performance.now(),0)');
 assert.equal(victim.shield,shieldBefore-15,'15 damage per 500ms');
 now+=500;
 run('pvpTickPower(state.entities.find(e=>e.id==='+power.id+'),performance.now(),0)');
 assert.equal(victim.shield,shieldBefore-30);
+ctx.pvpReadFlameAlpha=()=>({width:160,height:55,data:new Uint8ClampedArray(160*55*4)});
+now+=500;run('pvpTickPower(state.entities.find(e=>e.id==='+power.id+'),performance.now(),null)');
+assert.equal(victim.shield,shieldBefore-30,'transparent GIF pixels cannot damage');
+ctx.pvpReadFlameAlpha=()=>fullFlameMask;
+run('pvpTickPower(state.entities.find(e=>e.id==='+power.id+'),performance.now(),Math.PI/2)');
+assert.equal(power.pvpAimAngle,Math.PI/2,'manual aim overrides automatic targeting');
+now+=100;run('pvpTickPower(state.entities.find(e=>e.id==='+power.id+'),performance.now(),Math.PI/2)');
+assert.equal(power.pvpAimAngle,Math.PI/2,'manual direction does not oscillate');
 assert.equal(run('pvpCanPower(state.entities.find(e=>e.id==='+hero.id+'))'),false);
 
 assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
@@ -179,15 +191,27 @@ assert(html.includes("if(state.mode==='pvp')desired=pvpPreserveGifState(el,desir
 assert(html.includes("state.mode==='pvp'&&stateName==='anubisRanged'"),'Anubis ranged GIF visible in PvP');
 assert(html.includes("syncPVPSpecialEffects(domCamera.left"),'PvP ally special effect layer');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
- {id:'npc_1',name:'NPC 1',human:false,pvpHero:'king',color:'#e3b341'},
- {id:'npc_2',name:'NPC 2',human:false,pvpHero:'mage',color:'#3fb950'}];
+ {id:'npc_1',name:'NPC 1',human:false,pvpHero:'mageFemale',color:'#e3b341'},
+ {id:'npc_2',name:'NPC 2',human:false,pvpHero:'egyptMageFemale',color:'#3fb950'}];
 net.hostUid='u1';run('beginPVPRound()');
 assert.equal(state.world.w,1850);assert.equal(state.world.h,1542);
 const allied=state.entities.filter(e=>e.pvpAllyBot);
-assert.deepEqual([...allied.map(e=>e.type)],['king','mage']);
+assert.deepEqual([...allied.map(e=>e.type)],['mage','mage']);
 assert(allied.every(e=>e.team==='u1'&&e.maxHp===250&&e.maxShield===150&&e.speed===195&&!e.pvpWarAI));
 assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
 run('updatePVP(.016)');
+// A PvP dragon must emit an actual ball even when repetitive hits keep it
+// briefly knocked back; the War AI intentionally does not act during knockback.
+const defendingDragon=state.entities.find(e=>e.alive&&e.type==='dragon');
+const defendingTarget=state.entities.find(e=>e.alive&&!e.pvpMinion);
+defendingDragon.x=defendingTarget.x+110;defendingDragon.y=defendingTarget.y;
+defendingDragon.dragonFlightState='flying';defendingDragon.knockTime=.06;
+defendingDragon.dragonNextShotAt=0;defendingDragon.dragonCloseShotAt=0;defendingDragon.pvpNpcNextAttackAt=0;
+let retaliatoryShots=0;
+ctx.launchDragonFireball=e=>{retaliatoryShots++;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;return true};
+run('pvpBotAction(state.entities.find(e=>e.id==='+defendingDragon.id+'),.016)');
+assert.equal(retaliatoryShots,1,'PvP dragon releases a projectile when hit');
+assert(defendingDragon.pvpNpcNextAttackAt>now,'retaliation observes complete GIF recovery');
 state.pvpDamageSeq=0;state.pvpDamageEvents=[];
 run('recordPVPDamage(state.entities[0],15)');
 assert.equal(state.pvpDamageEvents[0].amount,15);
@@ -255,7 +279,7 @@ async function testPVPReadyLobby(){
  state.running=false;state.phase='idle';
  state.players=[
    {id:'u1',name:'Alice',human:true,pvpHero:'warrior',pvpConfirmed:false,color:'#abc'},
-   {id:'u2',name:'Beto',human:true,pvpHero:'king',pvpConfirmed:false,color:'#def'}
+   {id:'u2',name:'Beto',human:true,pvpHero:'mageFemale',pvpConfirmed:false,color:'#def'}
  ];
  const grid=node('#playerList');
  grid.children=[];grid.replaceChildren=function(){this.children=[]};grid.appendChild=function(child){this.children.push(child)};
@@ -274,14 +298,14 @@ async function testPVPReadyLobby(){
  assert.equal(grid.children[0].className.includes('mine'),true);
  run('openPVPCharacterPicker()');
  assert.equal(node('#pvpPicker').hidden,false);
- run("pvpPickerDraft='egyptMage'");
+ run("pvpPickerDraft='egyptMageFemale'");
  await run('commitPVPCharacterPicker()');
  assert.equal(updates.length,1);
  assert.equal(updates[0].path,'rooms/TEST/players/u1');
- assert.equal(updates[0].data.pvpHero,'egyptMage');
+ assert.equal(updates[0].data.pvpHero,'egyptMageFemale');
  assert.equal(updates[0].data.pvpConfirmed,true);
  assert.equal(state.players[0].pvpConfirmed,true);
- assert.equal(state.players[0].pvpHero,'egyptMage');
+ assert.equal(state.players[0].pvpHero,'egyptMageFemale');
  assert.equal(run('pvpAllPlayersConfirmed()'),false,'wait for other human');
  state.players[1].pvpConfirmed=true;
  assert.equal(run('pvpAllPlayersConfirmed()'),true);
