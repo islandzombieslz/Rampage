@@ -39,6 +39,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
 });
+vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map();',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
@@ -55,7 +56,7 @@ assert.equal(heroes.length,8);
 for(const h of heroes)assert(h.card.startsWith('assets/')&&h.name&&h.id);
 assert.equal(new Set(heroes.map(h=>h.id)).size,8);
 assert.equal(run('PVP_ENEMY_HERO_IDS.length'),5);
-assert.equal(base.hp,200);assert.equal(base.shield,100);
+assert.equal(base.hp,250);assert.equal(base.shield,150);
 assert.equal(base.damageMin,25);assert.equal(base.damageMax,40);
 assert.equal(base.meleeCooldown,.70);assert.equal(base.specialCooldown,20000);
 assert.equal(run('pvpDamageForRange(0)'),40);
@@ -78,8 +79,9 @@ mobile=true;assert(run('pvpCameraZoom(850,390)')<1.8);
 
 const hero=run('pvpBaseEntity(PVP_HERO_BY_ID.warrior,500,500,"u1","#aaa","u1",false)');
 const foe=run('pvpBaseEntity({...PVP_ENEMY_HEROES.naja,id:"naja"},595,500,"pvp-enemy","#f77",null,true)');
-assert.equal(hero.maxHp,200);assert.equal(hero.maxShield,100);assert.equal(hero.speed,195);
-assert.equal(foe.maxHp,150);assert.equal(foe.maxShield,100);assert.equal(foe.speed,117);
+assert.equal(hero.maxHp,250);assert.equal(hero.maxShield,150);assert.equal(hero.speed,195);
+assert.equal(foe.maxHp,300);assert.equal(foe.maxShield,250);assert.equal(foe.speed,117);
+assert.equal(foe.pvpDamageBonus,10);
 assert.equal(foe.damage,20);assert.equal(foe.controlled,false);
 assert(run('pvpBasicAttack(state.entities[0])'));
 assert.equal(damageCalls.length,1);assert(damageCalls[0].damage>=25&&damageCalls[0].damage<=40);
@@ -105,7 +107,7 @@ const hitsBefore=damageCalls.length;
 assert(run('pvpSpecialAttack(state.entities.find(e=>e.id==='+egypt.id+'))'));
 assert.equal(damageCalls.length,hitsBefore,'Egypt summon special deals no damage');
 const minions=state.entities.filter(e=>e.pvpSummonerId===egypt.id);
-assert.equal(minions.length,2);assert(minions.every(e=>e.type==='anubis'&&e.maxHp===100&&e.maxShield===50));
+assert.equal(minions.length,2);assert(minions.every(e=>e.type==='anubis'&&e.maxHp===125&&e.maxShield===75));
 now=egypt.pvpSpecialReadyAt+1;run('pvpExpireSummons(performance.now())');
 assert(minions.every(e=>!e.alive),'summons die immediately on cooldown completion');
 assert.equal(egypt.pvpSpecialDuration,30000);
@@ -155,6 +157,26 @@ for(let wave=1;wave<4;wave++){
  }
 }
 assert.equal(run('PVP_ENEMY_WAVES.length'),4);
+assert.deepEqual([...run('PVP_DIFFICULTY.normal.waves[0]').map(([type,count])=>[type,count])],[['dragon',5]]);
+assert.equal(run('PVP_DIFFICULTY.normal.waves[1][1][1]'),9);
+assert.equal(run('PVP_DIFFICULTY.normal.waves[2][0][1]'),5);
+assert.equal(run('PVP_DIFFICULTY.hard.waves[0][0][1]'),6);
+assert.equal(run('PVP_DIFFICULTY.hard.waves[1][1][1]'),11);
+assert.equal(run('PVP_DIFFICULTY.hard.waves[3][0][1]'),4);
+state.difficulty='normal';
+run('beginPVPRound()');
+assert.equal(state.entities.filter(e=>e.team==='pvp-enemy').length,5);
+assert(state.entities.filter(e=>e.type==='dragon').every(e=>e.maxHp===300&&e.maxShield===250&&e.pvpDamageBonus===10));
+const mediumNaja=run('pvpBaseEntity({...PVP_ENEMY_HEROES.naja,id:"naja"},700,700,"pvp-enemy","#f77",null,true)');
+assert.equal(mediumNaja.maxHp,350);assert.equal(mediumNaja.maxShield,300);assert.equal(mediumNaja.pvpDamageBonus,20);
+state.difficulty='hard';
+const hardPoseidon=run('pvpBaseEntity({...PVP_ENEMY_HEROES.poseidon,id:"poseidon"},700,700,"pvp-enemy","#f77",null,true)');
+assert.equal(hardPoseidon.maxHp,375);assert.equal(hardPoseidon.maxShield,325);assert.equal(hardPoseidon.pvpDamageBonus,25);
+state.difficulty='easy';
+assert(html.includes("state.mode==='pvp'?180:120"),'PvP-only lower snapshot frequency');
+assert(html.includes("if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
+assert(html.includes("state.mode==='pvp'&&stateName==='anubisRanged'"),'Anubis ranged GIF visible in PvP');
+assert(html.includes("syncPVPSpecialEffects(domCamera.left"),'PvP ally special effect layer');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
  {id:'npc_1',name:'NPC 1',human:false,pvpHero:'king',color:'#e3b341'},
  {id:'npc_2',name:'NPC 2',human:false,pvpHero:'mage',color:'#3fb950'}];
@@ -162,7 +184,7 @@ net.hostUid='u1';run('beginPVPRound()');
 assert.equal(state.world.w,1850);assert.equal(state.world.h,1542);
 const allied=state.entities.filter(e=>e.pvpAllyBot);
 assert.deepEqual([...allied.map(e=>e.type)],['king','mage']);
-assert(allied.every(e=>e.team==='u1'&&e.maxHp===200&&e.maxShield===100&&e.speed===195&&!e.pvpWarAI));
+assert(allied.every(e=>e.team==='u1'&&e.maxHp===250&&e.maxShield===150&&e.speed===195&&!e.pvpWarAI));
 assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
 run('updatePVP(.016)');
 state.pvpDamageSeq=0;state.pvpDamageEvents=[];
@@ -198,7 +220,7 @@ async function testPVPReadyLobby(){
  });
  assert.equal(run('pvpAllPlayersConfirmed()'),false);
  run('renderPVPPlayers(state.players,[])');
- assert.equal(grid.children.length,16,'PvP grid has four by four slots');
+ assert.equal(grid.children.length,4,'PvP lobby maximum four participants');
  assert.equal(grid.children[0].className.includes('mine'),true);
  run('openPVPCharacterPicker()');
  assert.equal(node('#pvpPicker').hidden,false);
@@ -213,7 +235,7 @@ async function testPVPReadyLobby(){
  assert.equal(run('pvpAllPlayersConfirmed()'),false,'wait for other human');
  state.players[1].pvpConfirmed=true;
  assert.equal(run('pvpAllPlayersConfirmed()'),true);
- console.log('PvP 4x4 grid, own-card hero confirmation and all-player readiness: PASS');
+ console.log('PvP four-ally cap, own-card hero confirmation and readiness: PASS');
 }
 testPVPReadyLobby().catch(e=>{console.error(e);process.exitCode=1});
 
