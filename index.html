@@ -8289,6 +8289,8 @@ const PVP_GIF_END_MARGIN_MS=25;
 function pvpMayRestartGif(img,key,serial){
  const el=img?.closest?.('.entity-visual'),cycle=el?._pvpGifCycle;
  if(!cycle||cycle.img!==img||cycle.key!==key)return true;
+ // Allow the existing one-time image-load retry if the sprite never decoded.
+ if(img.complete&&img.naturalWidth===0)return true;
  if(!cycle.done&&performance.now()<cycle.until-PVP_GIF_END_MARGIN_MS)return false;
  return true;
 }
