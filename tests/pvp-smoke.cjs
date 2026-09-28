@@ -200,6 +200,18 @@ assert.deepEqual([...allied.map(e=>e.type)],['mage','mage']);
 assert(allied.every(e=>e.team==='u1'&&e.maxHp===250&&e.maxShield===150&&e.speed===195&&!e.pvpWarAI));
 assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
 run('updatePVP(.016)');
+// A PvP dragon must emit an actual ball even when repetitive hits keep it
+// briefly knocked back; the War AI intentionally does not act during knockback.
+const defendingDragon=state.entities.find(e=>e.alive&&e.type==='dragon');
+const defendingTarget=state.entities.find(e=>e.alive&&!e.pvpMinion);
+defendingDragon.x=defendingTarget.x+110;defendingDragon.y=defendingTarget.y;
+defendingDragon.dragonFlightState='flying';defendingDragon.knockTime=.06;
+defendingDragon.dragonNextShotAt=0;defendingDragon.dragonCloseShotAt=0;defendingDragon.pvpNpcNextAttackAt=0;
+let retaliatoryShots=0;
+ctx.launchDragonFireball=e=>{retaliatoryShots++;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;return true};
+run('pvpBotAction(state.entities.find(e=>e.id==='+defendingDragon.id+'),.016)');
+assert.equal(retaliatoryShots,1,'PvP dragon releases a projectile when hit');
+assert(defendingDragon.pvpNpcNextAttackAt>now,'retaliation observes complete GIF recovery');
 state.pvpDamageSeq=0;state.pvpDamageEvents=[];
 run('recordPVPDamage(state.entities[0],15)');
 assert.equal(state.pvpDamageEvents[0].amount,15);
