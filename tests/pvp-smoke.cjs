@@ -242,14 +242,15 @@ assert(run('pvpBasicAttack(state.entities.find(e=>e.id==='+royal.id+'))'),'basic
 assert.equal(royal.pvpSpecialSerial,1,'normal attack does not retrigger special');
 
 let visualStops=0;
-const visual={_src:'gif',closest:()=>element,hasAttribute:()=>!!visual._src,removeAttribute(){this._src=''}};
+const visual={_src:'gif',closest:()=>element,classList:{contains:()=>false},hasAttribute:()=>!!visual._src,removeAttribute(){this._src=''}};
 const element={_pvpGifCycle:null,classList:{contains:()=>false}};
 ctx.fakePvpImage=visual;ctx.fakePvpElement=element;
 ctx.stopGif=image=>{if(image._src){visualStops++;image._src=''}};
 run('pvpGifFullDurationMs.set("kingSpecial",1000)');
 run('pvpRememberGifCycle(fakePvpImage,"kingSpecial",7)');
 assert.equal(run('pvpPreserveGifState(fakePvpElement,"idle")'),'special');
-assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),false,'new attack cannot restart a GIF mid-cycle');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",8)'),true,'new cast can replace a prior special GIF without waiting for its deadline');
+assert.equal(run('pvpMayRestartGif(fakePvpImage,"kingSpecial",7)'),false,'the same cast cannot replay its GIF');
 now+=976;
 assert.equal(run('pvpPreserveGifState(fakePvpElement,"special")'),'idle','spent serial cannot remain in special');
 assert.equal(visualStops,1,'GIF is stopped exactly once before its second loop');
