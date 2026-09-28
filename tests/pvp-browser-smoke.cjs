@@ -46,7 +46,17 @@ const firebaseStub=String.raw`
  queueMicrotask(()=>window.dispatchEvent(new Event('firebase-ready')));
 })();
 `;
-const testHTML=original.replace(/<script type="module">[\s\S]*?<\/script>/,()=>'<script>'+firebaseStub+'</script>');
+// Inject a test-only hook inside the game's closure; nothing is exported by
+// the production build and no production code is changed for browser tests.
+const pvpTestHook=`window.__pvpBrowserTest={castEgyptianSpecial(){
+ const hero=pvpLocalHero();
+ if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
+ hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
+ hero.pvpSpecialReadyAt=performance.now()-1;
+ return pvpSpecialAttack(hero);
+}};`;
+const testHTML=original.replace(/<script type="module">[\\s\\S]*?<\\/script>/,()=>'<script>'+firebaseStub+'</script>')
+ .replace('/* ==================== PVE ==================== */',pvpTestHook+'\\n/* ==================== PVE ==================== */');
 assert.notEqual(testHTML,original);
 const server=http.createServer((req,res)=>{
  const name=new URL(req.url,'http://127.0.0.1').pathname;
@@ -116,13 +126,7 @@ async function main(){
    await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
    // Exercise the Egyptian mage special in the live frame loop, not only the
    // normal flame: it summons two Anubis and previously could black-screen PvP.
-   const specialStarted=await page.evaluate(()=>{
-     const hero=state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&!e.pvpMinion&&e.alive);
-     if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
-     hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
-     hero.pvpSpecialReadyAt=performance.now()-1;
-     return pvpSpecialAttack(hero);
-   });
+   const specialStarted=await page.evaluate(()=>window.__pvpBrowserTest.castEgyptianSpecial());
    assert(specialStarted,'Egyptian mage special must activate');
    await page.waitForTimeout(700);
    assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),1,'special must not black-screen the match');
