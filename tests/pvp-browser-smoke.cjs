@@ -88,7 +88,11 @@ async function main(){
    await page.locator('#configScreen.active').waitFor({timeout:8000});
    await page.locator('#createRoomBtn').click();
    await page.locator('#lobbyScreen.active').waitFor({timeout:12000});
-   assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card').count(),16,'four-by-four PvP lobby grid');
+   const plus=page.locator('#lobbyScreen button.plus[data-target="npcs"]');
+   for(let i=0;i<5;i++)await plus.click();
+   await page.waitForFunction(()=>document.querySelector('#npcCountVal')?.textContent==='3');
+   assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card').count(),4,'maximum four allies in PvP lobby');
+   assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card:not(.empty)').count(),4,'one player and three allied NPCs');
    try{
      await page.locator('#playerList .pvp-player-card.mine').click({timeout:12000});
    }catch(err){

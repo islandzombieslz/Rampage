@@ -3194,7 +3194,7 @@ const NetworkAdapter = {
       const room=snap.val();
       if(roomIsExpired(room,this.serverNow())){await F.remove(rr);return {ok:false,reason:'not-found'}}
       if(room.status!=='lobby')return {ok:false,reason:'started'};
-      const count=room.players?Object.keys(room.players).length:0,max=(room.settings?.mode==='pve'||room.settings?.mode==='pvp')?10:3;
+      const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pvp'?4:room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
       const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
       await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
@@ -3721,6 +3721,8 @@ const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const ISIS_RUNTIME_REVISION='isis-double-heal-v5-20260919';
 const gifRuntime=new Map();
+// PvP uses whole GIF cycles independently of Clan War's action timing.
+const pvpGifFullDurationMs=new Map();
 let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
 let golemAttackAssetsReady=false;
@@ -3782,7 +3784,9 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      const r=await fetch(src,{cache:'force-cache',mode:crossOrigin?'cors':'same-origin'});
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
-     const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):gifCycleDurationMs(buf);
+     const fullDuration=gifCycleDurationMs(buf);
+      const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):fullDuration;
+      if(Number.isFinite(fullDuration)&&fullDuration>=250&&fullDuration<=30000)pvpGifFullDurationMs.set(key,fullDuration);
      // WAR MEMORY JANK FIX 2026-09-18
      // Mantemos apenas a duração. Guardar Blob de todos os ataques segurava ~178 MB
      // de GIF comprimido no heap durante a partida. O Service Worker já mantém os
@@ -3840,6 +3844,21 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  BROWN_SPECIAL_DURATION=BROWN_POWER_DURATION;
  KING_SPECIAL_DURATION=Math.max(KING_BODY_SPECIAL_DURATION,KING_POWER_DURATION);
 })();
+// Measure extra PvP sprites only after selecting PvP, not during a War load.
+let pvpExtraGifProbeStarted=false;
+function preloadExtraPVPGifDurations(){
+ if(pvpExtraGifProbeStarted)return;
+ pvpExtraGifProbeStarted=true;
+ for(const key of ['poseidonNormal','poseidonWaveCast','poseidonSummonCast','poseidonWavePower','seahorseAttack']){
+  fetch(ASSETS[key],{cache:'force-cache'}).then(r=>r.ok?r.arrayBuffer():null).then(buf=>{
+   if(!buf)return;
+   const duration=gifCycleDurationMs(buf);
+   if(Number.isFinite(duration)&&duration>=250&&duration<=30000){
+    pvpGifFullDurationMs.set(key,duration);gifRuntime.set(key,{duration});
+   }
+  }).catch(()=>{});
+ }
+}
 // Não deixa uma falha de rede impedir o mago de atacar para sempre.
 setTimeout(()=>{magePowerAssetReady=true},2000);
 setTimeout(()=>{egyptMagePowerAssetReady=true},2500);
@@ -4750,10 +4769,12 @@ function serializeGame(){
          out.pvpSpecialLocked=e.pvpSpecialReadyAt>=1e13;
          out.pvpSpecialRemainingMs=out.pvpSpecialLocked?0:Math.max(0,(Number(e.pvpSpecialReadyAt)||0)-now);
          out.pvpPowerRemainingMs=Math.max(0,(Number(e.pvpPowerUntil)||0)-now);
+          out.pvpPowerVisualRemainingMs=Math.max(0,(Number(e.pvpPowerVisualUntil)||0)-now);
+          out.pvpSpecialFxRemainingMs=Math.max(0,(Number(e.pvpSpecialFxUntil)||0)-now);
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
-         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;
+         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
        }
        if(out.pendingMageAttack){
@@ -4897,6 +4918,8 @@ function applyRemoteGame(game){
      if(state.mode==='pvp'){
        out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
        out.pvpPowerUntil=localNow+Math.max(0,Number(out.pvpPowerRemainingMs)||0);
+        out.pvpPowerVisualUntil=localNow+Math.max(0,Number(out.pvpPowerVisualRemainingMs)||0);
+        out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
@@ -5312,7 +5335,7 @@ function syncFirebaseRoom(room){
  const lobbyRosterPhase=room.status==='lobby'||room.status==='clan';
  if(lobbyRosterPhase && !warStartInFlight && !state.running){
    const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,pvpHero:PVP_HERO_BY_ID[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed}));
-   const max=(state.mode==='pve'||state.mode==='pvp')?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
+   const max=state.mode==='pvp'?4:state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
    const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0,pvpHero:PVP_HEROES[i%PVP_HEROES.length].id,pvpConfirmed:true}));
    state.players=[...humans,...bots];
    // Nao forca dois humanos para clans diferentes enquanto estao apenas selecionando.
@@ -5469,7 +5492,7 @@ function gameViewportSize(){
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;});
+$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp')preloadExtraPVPGifDurations();});
 $('#configureBtn').onclick=async()=>{
   if(state.mode==='war'){
     await createCurrentRoom($('#configureBtn'));
@@ -5513,7 +5536,7 @@ function applyStepperButton(b){
     if(NetworkAdapter.online&&!NetworkAdapter.isHost)return false;
     const npcCount=state.players.filter(p=>!p.human).length;
 
-    const maxPlayers=(state.mode==='pve'||state.mode==='pvp')?10:3;
+    const maxPlayers=state.mode==='pvp'?4:state.mode==='pve'?10:3;
     if(dir>0 && state.players.length<maxPlayers){
       const idx=state.players.length;
       state.players.push({
@@ -5663,13 +5686,13 @@ function renderPVPPlayers(humans,npcs){
    card.append(nick,img,ready);grid.appendChild(card);
    if(mine)card.onclick=()=>openPVPCharacterPicker();
  }
- for(let i=humans.length+npcs.length;i<16;i++){
+ for(let i=humans.length+npcs.length;i<4;i++){
    const blank=document.createElement('div');blank.className='pvp-player-card empty';
    blank.setAttribute('aria-hidden','true');
    blank.style.opacity='.22';grid.appendChild(blank);
  }
  const count=$('#npcCountVal');if(count)count.textContent=npcs.length;
- const hint=$('#participantLimitHint');if(hint)hint.textContent='PvP: escolha seu herói e confirme. Grade de até 4 × 4 cards; máximo de 10 participantes.';
+ const hint=$('#participantLimitHint');if(hint)hint.textContent='PvP: máximo de 4 aliados no total (jogadores + NPCs). Escolha o herói e confirme.';
  updatePVPLobbyAuthority();
 }
 function openPVPCharacterPicker(){
@@ -6516,8 +6539,8 @@ function applyCombatHit(target,attacker,amount,options={}){
    const periodic=options.knockForce===0;
    const special=attacker.pendingGolemAttack?.kind==='special'||
      attacker.pendingNajaAttack?.kind==='special'||attacker.pendingWaterAttack?.kind==='wave';
-   amount=periodic?Math.min(PVP_BASE.damageMax*.5,Math.max(0,Number(amount)||0)*.5):
-     pvpDamageForRange(distance,special,.5);
+   amount=(periodic?Math.min(PVP_BASE.damageMax*.5,Math.max(0,Number(amount)||0)*.5):
+     pvpDamageForRange(distance,special,.5))+(Number(attacker.pvpDamageBonus)||0);
    options={...options,knockForce:Math.min(PVP_BASE.knockForce,options.knockForce??PVP_BASE.knockForce),
      knockTime:Math.min(PVP_BASE.knockTime,options.knockTime??PVP_BASE.knockTime),shake:0};
  }
@@ -6794,6 +6817,7 @@ function restartGif(img,keyOrSrc,serial=0){
    const sep=String(src).includes('?')?'&':'?';
    img.src=src+sep+'gifStart='+Date.now()+'_'+serial;
  }
+ if(state.mode==='pvp'&&key)pvpRememberGifCycle(img,key,serial);
 }
 
 function stopGif(img){
@@ -7291,7 +7315,7 @@ function spawnPoseidonSeahorses(e,p){
  for(const unit of state.entities){
    if(unit.alive&&unit.type==='seahorse'&&unit.waterSummoned&&unit.waterSummonerId===e.id&&unit.team===e.team)alive++;
  }
- const summonLimit=state.mode==='pvp'&&e.pvpWarAI?5:POSEIDON_SUMMON_COUNT;
+ const summonLimit=state.mode==='pvp'&&e.pvpWarAI?(e.team==='pvp-enemy'?pvpDifficulty().waves[1].find(([type])=>type==='seahorse')[1]:5):POSEIDON_SUMMON_COUNT;
  const missing=Math.max(0,summonLimit-alive);
  const ox=p.originX??e.x,oy=p.originY??e.y,base=(Number(p.serial)||0)*.39;
  for(let i=0;i<missing;i++){
@@ -8129,11 +8153,21 @@ const PVP_ARENA=Object.freeze({w:1850,h:1542,inset:Object.freeze({left:270,right
 function pvpArenaBounds(r=0){const b=PVP_ARENA.inset;return {left:b.left+r,right:state.world.w-b.right-r,top:b.top+r,bottom:state.world.h-b.bottom-r}}
 function pvpClampEntity(e){if(state.mode!=='pvp'||!e?.alive)return;const b=pvpArenaBounds(e.r||30);e.x=clamp(e.x,b.left,b.right);e.y=clamp(e.y,b.top,b.bottom)}
 function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entities)pvpClampEntity(e)}
-const PVP_BASE=Object.freeze({hp:200,shield:100,speed:195,damageMin:25,damageMax:40,
+const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.70,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
 const pvpControls={selected:'attack',action:'attack',targetId:null,aimDelta:0};
 // In PvP, the next enemy group enters only after the current group is defeated.
+// Difficulty belongs exclusively to PvP. Easy preserves the existing waves.
+const PVP_DIFFICULTY=Object.freeze({
+ easy:{bonusHp:0,bonusShield:0,bonusDamage:0,waves:[
+  [['dragon',2]],[['poseidon',1],['seahorse',5]],[['anubis',1],['naja',1]],[['golem',1]]]},
+ normal:{bonusHp:50,bonusShield:50,bonusDamage:10,waves:[
+  [['dragon',5]],[['poseidon',1],['seahorse',9]],[['anubis',5],['naja',2]],[['golem',3]]]},
+ hard:{bonusHp:75,bonusShield:75,bonusDamage:15,waves:[
+  [['dragon',6]],[['poseidon',1],['seahorse',11]],[['anubis',6],['naja',3]],[['golem',4]]]}
+});
+function pvpDifficulty(){return PVP_DIFFICULTY[state.difficulty]||PVP_DIFFICULTY.easy}
 const PVP_ENEMY_WAVES=Object.freeze([
  {name:'DRAGÕES',units:[['dragon',2]]},
  {name:'POSEIDON E CAVALOS-MARINHOS',units:[['poseidon',1],['seahorse',5]]},
@@ -8176,10 +8210,13 @@ function pvpCameraZoom(w,h){
 function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  const e=entityBase(hero.type,x,y,team,color);
  e.variant=hero.variant||'male';e.clan=hero.clan||'warriors';
- const bossBoost=minion&&team==='pvp-enemy'&&['golem','naja','poseidon'].includes(hero.type);
- e.hp=e.maxHp=PVP_BASE.hp*(minion?.5:1)+(bossBoost?50:0);
- e.shield=e.maxShield=PVP_BASE.shield*(minion?.5:1)+(bossBoost?50:0);
+ const enemy=minion&&team==='pvp-enemy',bossBoost=enemy&&['golem','naja','poseidon'].includes(hero.type);
+ const bossVitality=enemy?(['naja','poseidon'].includes(hero.type)?200:hero.type==='dragon'?150:bossBoost?50:0):0;
+ const difficulty=enemy?pvpDifficulty():PVP_DIFFICULTY.easy;
+ e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*(minion?.5:1))+bossVitality+difficulty.bonusHp;
+ e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*(minion?.5:1))+bossVitality+difficulty.bonusShield;
  e.damage=PVP_BASE.damageMax*(minion?.5:1);e.speed=PVP_BASE.speed*(minion?.5:1)*(bossBoost?1.20:1);
+ e.pvpEnemy=!!enemy;e.pvpDamageBonus=enemy?difficulty.bonusDamage+(['naja','poseidon'].includes(hero.type)?10:0):0;
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
  e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
  e.pvpMode=true;e.pvpMinion=!!minion;e.pvpWarAI=!!minion;e.pvpHero=hero.id||hero.type;
@@ -8188,7 +8225,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
  e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
- e.pvpPowerUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
@@ -8198,8 +8235,10 @@ function pvpHeroForPlayer(p){return PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0]}
 function pvpConfigureWarMinion(e){
  // Normalize seahorses generated by the existing Poseidon AI only in PvP.
  if(!e||state.mode!=='pvp')return e;
- e.hp=e.maxHp=PVP_BASE.hp*.5;e.shield=e.maxShield=PVP_BASE.shield*.5;
+ const enemy=e.team==='pvp-enemy',difficulty=enemy?pvpDifficulty():PVP_DIFFICULTY.easy;
+ e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*.5)+difficulty.bonusHp;e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*.5)+difficulty.bonusShield;
  e.speed=PVP_BASE.speed*.5;e.damage=PVP_BASE.damageMax*.5;
+ e.pvpEnemy=enemy;e.pvpDamageBonus=enemy?difficulty.bonusDamage:0;
  e.pvpMode=true;e.pvpMinion=true;e.pvpWarAI=true;e.pvpHero=e.type;
  return e;
 }
@@ -8228,6 +8267,31 @@ function pvpNearestEnemy(e,preferred=null){
    if(d<best){nearest=t;best=d}
  }
  return nearest;
+}
+// A complete visual cycle never changes attack hit timing or cooldowns.
+const PVP_GIF_STATES=Object.freeze({
+ poseidonNormal:'attack',poseidonWaveCast:'waveCast',poseidonSummonCast:'summonCast',
+ seahorseAttack:'attack',najaAttack:'attack',najaSpecial:'special',najaSpecialFinal:'emerge',
+ golemAttack:'attack',golemSpecial:'special',brownAttack:'attack',brownSpecial:'special',
+ anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
+ mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
+ kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+function pvpFullGifDuration(key,fallback=3000){
+ return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
+}
+function pvpRememberGifCycle(img,key,serial){
+ const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
+ const el=img.closest?.('.entity-visual');if(!el)return;
+ const now=performance.now(),duration=pvpFullGifDuration(key,3000);
+ el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration};
+}
+function pvpPreserveGifState(el,desired){
+ if(state.mode!=='pvp')return desired;
+ const cycle=el._pvpGifCycle;
+ if(cycle&&cycle.until>performance.now()&&
+   (desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly')&&
+   cycle.img?.hasAttribute('src'))return cycle.state;
+ return desired;
 }
 function pvpDamageForRange(distance,special=false,multiplier=1){
  const near=special?PVP_BASE.specialMax:PVP_BASE.damageMax;
@@ -8263,15 +8327,24 @@ function pvpCastPower(e,targetId){
  if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
  const target=pvpNearestEnemy(e,targetId);if(!target)return false;
  const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
- e.pvpPowerUntil=now+2500;e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
+ e.pvpPowerUntil=now+2500;
+ e.pvpPowerVisualUntil=now+Math.max(2500,pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000));
+ e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
  e.heading=angle;e.facing=target.x<e.x?-1:1;
  return true;
+}
+function pvpSpecialEffectKey(e){
+ if(e.type==='king')return 'kingPower';
+ if(e.type==='brownWarrior')return 'brownPower';
+ if(e.type==='mage')return e.clan==='egypt'?'egyptMagePowerSpecial':'magePowerSpecial';
+ return null;
 }
 function pvpSpecialAttack(e){
  if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
  e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+1500;
+ e.pvpSpecialFxUntil=now+Math.max(1500,pvpFullGifDuration(pvpSpecialEffectKey(e),3200));
  e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.pvpSpecialWindowMs=e.pvpSpecialDuration;e.attackCooldown=.7;
  if(e.type==='mage'&&e.clan==='egypt'){
    // Exactly two autonomous Anubis; this special deals no direct damage.
@@ -8354,6 +8427,18 @@ function pvpExpireSummons(now){
    owner.pvpSummonedIds=[];
  }
 }
+// Reuse per-team target arrays during a PvP frame rather than scanning all units
+// independently for each ally/NPC. Target eligibility and attack AI are unchanged.
+const pvpFrameTargetLists=new Map(),pvpFrameLiving=[];
+function pvpRebuildTargets(){
+ pvpFrameTargetLists.clear();pvpFrameLiving.length=0;
+ for(const e of state.entities)if(e.alive)pvpFrameLiving.push(e);
+ for(const e of pvpFrameLiving)if(!pvpFrameTargetLists.has(e.team))pvpFrameTargetLists.set(e.team,[]);
+ for(const [team,targets] of pvpFrameTargetLists){
+  for(const e of pvpFrameLiving)if(e.team!==team)targets.push(e);
+ }
+}
+function pvpTargetsFor(e){return pvpFrameTargetLists.get(e.team)||state.entities}
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
  if(e.type==='golem')return e.golemAttackSerial||0;
@@ -8364,10 +8449,17 @@ function pvpNPCSerial(e){
  return e.attackSerial||0;
 }
 function pvpNPCRecovery(e,now){
- // PvP-only pause after the real attack animation finishes.
- if(e.type==='dragon')return now+2000;
+ // PvP waits for the complete GIF before the next attack; War remains unchanged.
  const pending=e.pendingGolemAttack||e.pendingNajaAttack||e.pendingWaterAttack||e.pendingAnubisAttack||e.pendingMageAttack;
- return Math.max(now,Number(pending?.endAt)||now)+(e.type==='seahorse'?850:1100);
+ const kind=pending?.kind;
+ const key=e.type==='dragon'?'dragonAttack':e.type==='golem'?(kind==='special'?'golemSpecial':'golemAttack'):
+   e.type==='naja'?(kind==='special'?'najaSpecialFinal':'najaAttack'):
+   e.type==='poseidon'?(kind==='wave'?'poseidonWaveCast':kind==='summon'?'poseidonSummonCast':'poseidonNormal'):
+   e.type==='seahorse'?'seahorseAttack':e.type==='anubis'?(kind==='ranged'?'anubisRangedAttack':'anubisMeleeAttack'):null;
+ const fullVisual=key?pvpFullGifDuration(key,e.type==='dragon'?2000:3000):0;
+ if(e.type==='dragon')return now+Math.max(2000,fullVisual);
+ const visualEnd=e.type==='naja'&&kind==='special'?(Number(pending?.emergeAt)||now)+fullVisual:now+fullVisual;
+ return Math.max(now,Number(pending?.endAt)||now,visualEnd)+(e.type==='seahorse'?850:1100);
 }
 function pvpBotAction(e,dt){
  if(!e.alive)return;
@@ -8380,7 +8472,7 @@ function pvpBotAction(e,dt){
   }
  }
  // Keep War's AI and timed GIFs intact; PvP controls recovery between attacks.
- aiFight(e,dt,null,state.entities);
+ aiFight(e,dt,null,pvpTargetsFor(e));
  if(pvpNPCSerial(e)!==before){
   e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
   if(e.type==='dragon'){
@@ -8394,7 +8486,13 @@ function pvpAllyBotAction(e,dt){
  if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
- const t=pvpNearestEnemy(e);if(!t){e.moving=false;return}
+ let t=null,best=Infinity;
+ for(const candidate of pvpTargetsFor(e)){
+  if(!candidate.alive||candidate===e)continue;
+  const dx=candidate.x-e.x,dy=candidate.y-e.y,ds=dx*dx+dy*dy;
+  if(ds<best){best=ds;t=candidate}
+ }
+ if(!t){e.moving=false;return}
  const dx=t.x-e.x,dy=t.y-e.y,d=Math.hypot(dx,dy)||1;
  e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>3)e.facing=dx<0?-1:1;
  const mage=e.type==='mage',range=mage?210:105;
@@ -8409,7 +8507,7 @@ function pvpAllyBotAction(e,dt){
 function pvpSpawnWave(index){
  const wave=PVP_ENEMY_WAVES[index];if(!wave)return false;
  let poseidon=null;
- for(const [type,count] of wave.units){
+ for(const [type,count] of pvpDifficulty().waves[index]){
    for(let i=0;i<count;i++){
      const npc=pvpSpawnNPC(type);
      if(type==='poseidon')poseidon=npc;
@@ -8456,6 +8554,7 @@ function beginPVPRound(){
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
+ preloadExtraPVPGifDurations();
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
@@ -8514,6 +8613,7 @@ function endPVPRound(){
 function updatePVP(dt){
  if(state.phase!=='combat')return;
  const now=performance.now();
+ pvpRebuildTargets();
  const entityById=rebuildWarEntityIdMap();
  updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
  for(const e of state.entities){
@@ -8582,12 +8682,13 @@ function updatePVPHUD(){
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
  }
 }
-const pvpFlameNodes=new Map();
+const pvpFlameNodes=new Map(),pvpFlameActiveIds=new Set();
+const pvpSpecialFxNodes=new Map(),pvpSpecialFxActiveIds=new Set();
 function syncPVPPowerEffects(left,top,zoom){
  if(state.mode!=='pvp')return;
- const layer=combatCameraLayer,now=renderFrameNow||performance.now(),active=new Set();
+ const layer=combatCameraLayer,now=renderFrameNow||performance.now(),active=pvpFlameActiveIds;active.clear();
  for(const e of state.entities){
-   if(!e.alive||e.type!=='mage'||!(e.pvpPowerUntil>now))continue;
+   if(!e.alive||e.type!=='mage'||!(e.pvpPowerUntil>now||e.pvpPowerVisualUntil>now))continue;
    active.add(e.id);
    let img=pvpFlameNodes.get(e.id);
    if(!img){
@@ -8605,6 +8706,39 @@ function syncPVPPowerEffects(left,top,zoom){
  }
  for(const [id,img] of pvpFlameNodes)if(!active.has(id)){
    releaseGifObjectUrl(img);img.remove();pvpFlameNodes.delete(id);
+ }
+}
+// Separate PvP-only instances of the same effects used by Clan War.
+function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
+ if(state.mode!=='pvp')return;
+ const now=renderFrameNow||performance.now(),active=pvpSpecialFxActiveIds;active.clear();
+ for(const e of state.entities){
+  const key=pvpSpecialEffectKey(e),previous=pvpSpecialFxNodes.get(e.id);
+  if(!key)continue;
+  if(!(e.pvpSpecialFxUntil>now||previous?._visualEndAt>now))continue;
+  const x=(e.x-left)*zoom,y=(e.y-top)*zoom,pad=280*zoom;
+  if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
+   if(previous){active.add(e.id);previous.style.visibility='hidden'}
+   continue;
+  }
+  active.add(e.id);
+  let img=previous;
+  if(!img){img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
+   entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img)}
+  const serial=String(e.pvpSpecialSerial||0);
+  if(img.dataset.serial!==serial){
+   img.dataset.serial=serial;
+   img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
+   restartGif(img,key,serial);
+   img._visualEndAt=now+pvpFullGifDuration(key,3200);
+  }
+  const size=(key==='kingPower'?430:key==='brownPower'?190:330)*zoom;
+  img.style.left=x+'px';img.style.top=y+'px';img.style.width=size+'px';img.style.height=size+'px';
+  img.style.opacity='1';img.style.visibility='visible';img.style.transform='translate(-50%,-50%)';
+  img.style.zIndex=String(40+Math.round(y));
+ }
+ for(const [id,img] of pvpSpecialFxNodes)if(!active.has(id)){
+  stopGif(img);img.remove();pvpSpecialFxNodes.delete(id)
  }
 }
 const PVP_FIRE_IMAGES={};
@@ -9980,7 +10114,7 @@ function loop(now){
  draw();
  updateLayeredBattleSfx(now);
 
- const networkPushInterval=state.mode==='war'?120:120;
+ const networkPushInterval=state.mode==='pvp'?180:120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
    NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
@@ -10212,7 +10346,10 @@ function draw(){
  syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncKingPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncMagePowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
- if(state.mode==='pvp')syncPVPPowerEffects(domCamera.left,domCamera.top,domCamera.zoom);
+ if(state.mode==='pvp'){
+   syncPVPPowerEffects(domCamera.left,domCamera.top,domCamera.zoom);
+   syncPVPSpecialEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh);
+  }
  syncWaterWaveEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncDragonProjectileEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
 }
@@ -11114,7 +11251,8 @@ function entitySpriteForState(el,stateName){
  if(stateName==='walk')return el._walk;
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
- if(stateName==='attack')return el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(stateName==='attack')return (state.mode==='pvp'?el._anubisMelee:null)||el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(state.mode==='pvp'&&stateName==='anubisRanged')return el._anubisRanged;
  if(stateName==='waveCast')return el._poseidonWaveCast;
  if(stateName==='summonCast')return el._poseidonSummonCast;
  if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._najaSpecial||el._isisSpecial||el._mageSpecial||el._kingSpecial;
@@ -11183,6 +11321,7 @@ function suspendEntityLoopGif(el){
  }
 }
 function setEntitySpriteState(el,desired){
+ if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired);
  const previous=el.dataset.anim||'';
  const desiredImg=entitySpriteForState(el,desired);
  if(previous===desired){
@@ -11720,6 +11859,8 @@ function clearEntityVisuals(){
  for(const img of magePowerNodes.values())releaseGifObjectUrl(img);
  for(const img of pvpFlameNodes.values()){releaseGifObjectUrl(img);img.remove()}
  pvpFlameNodes.clear();
+ for(const img of pvpSpecialFxNodes.values()){stopGif(img);img.remove()}
+ pvpSpecialFxNodes.clear();
  for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of isisPowerNodes.values())releaseGifObjectUrl(img);
