@@ -128,7 +128,7 @@ assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
 assert(html.includes("state.mode==='pvp'?pvpCameraZoom(vw,vh):1.80"));
 assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
-assert(html.includes("if(state.mode==='pvp')syncPVPPowerEffects("),'animated mage power');
+assert(html.includes("syncPVPPowerEffects(domCamera.left"),'animated mage power');
 // Wave staging and the actual War AI dispatch are PvP-only.
 assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs must use real War GIF states');
 assert(html.includes("if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now))"),'real NPC attack state must reach remote peers');
