@@ -114,9 +114,21 @@ async function main(){
    await page.locator('#pvpCombatHud [data-pvp-action="power"]').click();
    await page.locator('#attackBtn').click();
    await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
+   // Exercise the Egyptian mage special in the live frame loop, not only the
+   // normal flame: it summons two Anubis and previously could black-screen PvP.
+   const specialStarted=await page.evaluate(()=>{
+     const hero=state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&!e.pvpMinion&&e.alive);
+     if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
+     hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
+     hero.pvpSpecialReadyAt=performance.now()-1;
+     return pvpSpecialAttack(hero);
+   });
+   assert(specialStarted,'Egyptian mage special must activate');
+   await page.waitForTimeout(700);
+   assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),1,'special must not black-screen the match');
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage power cast and HUD');
+   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian special and HUD');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
