@@ -80,7 +80,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
    ally.pvpSpecialFxUntil=performance.now()+1000;
    syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
    return !!pvpSpecialFxNodes.get(ally.id);
- }, },
+ },
  dragonFirstHit(){
    const hero=pvpLocalHero();
    if(!hero?.alive)return {armed:false,shot:false};
