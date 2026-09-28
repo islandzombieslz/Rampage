@@ -44,6 +44,7 @@ vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySki
 vm.runInContext(section('const PVP_ARENA=Object.freeze(', '/* ==================== PVE ==================== */'),ctx);
 const warCalls=[];
 ctx.beginDragonTakeoff=e=>{e.dragonFlightState='takeoff';e.dragonTakeoffSerial=(e.dragonTakeoffSerial||0)+1;return true};
+ctx.updateDragonState=e=>{if(e.dragonFlightState==='takeoff'&&now>=e.dragonTakeoffEndAt)e.dragonFlightState='flying';if(e.pendingDragonAttack&&now>=e.pendingDragonAttack.endAt)e.pendingDragonAttack=null};
 ctx.aiFight=(e,dt,team,targets)=>{warCalls.push(e.type)};
 ctx.warBurningEntities=new Set();
 ctx.warFrameEnemiesByTeam=new Map();
