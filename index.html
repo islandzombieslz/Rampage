@@ -5336,9 +5336,9 @@ function syncFirebaseRoom(room){
  // territory, bonusGems e troops; substituir esse array apagava os dados do player.
  const lobbyRosterPhase=room.status==='lobby'||room.status==='clan';
  if(lobbyRosterPhase && !warStartInFlight && !state.running){
-   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,pvpHero:PVP_HERO_BY_ID[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed}));
+   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,pvpHero:(state.mode==='pvp'?PVP_SELECTABLE_BY_ID:PVP_HERO_BY_ID)[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed}));
    const max=state.mode==='pvp'?4:state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
-   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0,pvpHero:PVP_HEROES[i%PVP_HEROES.length].id,pvpConfirmed:true}));
+   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0,pvpHero:(state.mode==='pvp'?PVP_SELECTABLE_HEROES[i%PVP_SELECTABLE_HEROES.length]:PVP_HEROES[i%PVP_HEROES.length]).id,pvpConfirmed:true}));
    state.players=[...humans,...bots];
    // Nao forca dois humanos para clans diferentes enquanto estao apenas selecionando.
    // Também atualiza os clãs dos NPCs ao mudar a seleção no Firebase.
@@ -5659,6 +5659,9 @@ const PVP_HEROES=Object.freeze([
  {id:'king',name:'Rei Guerreiro',type:'king',clan:'warriors',variant:'male',card:'assets/king/card.png',power:false,special:true}
 ]);
 const PVP_HERO_BY_ID=Object.freeze(Object.fromEntries(PVP_HEROES.map(hero=>[hero.id,hero])));
+// The PvP picker is restricted independently of every other game mode.
+const PVP_SELECTABLE_HEROES=Object.freeze(PVP_HEROES.filter(hero=>['warrior','mageFemale','egyptMageFemale'].includes(hero.id)));
+const PVP_SELECTABLE_BY_ID=Object.freeze(Object.fromEntries(PVP_SELECTABLE_HEROES.map(hero=>[hero.id,hero])));
 const PVP_ENEMY_HERO_IDS=Object.freeze(['naja','poseidon','anubis','golem','dragon']);
 const PVP_ENEMY_HEROES=Object.freeze({
  naja:{name:'Naja',type:'naja',card:'assets/egypt/naja/card.png',clan:'egypt'},
@@ -5671,12 +5674,12 @@ const PVP_ENEMY_HEROES=Object.freeze({
 let pvpPickerDraft='warrior',pvpStartInFlight=false;
 function pvpAllPlayersConfirmed(){
  const humans=state.players.filter(p=>p.human);
- return humans.length>0&&humans.every(p=>p.pvpConfirmed&&PVP_HERO_BY_ID[p.pvpHero]);
+ return humans.length>0&&humans.every(p=>p.pvpConfirmed&&PVP_SELECTABLE_BY_ID[p.pvpHero]);
 }
 function renderPVPPlayers(humans,npcs){
  const grid=$('#playerList');grid.replaceChildren();
  for(const p of [...humans,...npcs]){
-   const hero=PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0];
+   const hero=PVP_SELECTABLE_BY_ID[p.pvpHero]||PVP_SELECTABLE_HEROES[0];
    const mine=p.human&&p.id===NetworkAdapter.localPlayerId;
    const card=document.createElement(mine?'button':'div');
    if(mine)card.type='button';
@@ -5700,9 +5703,9 @@ function renderPVPPlayers(humans,npcs){
 function openPVPCharacterPicker(){
  if(state.mode!=='pvp'||state.running)return;
  const me=localPlayer();if(!me?.human||me.id!==NetworkAdapter.localPlayerId)return;
- pvpPickerDraft=PVP_HERO_BY_ID[me.pvpHero]?me.pvpHero:'warrior';
+ pvpPickerDraft=PVP_SELECTABLE_BY_ID[me.pvpHero]?me.pvpHero:'warrior';
  const list=$('#pvpHeroChoices');list.replaceChildren();
- for(const hero of PVP_HEROES){
+ for(const hero of PVP_SELECTABLE_HEROES){
    const choice=document.createElement('button');choice.type='button';choice.className=hero.id===pvpPickerDraft?'selected':'';
    const img=document.createElement('img');img.src=hero.card;img.alt='';img.loading='lazy';
    const name=document.createElement('span');name.textContent=hero.name;
@@ -5715,7 +5718,7 @@ function openPVPCharacterPicker(){
  $('#pvpPicker').hidden=false;
 }
 async function commitPVPCharacterPicker(){
- if(state.mode!=='pvp'||!PVP_HERO_BY_ID[pvpPickerDraft])return;
+ if(state.mode!=='pvp'||!PVP_SELECTABLE_BY_ID[pvpPickerDraft])return;
  const F=await NetworkAdapter.waitFirebase(),uid=F.firebaseAuth.currentUser?.uid;
  if(!uid||uid!==NetworkAdapter.localPlayerId||!NetworkAdapter.roomId)return;
  const btn=$('#pvpHeroConfirm');if(btn.disabled)return;
@@ -8105,7 +8108,7 @@ function getLocalMovement(){
  if(state.mode==='pvp'){
    input.pvpAction=pvpControls.action;
    input.pvpTargetId=pvpControls.targetId;
-   input.pvpAimDelta=pvpControls.aimDelta;
+   input.pvpAimAngle=pvpControls.aimManual?pvpControls.aimAngle:null;
  }
  return input;
 }
@@ -8159,7 +8162,7 @@ function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entiti
 const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.70,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
-const pvpControls={selected:'attack',action:'attack',targetId:null,aimDelta:0};
+const pvpControls={selected:'attack',action:'attack',targetId:null,aimAngle:null,aimManual:false};
 // In PvP, the next enemy group enters only after the current group is defeated.
 // Difficulty belongs exclusively to PvP. Easy preserves the existing waves.
 const PVP_DIFFICULTY=Object.freeze({
@@ -8234,7 +8237,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
  state.entities.push(e);return e;
 }
-function pvpHeroForPlayer(p){return PVP_HERO_BY_ID[p.pvpHero]||PVP_HEROES[0]}
+function pvpHeroForPlayer(p){return PVP_SELECTABLE_BY_ID[p.pvpHero]||PVP_SELECTABLE_HEROES[0]}
 function pvpConfigureWarMinion(e){
  // Normalize seahorses generated by the existing Poseidon AI only in PvP.
  if(!e||state.mode!=='pvp')return e;
@@ -8352,10 +8355,11 @@ function pvpCastPower(e,targetId){
  if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const target=pvpNearestEnemy(e,targetId);if(!target)return false;
  const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
- e.pvpPowerUntil=now+2500;
- e.pvpPowerVisualUntil=now+Math.max(2500,pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000));
- e.pvpActionUntil=e.pvpPowerVisualUntil;
- e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
+ // Both damage and action lock end with the visible full GIF cycle.
+ const duration=pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000);
+ e.pvpPowerUntil=now+duration;e.pvpPowerVisualUntil=e.pvpPowerUntil;
+ e.pvpActionUntil=e.pvpPowerUntil;
+ e.pvpPowerNextTick=now+100;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
  e.heading=angle;e.facing=target.x<e.x?-1:1;
  return true;
@@ -8419,7 +8423,9 @@ function pvpTriggerAttack(override=null){
  const action=override||pvpControls.selected;
  if(action==='special'&&!pvpCanSpecial(pvpLocalHero()))return;
  if(action==='power'&&!pvpCanPower(pvpLocalHero()))return;
- pvpControls.action=action;NetworkAdapter.attackSeq++;
+ pvpControls.action=action;
+ if(action==='power'){pvpControls.aimAngle=null;pvpControls.aimManual=false}
+ NetworkAdapter.attackSeq++;
  const me=pvpLocalHero();
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){sendLocalPVEInput(true);return}
  if(me){me.pvpLastAttackSeq=NetworkAdapter.attackSeq;pvpHandleAction(me,action,pvpControls.targetId)}
@@ -8431,25 +8437,58 @@ function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special
   performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
 function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.attackCooldown<=0&&
   performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
-function pvpTickPower(e,now,steer=0){
+// Sample the current animated flame frame: transparent GIF pixels do not hurt.
+let pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
+function pvpReadFlameAlpha(e){
+ const img=pvpFlameNodes.get(e.id);
+ if(!img?.hasAttribute('src')||!img.complete||!img.naturalWidth)return null;
+ try{
+   if(!pvpFlameMaskCanvas){
+     pvpFlameMaskCanvas=document.createElement('canvas');
+     pvpFlameMaskCanvas.width=160;pvpFlameMaskCanvas.height=55;
+     pvpFlameMaskCtx=pvpFlameMaskCanvas.getContext('2d',{willReadFrequently:true});
+   }
+   if(!pvpFlameMaskCtx)return null;
+   pvpFlameMaskCtx.clearRect(0,0,160,55);
+   pvpFlameMaskCtx.drawImage(img,0,0,160,55);
+   return {width:160,height:55,data:pvpFlameMaskCtx.getImageData(0,0,160,55).data};
+ }catch(err){pvpReportError('alpha do fogo',err);return null}
+}
+function pvpFlameTouchesTarget(mask,e,t,angle){
+ if(!mask)return false;
+ const ox=e.x+Math.cos(angle)*30,oy=e.y-13,dx=t.x-ox,dy=t.y-oy;
+ const x=dx*Math.cos(angle)+dy*Math.sin(angle),y=-dx*Math.sin(angle)+dy*Math.cos(angle);
+ const r=Math.max(1,Number(t.r)||30),w=mask.width,h=mask.height;
+ if(x+r<0||x-r>305||y+r< -52.5||y-r>52.5)return false;
+ const left=Math.max(0,Math.floor((x-r)*w/305)),right=Math.min(w-1,Math.ceil((x+r)*w/305));
+ const top=Math.max(0,Math.floor((y-r+52.5)*h/105)),bottom=Math.min(h-1,Math.ceil((y+r+52.5)*h/105));
+ for(let py=top;py<=bottom;py++)for(let px=left;px<=right;px++){
+   const wx=(px+.5)*305/w,wy=(py+.5)*105/h-52.5;
+   if((wx-x)**2+(wy-y)**2<=r*r&&mask.data[(py*w+px)*4+3]>16)return true;
+ }
+ return false;
+}
+function pvpTickPower(e,now,manualAngle=null){
  if(!e.pvpPowerUntil||now>=e.pvpPowerUntil){e.pvpPowerUntil=0;return}
- const target=pvpNearestEnemy(e,e.pvpAimTarget);
- if(target&&target.id===e.pvpAimTarget){
-   const angle=Math.atan2(target.y-e.y,target.x-e.x);
-   // Assisted aim tracks the selected enemy, with limited lateral steering.
-   e.pvpAimAngle=angle+clamp(Number(steer)||0,-1,1)*.27;
+ if(Number.isFinite(manualAngle)){
+   // Drag has exclusive control for this cast; automatic tracking cannot pull it.
+   e.pvpAimAngle=manualAngle;
+ }else{
+   const target=pvpNearestEnemy(e,e.pvpAimTarget);
+   if(target){e.pvpAimTarget=target.id;e.pvpAimAngle=Math.atan2(target.y-e.y,target.x-e.x)}
  }
  e.heading=e.pvpAimAngle;e.facing=Math.cos(e.heading)<0?-1:1;
- while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil){
-   const a=e.pvpAimAngle,ox=e.x+Math.cos(a)*30,oy=e.y-13;
-   const bx=ox+Math.cos(a)*305,by=oy+Math.sin(a)*305;
-   for(const t of state.entities){
+ let ticks=0;
+ while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil&&ticks++<3){
+   const mask=pvpReadFlameAlpha(e);
+   if(mask)for(const t of state.entities){
      if(!t.alive||t.team===e.team)continue;
-     if(distanceToSegment(t.x,t.y,ox,oy,bx,by)<=47+t.r*.33)
-       pvpCombatHit(t,e,PVP_BASE.fireDamage);
+     if(pvpFlameTouchesTarget(mask,e,t,e.pvpAimAngle))pvpCombatHit(t,e,PVP_BASE.fireDamage);
    }
    e.pvpPowerNextTick+=PVP_BASE.fireTick;
  }
+ // Discard the hit backlog if a mobile browser suspended the animation.
+ if(e.pvpPowerNextTick<=now)e.pvpPowerNextTick=now+PVP_BASE.fireTick;
 }
 function pvpExpireSummons(now){
  for(const minion of [...state.entities]){
@@ -8591,7 +8630,7 @@ function beginPVPRound(){
    e.pvpAllyBot=true;e.controlled=false;
  });
  pvpSpawnWave(0);
- pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimDelta=0;
+ pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
@@ -8675,7 +8714,7 @@ function updatePVP(dt){
      if(seq>e.pvpLastAttackSeq){
        e.pvpLastAttackSeq=seq;pvpHandleAction(e,input.pvpAction||'attack',input.pvpTargetId);
      }
-     pvpTickPower(e,now,input.pvpAimDelta);
+     pvpTickPower(e,now,input.pvpAimAngle);
    }else pvpBotAction(e,dt);
  }
  // Real NPC attacks bypass pvpCombatHit; arm the mage on shield break too.
@@ -8740,7 +8779,7 @@ function syncPVPPowerEffects(left,top,zoom){
    const serial=String(e.pvpPowerSerial||0),key=e.clan==='egypt'?'egyptMagePower':'magePower';
    if(img.dataset.serial!==serial){
     img.dataset.serial=serial;restartGif(img,key,serial);
-    img._visualEndAt=now+pvpFullGifDuration(key,3000);
+    img._visualEndAt=e.pvpPowerVisualUntil;
    }
    if(now>=Number(img._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
     // Power damage retains its original tick window; only the GIF ends.
@@ -8862,8 +8901,9 @@ $('#gameScreen').addEventListener('pointermove',event=>{
  if(state.mode!=='pvp'||!state.running||!pvpLocalHero()?.pvpPowerUntil||!event.buttons)return;
  const pt=screenPointToGame(event.clientX,event.clientY),me=pvpLocalHero();
  const x=state.camera.x+pt.x/state.camera.zoom,y=state.camera.y+pt.y/state.camera.zoom;
- const desired=Math.atan2(y-me.y,x-me.x),base=me.pvpAimAngle||me.heading;
- pvpControls.aimDelta=clamp(Math.atan2(Math.sin(desired-base),Math.cos(desired-base))/.27,-1,1);
+ const desired=Math.atan2(y-me.y,x-me.x);
+ pvpControls.aimAngle=desired;pvpControls.aimManual=true;me.pvpAimAngle=desired;
+ event.preventDefault();event.stopPropagation();
 },true);
 
 /* ==================== PVE ==================== */
