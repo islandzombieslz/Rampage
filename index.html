@@ -6803,6 +6803,7 @@ function restartGif(img,keyOrSrc,serial=0){
  if(!img)return;
  const key=ASSETS[keyOrSrc]?keyOrSrc:Object.keys(ASSETS).find(k=>ASSETS[k]===keyOrSrc);
  const src=key?ASSETS[key]:keyOrSrc;
+ if(state.mode==='pvp'&&key&&!pvpMayRestartGif(img,key,serial))return false;
  if(key)img.dataset.assetKey=key;
  releaseGifObjectUrl(img);
  img.removeAttribute('src');
@@ -6818,6 +6819,7 @@ function restartGif(img,keyOrSrc,serial=0){
    img.src=src+sep+'gifStart='+Date.now()+'_'+serial;
  }
  if(state.mode==='pvp'&&key)pvpRememberGifCycle(img,key,serial);
+ return true;
 }
 
 function stopGif(img){
@@ -8279,18 +8281,37 @@ const PVP_GIF_STATES=Object.freeze({
 function pvpFullGifDuration(key,fallback=3000){
  return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
 }
+// A GIF is a playback of one action serial, not the action state itself.
+// When it finishes, remove src BEFORE the browser loops to frame zero.
+const PVP_GIF_END_MARGIN_MS=25;
+function pvpMayRestartGif(img,key,serial){
+ const el=img?.closest?.('.entity-visual'),cycle=el?._pvpGifCycle;
+ if(!cycle||cycle.img!==img||cycle.key!==key)return true;
+ if(!cycle.done&&performance.now()<cycle.until-PVP_GIF_END_MARGIN_MS)return false;
+ return true;
+}
 function pvpRememberGifCycle(img,key,serial){
  const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
  const el=img.closest?.('.entity-visual');if(!el)return;
  const now=performance.now(),duration=pvpFullGifDuration(key,3000);
- el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration};
+ el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration,done:false};
 }
 function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
- const cycle=el._pvpGifCycle;
- if(cycle&&cycle.until>performance.now()&&
-   (desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly')&&
-   cycle.img?.hasAttribute('src'))return cycle.state;
+ const cycle=el._pvpGifCycle;if(!cycle)return desired;
+ const now=performance.now();
+ // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
+ const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
+ if(!cycle.done&&(now>=cycle.until-PVP_GIF_END_MARGIN_MS||underground)){
+  cycle.done=true;stopGif(cycle.img);
+ }
+ if(cycle.done){
+  // The same pending attack/late network snapshot must never show or restart a spent GIF.
+  if(desired===cycle.state)return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  return desired;
+ }
+ if(desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly'||
+    (cycle.state==='special'&&desired==='attack'))return cycle.state;
  return desired;
 }
 function pvpDamageForRange(distance,special=false,multiplier=1){
