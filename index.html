@@ -8388,8 +8388,19 @@ function pvpDamageForRange(distance,special=false,multiplier=1){
 }
 function pvpCombatHit(target,source,damage){
  if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
- const oldShield=target.shield;
+ const oldShield=target.shield,oldHp=target.hp;
  applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
+ if(target.type==='dragon'&&target.alive&&!target.pvpDragonFirstHitSeen&&
+    (target.shield<oldShield||target.hp<oldHp)){
+   // Remember the FIRST incoming PvP hit even during takeoff/knockback.
+   // The projectile is released once the dragon is flying, not lost to AI gates.
+   target.pvpDragonFirstHitSeen=true;
+   target.pvpDragonRetaliatePending=true;
+   target.pvpDragonRetaliateTargetId=source.id;
+   target.pvpNpcNextAttackAt=0;
+   target.dragonNextShotAt=0;
+   target.dragonCloseShotAt=0;
+ }
  if(oldShield>0&&target.shield<=0&&target.type==='mage'&&target.clan==='warriors'&&
     target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
 }
@@ -8613,7 +8624,26 @@ function pvpNPCRecovery(e,now){
 }
 function pvpBotAction(e,dt){
  if(!e.alive)return;
- const now=performance.now(),before=pvpNPCSerial(e),next=Number(e.pvpNpcNextAttackAt)||0;
+ const now=performance.now();
+ if(e.type==='dragon'){
+   // War's aiFightDragon exits on knockback BEFORE advancing takeoff;
+   // PvP must advance the visual flight state even while being hit.
+   updateDragonState(e,now);
+   if(e.pvpDragonRetaliatePending&&e.dragonFlightState==='flying'&&!e.pendingDragonAttack){
+     const target=pvpNearestEnemy(e,e.pvpDragonRetaliateTargetId);
+     if(target){
+       e.dragonNextShotAt=0;e.dragonCloseShotAt=0;
+       if(launchDragonFireball(e,target,{emergency:Math.hypot(target.x-e.x,target.y-e.y)<DRAGON_CLOSE_RANGE})){
+         e.pvpDragonRetaliatePending=false;
+         e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
+         e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,e.pvpNpcNextAttackAt);
+         e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,e.pvpNpcNextAttackAt);
+         return;
+       }
+     }
+   }
+ }
+ const before=pvpNPCSerial(e),next=Number(e.pvpNpcNextAttackAt)||0;
  if(next>now){
   e.attackCooldown=Math.max(Number(e.attackCooldown)||0,(next-now)/1000);
   if(e.type==='dragon'){
