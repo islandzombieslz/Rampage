@@ -4769,12 +4769,13 @@ function serializeGame(){
          out.pvpSpecialLocked=e.pvpSpecialReadyAt>=1e13;
          out.pvpSpecialRemainingMs=out.pvpSpecialLocked?0:Math.max(0,(Number(e.pvpSpecialReadyAt)||0)-now);
          out.pvpPowerRemainingMs=Math.max(0,(Number(e.pvpPowerUntil)||0)-now);
+          out.pvpActionRemainingMs=Math.max(0,(Number(e.pvpActionUntil)||0)-now);
           out.pvpPowerVisualRemainingMs=Math.max(0,(Number(e.pvpPowerVisualUntil)||0)-now);
           out.pvpSpecialFxRemainingMs=Math.max(0,(Number(e.pvpSpecialFxUntil)||0)-now);
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
-         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
+         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
        }
        if(out.pendingMageAttack){
@@ -4918,6 +4919,7 @@ function applyRemoteGame(game){
      if(state.mode==='pvp'){
        out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
        out.pvpPowerUntil=localNow+Math.max(0,Number(out.pvpPowerRemainingMs)||0);
+        out.pvpActionUntil=localNow+Math.max(0,Number(out.pvpActionRemainingMs)||0);
         out.pvpPowerVisualUntil=localNow+Math.max(0,Number(out.pvpPowerVisualRemainingMs)||0);
         out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
@@ -8227,7 +8229,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
  e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
- e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
@@ -8327,7 +8329,7 @@ function pvpCombatHit(target,source,damage){
     target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
 }
 function pvpBasicAttack(e){
- if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const now=performance.now();
  e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
  e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
@@ -8345,11 +8347,12 @@ function pvpBasicAttack(e){
  return true;
 }
 function pvpCastPower(e,targetId){
- if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now())return false;
+ if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const target=pvpNearestEnemy(e,targetId);if(!target)return false;
  const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
  e.pvpPowerUntil=now+2500;
  e.pvpPowerVisualUntil=now+Math.max(2500,pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000));
+ e.pvpActionUntil=e.pvpPowerVisualUntil;
  e.pvpPowerNextTick=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
  e.heading=angle;e.facing=target.x<e.x?-1:1;
@@ -8361,10 +8364,22 @@ function pvpSpecialEffectKey(e){
  if(e.type==='mage')return e.clan==='egypt'?'egyptMagePowerSpecial':'magePowerSpecial';
  return null;
 }
+function pvpBodySpecialKey(e){
+ if(e.type==='king')return 'kingSpecial';
+ if(e.type==='brownWarrior')return 'brownSpecial';
+ if(e.type==='mage'){
+  const egypt=e.clan==='egypt',female=e.variant==='female';
+  return egypt?(female?'egyptFemaleMageSpecial':'egyptMageSpecial'):(female?'femaleMageSpecial':'mageSpecial');
+ }
+ return null;
+}
 function pvpSpecialAttack(e){
- if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||performance.now()<e.pvpSpecialReadyAt)return false;
+ if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||e.attackCooldown>0||
+    e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
- e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+1500;
+ const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
+ e.pvpActionUntil=now+bodyDuration;
+ e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+bodyDuration;
  e.pvpSpecialFxUntil=now+Math.max(1500,pvpFullGifDuration(pvpSpecialEffectKey(e),3200));
  e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.pvpSpecialWindowMs=e.pvpSpecialDuration;e.attackCooldown=.7;
  if(e.type==='mage'&&e.clan==='egypt'){
@@ -8410,8 +8425,10 @@ function pvpTriggerAttack(override=null){
 function pvpLocalHero(){
  return state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&e.alive&&!e.pvpMinion)||null;
 }
-function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&performance.now()>=e.pvpSpecialReadyAt)}
-function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power)}
+function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&e.attackCooldown<=0&&
+  performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
+function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.attackCooldown<=0&&
+  performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
 function pvpTickPower(e,now,steer=0){
  if(!e.pvpPowerUntil||now>=e.pvpPowerUntil){e.pvpPowerUntil=0;return}
  const target=pvpNearestEnemy(e,e.pvpAimTarget);
@@ -8507,6 +8524,7 @@ function pvpAllyBotAction(e,dt){
  if(e.knockTime>0){e.moving=false;return}
  const now=performance.now();
  if(e.pvpPowerUntil>now){pvpTickPower(e,now,0);e.moving=false;return}
+ if(e.pvpActionUntil>now){e.moving=false;return}
  let t=null,best=Infinity;
  for(const candidate of pvpTargetsFor(e)){
   if(!candidate.alive||candidate===e)continue;
@@ -8691,8 +8709,9 @@ function updatePVPHUD(){
  const hero=PVP_HERO_BY_ID[me?.pvpHero]||PVP_HEROES[0];
  for(const button of $$('#pvpCombatHud [data-pvp-action]')){
    const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
-   const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):0;
-   const duration=me?.pvpSpecialWindowMs||20000;
+   const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):
+     action==='power'?Math.max(0,(me?.pvpPowerVisualUntil||0)-now):0;
+   const duration=action==='power'?pvpFullGifDuration(me?.clan==='egypt'?'egyptMagePower':'magePower',3000):(me?.pvpSpecialWindowMs||20000);
    button.disabled=!me||!available;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
