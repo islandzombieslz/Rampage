@@ -8250,6 +8250,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
  e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
+ e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
@@ -8405,6 +8406,8 @@ function pvpSpecialAttack(e){
     e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
  const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
+ e.pvpSpecialBodyDuration=bodyDuration;
+ e.pvpSpecialOriginX=e.x;e.pvpSpecialOriginY=e.y;
  e.pvpActionUntil=now+bodyDuration;
  e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+bodyDuration;
  // Same synchronized body/power timeline as War; PvP-specific hit/cooldown rules stay intact.
@@ -8912,9 +8915,17 @@ function drawPVPEffects(ctx,now){
      ctx.restore();
    }
    if(e.pvpSpecialVisualUntil>now){
-     ctx.save();ctx.globalAlpha=clamp((e.pvpSpecialVisualUntil-now)/1500,0,1)*.7;
-     ctx.strokeStyle=e.clan==='egypt'?'#d8b967':'#ffe7b6';ctx.lineWidth=6;
-     ctx.beginPath();ctx.arc(e.x,e.y,90+(1-(e.pvpSpecialVisualUntil-now)/1500)*150,0,Math.PI*2);ctx.stroke();ctx.restore();
+     // A fixed 1.5 s denominator made the radius negative for longer GIFs.
+     // Canvas.arc threw IndexSizeError mid-frame and left the world transform saved.
+     const remaining=e.pvpSpecialVisualUntil-now;
+     const duration=Math.max(1,Number(e.pvpSpecialBodyDuration)||pvpFullGifDuration(pvpBodySpecialKey(e),3000));
+     const progress=clamp(1-remaining/duration,0,1);
+     ctx.save();
+     try{
+       ctx.globalAlpha=clamp(remaining/Math.min(1500,duration),0,1)*.7;
+       ctx.strokeStyle=e.clan==='egypt'?'#d8b967':'#ffe7b6';ctx.lineWidth=6;
+       ctx.beginPath();ctx.arc(e.pvpSpecialOriginX??e.x,e.pvpSpecialOriginY??e.y,90+150*progress,0,Math.PI*2);ctx.stroke();
+     }finally{ctx.restore()}
    }
    if(e.pvpShotUntil>now){
      const t=state.entities.find(t=>t.id===e.pvpShotTargetId);
@@ -10493,8 +10504,10 @@ function draw(){
  });
  ctx.globalAlpha=1;
  if(state.mode==='pve'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
- if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
- ctx.restore();
+ if(state.mode==='pvp'){
+   try{drawPVPEffects(ctx,renderFrameNow)}
+   finally{ctx.restore()}
+ }else ctx.restore();
  // PvP numbers use a dedicated foreground canvas: never hidden behind sprites.
  pvpDamageCtx.clearRect(0,0,vw,vh);
  if(state.mode==='pvp'){
