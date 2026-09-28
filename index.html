@@ -3775,7 +3775,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack','isisAttack','isisSpecial','isisPower','poseidonNormal','poseidonWaveCast','poseidonSummonCast','poseidonWavePower','seahorseAttack'];
+ const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack','isisAttack','isisSpecial','isisPower'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -3844,6 +3844,21 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  BROWN_SPECIAL_DURATION=BROWN_POWER_DURATION;
  KING_SPECIAL_DURATION=Math.max(KING_BODY_SPECIAL_DURATION,KING_POWER_DURATION);
 })();
+// Measure extra PvP sprites only after selecting PvP, not during a War load.
+let pvpExtraGifProbeStarted=false;
+function preloadExtraPVPGifDurations(){
+ if(pvpExtraGifProbeStarted)return;
+ pvpExtraGifProbeStarted=true;
+ for(const key of ['poseidonNormal','poseidonWaveCast','poseidonSummonCast','poseidonWavePower','seahorseAttack']){
+  fetch(ASSETS[key],{cache:'force-cache'}).then(r=>r.ok?r.arrayBuffer():null).then(buf=>{
+   if(!buf)return;
+   const duration=gifCycleDurationMs(buf);
+   if(Number.isFinite(duration)&&duration>=250&&duration<=30000){
+    pvpGifFullDurationMs.set(key,duration);gifRuntime.set(key,{duration});
+   }
+  }).catch(()=>{});
+ }
+}
 // Não deixa uma falha de rede impedir o mago de atacar para sempre.
 setTimeout(()=>{magePowerAssetReady=true},2000);
 setTimeout(()=>{egyptMagePowerAssetReady=true},2500);
@@ -5477,7 +5492,7 @@ function gameViewportSize(){
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;});
+$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp')preloadExtraPVPGifDurations();});
 $('#configureBtn').onclick=async()=>{
   if(state.mode==='war'){
     await createCurrentRoom($('#configureBtn'));
@@ -8539,6 +8554,7 @@ function beginPVPRound(){
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
+ preloadExtraPVPGifDurations();
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
