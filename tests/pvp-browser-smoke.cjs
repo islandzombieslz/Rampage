@@ -48,13 +48,37 @@ const firebaseStub=String.raw`
 `;
 // Inject a test-only hook inside the game's closure; nothing is exported by
 // the production build and no production code is changed for browser tests.
-const pvpTestHook=`window.__pvpBrowserTest={castEgyptianSpecial(){
- const hero=pvpLocalHero();
- if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
- hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
- hero.pvpSpecialReadyAt=performance.now()-1;
- return pvpSpecialAttack(hero);
-}};`;
+const pvpTestHook=`window.__pvpBrowserTest={
+ castEgyptianSpecial(){
+   const hero=pvpLocalHero();
+   if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
+   hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
+   hero.pvpSpecialReadyAt=performance.now()-1;
+   return pvpSpecialAttack(hero);
+ },
+ castWarriorSpecial(){
+   const ally=state.entities.find(e=>e.alive&&e.pvpAllyBot&&e.pvpHero==='mageFemale');
+   if(!ally)return false;
+   ally.pvpPowerUntil=0;ally.pvpActionUntil=0;ally.attackCooldown=0;
+   ally.pvpSpecialReadyAt=performance.now()-1;
+   return pvpSpecialAttack(ally);
+ },
+ warriorFx(){
+   const ally=state.entities.find(e=>e.pvpAllyBot&&e.pvpHero==='mageFemale');
+   const img=ally&&pvpSpecialFxNodes.get(ally.id);
+   return {serial:ally?.pvpSpecialSerial||0,src:!!img?.hasAttribute('src'),
+     played:ally?pvpSpecialFxPlayedSerial.get(ally.id):null};
+ },
+ expireAndReplayWarriorFx(){
+   const ally=state.entities.find(e=>e.pvpAllyBot&&e.pvpHero==='mageFemale');
+   if(!ally)return false;
+   ally.pvpSpecialFxUntil=performance.now()-1;
+   syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
+   ally.pvpSpecialFxUntil=performance.now()+1000;
+   syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
+   return !!pvpSpecialFxNodes.get(ally.id);
+ }
+};`;
 const testHTML=original.replace(/<script type="module">[\s\S]*?<\/script>/,()=>'<script>'+firebaseStub+'</script>')
  .replace('/* ==================== PVE ==================== */',pvpTestHook+'\n/* ==================== PVE ==================== */');
 assert.notEqual(testHTML,original);
@@ -71,9 +95,10 @@ const server=http.createServer((req,res)=>{
 async function main(){
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const browser=await chromium.launch({headless:true});
- const errors=[];
+ const errors=[],renderErrors=[];
  const page=await browser.newPage({viewport:{width:1280,height:720}});
  page.on('pageerror',err=>errors.push(err.message));
+ page.on('console',msg=>{if(msg.type()==='error'&&/PvP (desenho|simulação|entidade)|IndexSizeError/.test(msg.text()))renderErrors.push(msg.text())});
  try{
    await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>!document.body.classList.contains('booting'),null,{timeout:55000});
@@ -130,9 +155,22 @@ async function main(){
    assert(specialStarted,'Egyptian mage special must activate');
    await page.waitForTimeout(700);
    assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),1,'special must not black-screen the match');
+   // A 1.8x PvP camera at fullscreen-size viewport formerly repeatedly threw
+   // an IndexSizeError from the special's negative Canvas arc radius.
+   await page.setViewportSize({width:1920,height:1080});
+   await page.waitForTimeout(450);
+   assert(!renderErrors.length,'PvP must render long specials without Canvas exceptions: '+renderErrors.join(' | '));
+   assert(await page.evaluate(()=>window.__pvpBrowserTest.castWarriorSpecial()),'Warrior mage special must activate');
+   await page.waitForTimeout(260);
+   const firstFx=await page.evaluate(()=>window.__pvpBrowserTest.warriorFx());
+   assert.equal(firstFx.serial,1,'Warrior special serial');
+   assert.equal(firstFx.src,true,'Warrior power GIF starts behind the mage');
+   const replayed=await page.evaluate(()=>window.__pvpBrowserTest.expireAndReplayWarriorFx());
+   assert.equal(replayed,false,'spent PvP special never recreates its GIF on a late snapshot');
+   assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian special and HUD');
+   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas and no GIF replay');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});

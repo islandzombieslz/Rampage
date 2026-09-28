@@ -1440,6 +1440,8 @@ html,body{
 .mage-power-normal,.mage-power-special{position:absolute;object-fit:fill;pointer-events:none;transform-origin:0 50%;will-change:auto}
 .mage-power-normal{z-index:8;visibility:visible !important;opacity:1 !important;border-radius:999px;background:transparent;box-shadow:none;filter:none}
 .mage-power-special{object-fit:contain;transform-origin:center;z-index:2}
+/* PvP flame visibility is controlled by its own GIF lifetime, not the War CSS !important rule. */
+#gameScreen.pvp-mode .pvp-flame-gif{position:absolute;object-fit:fill;pointer-events:none;transform-origin:0 50%;z-index:8;visibility:hidden;opacity:1;will-change:auto}
 
 /* Loja do modo Guerra: as três tropas ficam visíveis juntas em landscape. */
 #shop{
@@ -4772,10 +4774,11 @@ function serializeGame(){
           out.pvpActionRemainingMs=Math.max(0,(Number(e.pvpActionUntil)||0)-now);
           out.pvpPowerVisualRemainingMs=Math.max(0,(Number(e.pvpPowerVisualUntil)||0)-now);
           out.pvpSpecialFxRemainingMs=Math.max(0,(Number(e.pvpSpecialFxUntil)||0)-now);
+          out.pvpSpecialFxElapsedMs=Math.max(0,now-(Number(e.pvpSpecialFxStartedAt)||now));
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
-         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;
+         delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;delete out.pvpSpecialFxStartedAt;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
        }
        if(out.pendingMageAttack){
@@ -4923,6 +4926,7 @@ function applyRemoteGame(game){
         out.pvpActionUntil=localNow+Math.max(0,Number(out.pvpActionRemainingMs)||0);
         out.pvpPowerVisualUntil=localNow+Math.max(0,Number(out.pvpPowerVisualRemainingMs)||0);
         out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
+        out.pvpSpecialFxStartedAt=localNow-Math.max(0,Number(out.pvpSpecialFxElapsedMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
@@ -8245,7 +8249,8 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
    (hero.clan==='egypt'?performance.now()+10000:1e14):0;
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
  e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
- e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;
+ e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
+ e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
@@ -8306,8 +8311,10 @@ const PVP_GIF_END_MARGIN_MS=25;
 function pvpMayRestartGif(img,key,serial){
  const el=img?.closest?.('.entity-visual'),cycle=el?._pvpGifCycle;
  if(!cycle||cycle.img!==img||cycle.key!==key)return true;
- // Allow the existing one-time image-load retry if the sprite never decoded.
- if(img.complete&&img.naturalWidth===0)return true;
+ // An already played serial must never restart, even after a remote snapshot.
+ if(String(cycle.serial)===String(serial)&&cycle.done)return false;
+ // Allow a real one-time decode failure to retry, not a deliberately stopped GIF.
+ if(img.hasAttribute('src')&&img.complete&&img.naturalWidth===0)return true;
  if(!cycle.done&&performance.now()<cycle.until-PVP_GIF_END_MARGIN_MS)return false;
  return true;
 }
@@ -8399,8 +8406,12 @@ function pvpSpecialAttack(e){
     e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
  const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
+ e.pvpSpecialBodyDuration=bodyDuration;
+ e.pvpSpecialOriginX=e.x;e.pvpSpecialOriginY=e.y;
  e.pvpActionUntil=now+bodyDuration;
  e.pvpSpecialSerial++;e.pvpSpecialVisualUntil=now+bodyDuration;
+ // Same synchronized body/power timeline as War; PvP-specific hit/cooldown rules stay intact.
+ e.pvpSpecialFxStartedAt=now;
  e.pvpSpecialFxUntil=now+Math.max(1500,pvpFullGifDuration(pvpSpecialEffectKey(e),3200));
  e.pvpSpecialReadyAt=now+e.pvpSpecialDuration;e.pvpSpecialWindowMs=e.pvpSpecialDuration;e.attackCooldown=.7;
  if(e.type==='mage'&&e.clan==='egypt'){
@@ -8807,6 +8818,9 @@ function updatePVPHUD(){
 }
 const pvpFlameNodes=new Map(),pvpFlameActiveIds=new Set();
 const pvpSpecialFxNodes=new Map(),pvpSpecialFxActiveIds=new Set();
+// The DOM element may be culled or rebuilt, but an already consumed cast serial
+// cannot start again just because a late PvP network snapshot arrived.
+const pvpSpecialFxPlayedSerial=new Map();
 function syncPVPPowerEffects(left,top,zoom){
  if(state.mode!=='pvp')return;
  const layer=combatCameraLayer,now=renderFrameNow||performance.now(),active=pvpFlameActiveIds;active.clear();
@@ -8815,7 +8829,7 @@ function syncPVPPowerEffects(left,top,zoom){
    active.add(e.id);
    let img=pvpFlameNodes.get(e.id);
    if(!img){
-     img=document.createElement('img');img.className='mage-power-normal pvp-flame-gif';
+     img=document.createElement('img');img.className='pvp-flame-gif';
      img.draggable=false;img.decoding='async';layer.appendChild(img);pvpFlameNodes.set(e.id,img);img.dataset.serial='-1';
    }
    const serial=String(e.pvpPowerSerial||0),key=e.clan==='egypt'?'egyptMagePower':'magePower';
@@ -8843,37 +8857,63 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
  if(state.mode!=='pvp')return;
  const now=renderFrameNow||performance.now(),active=pvpSpecialFxActiveIds;active.clear();
  for(const e of state.entities){
-  const key=pvpSpecialEffectKey(e),previous=pvpSpecialFxNodes.get(e.id);
-  const serial=String(e.pvpSpecialSerial||0);
-  if(!e.alive||!key||serial==='0')continue;
-  if(!(e.pvpSpecialFxUntil>now||previous?._visualEndAt>now))continue;
-  if(previous&&previous.dataset.serial===serial&&
-     now>=Number(previous._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
-   // Keep the consumed serial until its window closes; never recreate/reloop it.
-   stopGif(previous);previous.style.visibility='hidden';active.add(e.id);continue;
-  }
-  const x=(e.x-left)*zoom,y=(e.y-top)*zoom,pad=280*zoom;
-  if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
-   if(previous){active.add(e.id);previous.style.visibility='hidden'}
-   continue;
-  }
-  active.add(e.id);
-  let img=previous;
-  if(!img){img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
-   entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img)}
-  if(img.dataset.serial!==serial){
-   img.dataset.serial=serial;
-   img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
-   restartGif(img,key,serial);
-   img._visualEndAt=now+pvpFullGifDuration(key,3200);
-  }
-  const size=(key==='kingPower'?430:key==='brownPower'?190:330)*zoom;
-  img.style.left=x+'px';img.style.top=y+'px';img.style.width=size+'px';img.style.height=size+'px';
-  img.style.opacity='1';img.style.visibility='visible';img.style.transform='translate(-50%,-50%)';
-  img.style.zIndex=String(40+Math.round(y));
+   const key=pvpSpecialEffectKey(e),old=pvpSpecialFxNodes.get(e.id);
+   const serialNumber=Number(e.pvpSpecialSerial)||0,serial=String(serialNumber);
+   const end=Number(e.pvpSpecialFxUntil)||0;
+   if(!e.alive||!key||serialNumber<=0||now>=end-PVP_GIF_END_MARGIN_MS)continue;
+   // A stopped effect remains in the map until the original cast deadline.
+   // Never re-create a consumed serial, including after culling or snapshots.
+   if(!old&&serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0))continue;
+   active.add(e.id);
+   if(old&&old.dataset.serial===serial&&
+      (now>=Math.min(Number(old._visualEndAt)||end,end)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
+     stopGif(old);old.style.visibility='hidden';old.style.opacity='0';continue;
+   }
+   const ox=e.pvpSpecialOriginX??e.x,oy=e.pvpSpecialOriginY??e.y;
+   const x=(ox-left)*zoom,y=(oy-top)*zoom,pad=280*zoom;
+   if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
+     if(old)old.style.visibility='hidden';
+     continue;
+   }
+   let img=old;
+   if(!img){
+     img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
+     entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img);
+   }
+   if(img.dataset.serial!==serial){
+     if(serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0)){
+       img.style.visibility='hidden';continue;
+     }
+     stopGif(img);
+     img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
+     restartGif(img,key,serial);
+     img.dataset.serial=serial;
+     // Like War, a cast has one fixed body/power timeline. Do not extend
+     // it every frame or on a delayed snapshot; stop before frame zero repeats.
+     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200));
+     pvpSpecialFxPlayedSerial.set(e.id,serialNumber);
+   }
+   if(now>=Math.min(img._visualEndAt,end)-PVP_GIF_END_MARGIN_MS){
+     stopGif(img);img.style.visibility='hidden';img.style.opacity='0';continue;
+   }
+   let size,alpha=1;
+   if(e.type==='mage'){
+     // Same growth, dimensions and fade used for the War mage power behind
+     // the body, while PvP keeps its own damage/cooldown/summoning rules.
+     const duration=Math.max(1,end-(Number(e.pvpSpecialFxStartedAt)||end-pvpFullGifDuration(key,3200)));
+     const progress=clamp(1-(end-now)/duration,0,1);
+     const egypt=e.clan==='egypt',grow=egypt?(.96+progress*.02):(.90+progress*.30);
+     size=MAGE_SPECIAL_RADIUS*2*zoom*grow*(egypt? .50:1);
+     alpha=Math.min(clamp(progress/.16,0,1),clamp((1-progress)/.22,0,1));
+   }else size=(key==='kingPower'?430:190)*zoom;
+   img.style.left=x+'px';img.style.top=y+'px';
+   img.style.width=size+'px';img.style.height=size+'px';
+   img.style.opacity=String(alpha);img.style.visibility=alpha>.01?'visible':'hidden';
+   img.style.transform='translate(-50%,-50%)';
+   img.style.zIndex=String(40+Math.round(y));
  }
  for(const [id,img] of pvpSpecialFxNodes)if(!active.has(id)){
-  stopGif(img);img.remove();pvpSpecialFxNodes.delete(id)
+   stopGif(img);img.remove();pvpSpecialFxNodes.delete(id);
  }
 }
 const PVP_FIRE_IMAGES={};
@@ -8904,9 +8944,17 @@ function drawPVPEffects(ctx,now){
      ctx.restore();
    }
    if(e.pvpSpecialVisualUntil>now){
-     ctx.save();ctx.globalAlpha=clamp((e.pvpSpecialVisualUntil-now)/1500,0,1)*.7;
-     ctx.strokeStyle=e.clan==='egypt'?'#d8b967':'#ffe7b6';ctx.lineWidth=6;
-     ctx.beginPath();ctx.arc(e.x,e.y,90+(1-(e.pvpSpecialVisualUntil-now)/1500)*150,0,Math.PI*2);ctx.stroke();ctx.restore();
+     // A fixed 1.5 s denominator made the radius negative for longer GIFs.
+     // Canvas.arc threw IndexSizeError mid-frame and left the world transform saved.
+     const remaining=e.pvpSpecialVisualUntil-now;
+     const duration=Math.max(1,Number(e.pvpSpecialBodyDuration)||pvpFullGifDuration(pvpBodySpecialKey(e),3000));
+     const progress=clamp(1-remaining/duration,0,1);
+     ctx.save();
+     try{
+       ctx.globalAlpha=clamp(remaining/Math.min(1500,duration),0,1)*.7;
+       ctx.strokeStyle=e.clan==='egypt'?'#d8b967':'#ffe7b6';ctx.lineWidth=6;
+       ctx.beginPath();ctx.arc(e.pvpSpecialOriginX??e.x,e.pvpSpecialOriginY??e.y,90+150*progress,0,Math.PI*2);ctx.stroke();
+     }finally{ctx.restore()}
    }
    if(e.pvpShotUntil>now){
      const t=state.entities.find(t=>t.id===e.pvpShotTargetId);
@@ -10485,8 +10533,10 @@ function draw(){
  });
  ctx.globalAlpha=1;
  if(state.mode==='pve'){ctx.strokeStyle='#ffffff2e';ctx.lineWidth=3/zoom;ctx.strokeRect(2,2,state.world.w-4,state.world.h-4)}
- if(state.mode==='pvp')drawPVPEffects(ctx,renderFrameNow);
- ctx.restore();
+ if(state.mode==='pvp'){
+   try{drawPVPEffects(ctx,renderFrameNow)}
+   finally{ctx.restore()}
+ }else ctx.restore();
  // PvP numbers use a dedicated foreground canvas: never hidden behind sprites.
  pvpDamageCtx.clearRect(0,0,vw,vh);
  if(state.mode==='pvp'){
@@ -11763,14 +11813,16 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
       const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
       const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
       const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
+      // Start a new serial before setting the visual state. A spent old
+      // cycle cannot swallow the first frame of the next PvP special.
+      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
+        if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+          el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
+      }
       const desired=special&&el._gifKeys?.special?'special':
         melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
       setEntitySpriteState(el,desired);
-      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
-        el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
-        if(specialImage)restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial);
-      }
       if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
         el.dataset.pvpAttackSerial=String(e.attackSerial||0);
         const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
@@ -12019,6 +12071,7 @@ function clearEntityVisuals(){
  pvpFlameNodes.clear();
  for(const img of pvpSpecialFxNodes.values()){stopGif(img);img.remove()}
  pvpSpecialFxNodes.clear();
+ if(state.mode==='pvp')pvpSpecialFxPlayedSerial.clear();
  for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of isisPowerNodes.values())releaseGifObjectUrl(img);
