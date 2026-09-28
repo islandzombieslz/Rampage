@@ -8302,6 +8302,7 @@ function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
  const cycle=el._pvpGifCycle;if(!cycle)return desired;
  const now=performance.now();
+ if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
  const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
  if(!cycle.done&&(now>=cycle.until-PVP_GIF_END_MARGIN_MS||underground)){
@@ -11278,6 +11279,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        setTimeout(()=>{
          // Um retry atrasado não pode religar um GIF de ataque que já terminou.
          if(transientState&&el.dataset.anim!==transientState)return;
+         if(state.mode==='pvp'&&el._pvpGifCycle?.img===img&&el._pvpGifCycle.done)return;
          restartGif(img,original,Date.now());
        },350);
      }else if(assetWarning){
@@ -11655,8 +11657,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    }
 
    if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI){
-      const special=(Number(e.pvpSpecialVisualUntil)||0)>localNow;
-      const melee=(Number(e.pvpMeleeVisualUntil)||0)>localNow;
+      const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
+      const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
       const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
       const desired=special&&el._gifKeys?.special?'special':
         melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
@@ -11679,7 +11681,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
           el._mageStaff.classList.add('pvp-staff-strike');
         }
       }
-      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=special?'hidden':'visible';
+      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
+        (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
     }else if(e.type==='poseidon'||e.type==='seahorse'){
       const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
       const kind=active?p.kind:null;
