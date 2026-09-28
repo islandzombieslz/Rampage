@@ -8443,7 +8443,8 @@ function pvpNPCRecovery(e,now){
    e.type==='seahorse'?'seahorseAttack':e.type==='anubis'?(kind==='ranged'?'anubisRangedAttack':'anubisMeleeAttack'):null;
  const fullVisual=key?pvpFullGifDuration(key,e.type==='dragon'?2000:3000):0;
  if(e.type==='dragon')return now+Math.max(2000,fullVisual);
- return Math.max(now,Number(pending?.endAt)||now,now+fullVisual)+(e.type==='seahorse'?850:1100);
+ const visualEnd=e.type==='naja'&&kind==='special'?(Number(pending?.emergeAt)||now)+fullVisual:now+fullVisual;
+ return Math.max(now,Number(pending?.endAt)||now,visualEnd)+(e.type==='seahorse'?850:1100);
 }
 function pvpBotAction(e,dt){
  if(!e.alive)return;
