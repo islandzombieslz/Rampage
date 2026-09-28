@@ -3721,6 +3721,8 @@ const ISIS_NORMAL_DAMAGE_1=Math.max(0,BROWN_NORMAL_DAMAGE_1-15);
 const ISIS_NORMAL_DAMAGE_2=Math.max(0,BROWN_NORMAL_DAMAGE_2-15);
 const ISIS_RUNTIME_REVISION='isis-double-heal-v5-20260919';
 const gifRuntime=new Map();
+// PvP uses whole GIF cycles independently of Clan War's action timing.
+const pvpGifFullDurationMs=new Map();
 let magePowerAssetReady=false;
 let egyptMagePowerAssetReady=false;
 let golemAttackAssetsReady=false;
@@ -3773,7 +3775,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // Só ataques fechados precisam de Blob/medição de duração. Idle e caminhada
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
- const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack','isisAttack','isisSpecial','isisPower'];
+ const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack','isisAttack','isisSpecial','isisPower','poseidonNormal','poseidonWaveCast','poseidonSummonCast','poseidonWavePower','seahorseAttack'];
  await Promise.all(gifKeys.map(async key=>{
    const src=ASSETS[key];
    try{
@@ -3782,7 +3784,9 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
      const r=await fetch(src,{cache:'force-cache',mode:crossOrigin?'cors':'same-origin'});
      if(!r.ok)throw Error(key+' '+r.status);
      const buf=await r.arrayBuffer();
-     const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):gifCycleDurationMs(buf);
+     const fullDuration=gifCycleDurationMs(buf);
+      const duration=(key==='golemSpecial'||key==='najaSpecial'||key==='najaSpecialFinal')?gifActionDurationMs(buf):fullDuration;
+      if(Number.isFinite(fullDuration)&&fullDuration>=250&&fullDuration<=30000)pvpGifFullDurationMs.set(key,fullDuration);
      // WAR MEMORY JANK FIX 2026-09-18
      // Mantemos apenas a duração. Guardar Blob de todos os ataques segurava ~178 MB
      // de GIF comprimido no heap durante a partida. O Service Worker já mantém os
@@ -6794,6 +6798,7 @@ function restartGif(img,keyOrSrc,serial=0){
    const sep=String(src).includes('?')?'&':'?';
    img.src=src+sep+'gifStart='+Date.now()+'_'+serial;
  }
+ if(state.mode==='pvp'&&key)pvpRememberGifCycle(img,key,serial);
 }
 
 function stopGif(img){
@@ -8243,6 +8248,31 @@ function pvpNearestEnemy(e,preferred=null){
    if(d<best){nearest=t;best=d}
  }
  return nearest;
+}
+// A complete visual cycle never changes attack hit timing or cooldowns.
+const PVP_GIF_STATES=Object.freeze({
+ poseidonNormal:'attack',poseidonWaveCast:'waveCast',poseidonSummonCast:'summonCast',
+ seahorseAttack:'attack',najaAttack:'attack',najaSpecial:'special',najaSpecialFinal:'emerge',
+ golemAttack:'attack',golemSpecial:'special',brownAttack:'attack',brownSpecial:'special',
+ anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
+ mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
+ kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+function pvpFullGifDuration(key,fallback=3000){
+ return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
+}
+function pvpRememberGifCycle(img,key,serial){
+ const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
+ const el=img.closest?.('.entity-visual');if(!el)return;
+ const now=performance.now(),duration=pvpFullGifDuration(key,3000);
+ el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration};
+}
+function pvpPreserveGifState(el,desired){
+ if(state.mode!=='pvp')return desired;
+ const cycle=el._pvpGifCycle;
+ if(cycle&&cycle.until>performance.now()&&
+   (desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly')&&
+   cycle.img?.hasAttribute('src'))return cycle.state;
+ return desired;
 }
 function pvpDamageForRange(distance,special=false,multiplier=1){
  const near=special?PVP_BASE.specialMax:PVP_BASE.damageMax;
@@ -11148,7 +11178,8 @@ function entitySpriteForState(el,stateName){
  if(stateName==='walk')return el._walk;
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
- if(stateName==='attack')return el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(stateName==='attack')return (state.mode==='pvp'?el._anubisMelee:null)||el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(state.mode==='pvp'&&stateName==='anubisRanged')return el._anubisRanged;
  if(stateName==='waveCast')return el._poseidonWaveCast;
  if(stateName==='summonCast')return el._poseidonSummonCast;
  if(stateName==='special')return el._brownSpecial||el._golemSpecial||el._najaSpecial||el._isisSpecial||el._mageSpecial||el._kingSpecial;
@@ -11217,6 +11248,7 @@ function suspendEntityLoopGif(el){
  }
 }
 function setEntitySpriteState(el,desired){
+ if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired);
  const previous=el.dataset.anim||'';
  const desiredImg=entitySpriteForState(el,desired);
  if(previous===desired){
