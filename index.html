@@ -8902,8 +8902,8 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      // the body, while PvP keeps its own damage/cooldown/summoning rules.
      const duration=Math.max(1,end-(Number(e.pvpSpecialFxStartedAt)||end-pvpFullGifDuration(key,3200)));
      const progress=clamp(1-(end-now)/duration,0,1);
-     const egypt=e.clan==='egypt',grow=egypt?.96+progress*.02:.90+progress*.30;
-     size=MAGE_SPECIAL_RADIUS*2*zoom*grow*(egypt?.50:1);
+     const egypt=e.clan==='egypt',grow=egypt?(.96+progress*.02):(.90+progress*.30);
+     size=MAGE_SPECIAL_RADIUS*2*zoom*grow*(egypt? .50:1);
      alpha=Math.min(clamp(progress/.16,0,1),clamp((1-progress)/.22,0,1));
    }else size=(key==='kingPower'?430:190)*zoom;
    img.style.left=x+'px';img.style.top=y+'px';
@@ -11813,14 +11813,16 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
       const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
       const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
       const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
+      // Start a new serial before setting the visual state. A spent old
+      // cycle cannot swallow the first frame of the next PvP special.
+      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
+        if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+          el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
+      }
       const desired=special&&el._gifKeys?.special?'special':
         melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
       setEntitySpriteState(el,desired);
-      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
-        el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
-        if(specialImage)restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial);
-      }
       if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
         el.dataset.pvpAttackSerial=String(e.attackSerial||0);
         const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
