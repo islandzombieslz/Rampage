@@ -8818,6 +8818,9 @@ function updatePVPHUD(){
 }
 const pvpFlameNodes=new Map(),pvpFlameActiveIds=new Set();
 const pvpSpecialFxNodes=new Map(),pvpSpecialFxActiveIds=new Set();
+// The DOM element may be culled or rebuilt, but an already consumed cast serial
+// cannot start again just because a late PvP network snapshot arrived.
+const pvpSpecialFxPlayedSerial=new Map();
 function syncPVPPowerEffects(left,top,zoom){
  if(state.mode!=='pvp')return;
  const layer=combatCameraLayer,now=renderFrameNow||performance.now(),active=pvpFlameActiveIds;active.clear();
@@ -8854,37 +8857,63 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
  if(state.mode!=='pvp')return;
  const now=renderFrameNow||performance.now(),active=pvpSpecialFxActiveIds;active.clear();
  for(const e of state.entities){
-  const key=pvpSpecialEffectKey(e),previous=pvpSpecialFxNodes.get(e.id);
-  const serial=String(e.pvpSpecialSerial||0);
-  if(!e.alive||!key||serial==='0')continue;
-  if(!(e.pvpSpecialFxUntil>now||previous?._visualEndAt>now))continue;
-  if(previous&&previous.dataset.serial===serial&&
-     now>=Number(previous._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
-   // Keep the consumed serial until its window closes; never recreate/reloop it.
-   stopGif(previous);previous.style.visibility='hidden';active.add(e.id);continue;
-  }
-  const x=(e.x-left)*zoom,y=(e.y-top)*zoom,pad=280*zoom;
-  if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
-   if(previous){active.add(e.id);previous.style.visibility='hidden'}
-   continue;
-  }
-  active.add(e.id);
-  let img=previous;
-  if(!img){img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
-   entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img)}
-  if(img.dataset.serial!==serial){
-   img.dataset.serial=serial;
-   img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
-   restartGif(img,key,serial);
-   img._visualEndAt=now+pvpFullGifDuration(key,3200);
-  }
-  const size=(key==='kingPower'?430:key==='brownPower'?190:330)*zoom;
-  img.style.left=x+'px';img.style.top=y+'px';img.style.width=size+'px';img.style.height=size+'px';
-  img.style.opacity='1';img.style.visibility='visible';img.style.transform='translate(-50%,-50%)';
-  img.style.zIndex=String(40+Math.round(y));
+   const key=pvpSpecialEffectKey(e),old=pvpSpecialFxNodes.get(e.id);
+   const serialNumber=Number(e.pvpSpecialSerial)||0,serial=String(serialNumber);
+   const end=Number(e.pvpSpecialFxUntil)||0;
+   if(!e.alive||!key||serialNumber<=0||now>=end-PVP_GIF_END_MARGIN_MS)continue;
+   // A stopped effect remains in the map until the original cast deadline.
+   // Never re-create a consumed serial, including after culling or snapshots.
+   if(!old&&serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0))continue;
+   active.add(e.id);
+   if(old&&old.dataset.serial===serial&&
+      (now>=Math.min(Number(old._visualEndAt)||end,end)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
+     stopGif(old);old.style.visibility='hidden';old.style.opacity='0';continue;
+   }
+   const ox=e.pvpSpecialOriginX??e.x,oy=e.pvpSpecialOriginY??e.y;
+   const x=(ox-left)*zoom,y=(oy-top)*zoom,pad=280*zoom;
+   if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
+     if(old)old.style.visibility='hidden';
+     continue;
+   }
+   let img=old;
+   if(!img){
+     img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
+     entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img);
+   }
+   if(img.dataset.serial!==serial){
+     if(serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0)){
+       img.style.visibility='hidden';continue;
+     }
+     stopGif(img);
+     img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
+     restartGif(img,key,serial);
+     img.dataset.serial=serial;
+     // Like War, a cast has one fixed body/power timeline. Do not extend
+     // it every frame or on a delayed snapshot; stop before frame zero repeats.
+     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200));
+     pvpSpecialFxPlayedSerial.set(e.id,serialNumber);
+   }
+   if(now>=Math.min(img._visualEndAt,end)-PVP_GIF_END_MARGIN_MS){
+     stopGif(img);img.style.visibility='hidden';img.style.opacity='0';continue;
+   }
+   let size,alpha=1;
+   if(e.type==='mage'){
+     // Same growth, dimensions and fade used for the War mage power behind
+     // the body, while PvP keeps its own damage/cooldown/summoning rules.
+     const duration=Math.max(1,end-(Number(e.pvpSpecialFxStartedAt)||end-pvpFullGifDuration(key,3200)));
+     const progress=clamp(1-(end-now)/duration,0,1);
+     const egypt=e.clan==='egypt',grow=egypt?.96+progress*.02:.90+progress*.30;
+     size=MAGE_SPECIAL_RADIUS*2*zoom*grow*(egypt?.50:1);
+     alpha=Math.min(clamp(progress/.16,0,1),clamp((1-progress)/.22,0,1));
+   }else size=(key==='kingPower'?430:190)*zoom;
+   img.style.left=x+'px';img.style.top=y+'px';
+   img.style.width=size+'px';img.style.height=size+'px';
+   img.style.opacity=String(alpha);img.style.visibility=alpha>.01?'visible':'hidden';
+   img.style.transform='translate(-50%,-50%)';
+   img.style.zIndex=String(40+Math.round(y));
  }
  for(const [id,img] of pvpSpecialFxNodes)if(!active.has(id)){
-  stopGif(img);img.remove();pvpSpecialFxNodes.delete(id)
+   stopGif(img);img.remove();pvpSpecialFxNodes.delete(id);
  }
 }
 const PVP_FIRE_IMAGES={};
@@ -12040,6 +12069,7 @@ function clearEntityVisuals(){
  pvpFlameNodes.clear();
  for(const img of pvpSpecialFxNodes.values()){stopGif(img);img.remove()}
  pvpSpecialFxNodes.clear();
+ if(state.mode==='pvp')pvpSpecialFxPlayedSerial.clear();
  for(const img of brownPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of kingPowerNodes.values())releaseGifObjectUrl(img);
  for(const img of isisPowerNodes.values())releaseGifObjectUrl(img);
