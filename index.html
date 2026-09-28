@@ -8717,7 +8717,14 @@ function syncPVPPowerEffects(left,top,zoom){
      img.draggable=false;img.decoding='async';layer.appendChild(img);pvpFlameNodes.set(e.id,img);img.dataset.serial='-1';
    }
    const serial=String(e.pvpPowerSerial||0),key=e.clan==='egypt'?'egyptMagePower':'magePower';
-   if(img.dataset.serial!==serial){img.dataset.serial=serial;restartGif(img,key,serial)}
+   if(img.dataset.serial!==serial){
+    img.dataset.serial=serial;restartGif(img,key,serial);
+    img._visualEndAt=now+pvpFullGifDuration(key,3000);
+   }
+   if(now>=Number(img._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
+    // Power damage retains its original tick window; only the GIF ends.
+    stopGif(img);img.style.visibility='hidden';continue;
+   }
    const angle=e.pvpAimAngle||e.heading||0;
    const ox=e.x+Math.cos(angle)*30,oy=e.y-13;
    img.style.left=((ox-left)*zoom)+'px';img.style.top=((oy-top)*zoom)+'px';
@@ -8735,8 +8742,14 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
  const now=renderFrameNow||performance.now(),active=pvpSpecialFxActiveIds;active.clear();
  for(const e of state.entities){
   const key=pvpSpecialEffectKey(e),previous=pvpSpecialFxNodes.get(e.id);
-  if(!key)continue;
+  const serial=String(e.pvpSpecialSerial||0);
+  if(!e.alive||!key||serial==='0')continue;
   if(!(e.pvpSpecialFxUntil>now||previous?._visualEndAt>now))continue;
+  if(previous&&previous.dataset.serial===serial&&
+     now>=Number(previous._visualEndAt||0)-PVP_GIF_END_MARGIN_MS){
+   // Keep the consumed serial until its window closes; never recreate/reloop it.
+   stopGif(previous);previous.style.visibility='hidden';active.add(e.id);continue;
+  }
   const x=(e.x-left)*zoom,y=(e.y-top)*zoom,pad=280*zoom;
   if(x+pad<0||x-pad>screenW||y+pad<0||y-pad>screenH){
    if(previous){active.add(e.id);previous.style.visibility='hidden'}
@@ -8746,7 +8759,6 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
   let img=previous;
   if(!img){img=document.createElement('img');img.draggable=false;img.decoding='async';img.dataset.serial='-1';
    entityCameraLayer.appendChild(img);pvpSpecialFxNodes.set(e.id,img)}
-  const serial=String(e.pvpSpecialSerial||0);
   if(img.dataset.serial!==serial){
    img.dataset.serial=serial;
    img.className=key==='kingPower'?'king-special-power':key==='brownPower'?'brown-warrior-power':'mage-power-special';
