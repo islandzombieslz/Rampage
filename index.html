@@ -1442,6 +1442,11 @@ html,body{
 .mage-power-special{object-fit:contain;transform-origin:center;z-index:2}
 /* PvP flame visibility is controlled by its own GIF lifetime, not the War CSS !important rule. */
 #gameScreen.pvp-mode .pvp-flame-gif{position:absolute;object-fit:fill;pointer-events:none;transform-origin:0 50%;z-index:8;visibility:hidden;opacity:1;will-change:auto}
+/* A stopped/unloaded PvP image never displays the browser's broken-image icon. */
+#gameScreen.pvp-mode #entityLayer img:not([src]),
+#gameScreen.pvp-mode #combatFxLayer img:not([src]),
+#gameScreen.pvp-mode img.pvp-gif-loading,
+#gameScreen.pvp-mode img.pvp-gif-failed{visibility:hidden!important}
 
 /* Loja do modo Guerra: as três tropas ficam visíveis juntas em landscape. */
 #shop{
@@ -6815,6 +6820,35 @@ function releaseGifObjectUrl(img){
  img._gifObjectUrl=null;
 }
 
+// PvP hides a fresh GIF until decoded. One failed unique URL retries the
+// canonical cached asset without repeatedly reloading or changing other modes.
+function pvpPrepareGifImage(img,src,requestedSrc){
+ img._pvpGifLoadCleanup?.();
+ const token=(img._pvpGifLoadToken||0)+1;img._pvpGifLoadToken=token;
+ img.classList.add('pvp-gif-loading');img.classList.remove('pvp-gif-failed');
+ let retried=false;
+ const cleanup=()=>{
+   img.removeEventListener('load',onLoad);img.removeEventListener('error',onError);
+   if(img._pvpGifLoadCleanup===cleanup)img._pvpGifLoadCleanup=null;
+ };
+ const onLoad=()=>{
+   if(img._pvpGifLoadToken!==token)return cleanup();
+   if(!img.naturalWidth)return onError();
+   img.classList.remove('pvp-gif-loading','pvp-gif-failed');cleanup();
+ };
+ const onError=()=>{
+   if(img._pvpGifLoadToken!==token)return cleanup();
+   if(!retried&&img.getAttribute('src')===requestedSrc&&requestedSrc!==src){
+     retried=true;img.src=src;return;
+   }
+   cleanup();img.classList.remove('pvp-gif-loading');img.classList.add('pvp-gif-failed');
+   const cycle=img.closest?.('.entity-visual')?._pvpGifCycle;
+   if(cycle?.img===img)cycle.done=true;
+   img.removeAttribute('src');
+ };
+ img._pvpGifLoadCleanup=cleanup;
+ img.addEventListener('load',onLoad);img.addEventListener('error',onError);
+}
 function restartGif(img,keyOrSrc,serial=0){
  if(!img)return;
  const key=ASSETS[keyOrSrc]?keyOrSrc:Object.keys(ASSETS).find(k=>ASSETS[k]===keyOrSrc);
@@ -6822,23 +6856,30 @@ function restartGif(img,keyOrSrc,serial=0){
  if(state.mode==='pvp'&&key&&!pvpMayRestartGif(img,key,serial))return false;
  if(key)img.dataset.assetKey=key;
  releaseGifObjectUrl(img);
+ if(state.mode==='pvp')img.classList.add('pvp-gif-loading');
  img.removeAttribute('src');
- // A Object URL/URL com serial já é sempre nova; não é necessário forçar um
- // reflow síncrono (offsetWidth) para reiniciar a animação.
  const runtime=key?gifRuntime.get(key):null;
  if(runtime?.blob){
    const url=URL.createObjectURL(runtime.blob);
-   img._gifObjectUrl=url;
-   img.src=url;
+   img._gifObjectUrl=url;img.src=url;
+   if(state.mode==='pvp')img.classList.remove('pvp-gif-loading');
  }else{
    const sep=String(src).includes('?')?'&':'?';
-   img.src=src+sep+'gifStart='+Date.now()+'_'+serial;
+   const requestedSrc=src+sep+'gifStart='+Date.now()+'_'+serial;
+   if(state.mode==='pvp'&&key)pvpPrepareGifImage(img,src,requestedSrc);
+   img.src=requestedSrc;
  }
  if(state.mode==='pvp'&&key)pvpRememberGifCycle(img,key,serial);
+ return true;
 }
-
 function stopGif(img){
- if(!img||!img.hasAttribute('src'))return;
+ if(!img)return;
+ if(state.mode==='pvp'){
+   img._pvpGifLoadToken=(img._pvpGifLoadToken||0)+1;
+   img._pvpGifLoadCleanup?.();
+   img.classList.remove('pvp-gif-loading');
+ }
+ if(!img.hasAttribute('src'))return;
  releaseGifObjectUrl(img);
  img.removeAttribute('src');
 }
@@ -8311,12 +8352,8 @@ const PVP_GIF_END_MARGIN_MS=25;
 function pvpMayRestartGif(img,key,serial){
  const el=img?.closest?.('.entity-visual'),cycle=el?._pvpGifCycle;
  if(!cycle||cycle.img!==img||cycle.key!==key)return true;
- // An already played serial must never restart, even after a remote snapshot.
- if(String(cycle.serial)===String(serial)&&cycle.done)return false;
- // Allow a real one-time decode failure to retry, not a deliberately stopped GIF.
- if(img.hasAttribute('src')&&img.complete&&img.naturalWidth===0)return true;
- if(!cycle.done&&performance.now()<cycle.until-PVP_GIF_END_MARGIN_MS)return false;
- return true;
+ // One replay per cast; a genuinely new serial must not inherit the old lock.
+ return String(cycle.serial)!==String(serial);
 }
 function pvpRememberGifCycle(img,key,serial){
  const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
@@ -8328,6 +8365,7 @@ function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
  const cycle=el._pvpGifCycle;if(!cycle)return desired;
  const now=performance.now();
+ if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
  if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
  const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
@@ -11420,6 +11458,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      if(assetWarning)assetWarning.classList.remove('show');
    });
    img.addEventListener('error',()=>{
+     if(state.mode==='pvp')return; // PvP loader owns its single canonical retry.
      if(!retried){
        retried=true;
        const currentSrc=img.getAttribute('src')||'';
@@ -11528,7 +11567,13 @@ function suspendEntityLoopGif(el){
  }
 }
 function setEntitySpriteState(el,desired){
- if(state.mode==='pvp')desired=pvpPreserveGifState(el,desired);
+ if(state.mode==='pvp'){
+   desired=pvpPreserveGifState(el,desired);
+   const candidate=entitySpriteForState(el,desired);
+   if(candidate&&!ENTITY_LOOP_STATES.has(desired)&&
+      (!candidate.hasAttribute('src')||candidate.classList.contains('pvp-gif-failed')))
+     desired=el._dragonFly||el._dragonGround?(el._dragonFly?'fly':'ground'):'idle';
+ }
  const previous=el.dataset.anim||'';
  const desiredImg=entitySpriteForState(el,desired);
  if(previous===desired){
