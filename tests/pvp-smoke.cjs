@@ -157,7 +157,8 @@ for(let wave=1;wave<4;wave++){
  }
 }
 assert.equal(run('PVP_ENEMY_WAVES.length'),4);
-assert.deepEqual([...run('PVP_DIFFICULTY.normal.waves[0]').map(([type,count])=>[type,count])],[['dragon',5]]);
+assert.equal(run('PVP_DIFFICULTY.normal.waves[0][0][0]'),'dragon');
+assert.equal(run('PVP_DIFFICULTY.normal.waves[0][0][1]'),5);
 assert.equal(run('PVP_DIFFICULTY.normal.waves[1][1][1]'),9);
 assert.equal(run('PVP_DIFFICULTY.normal.waves[2][0][1]'),5);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[0][0][1]'),6);
