@@ -8469,6 +8469,8 @@ function pvpArmDragonRetaliation(target,source){
  target.pvpDragonFirstHitSeen=true;
  target.pvpDragonRetaliatePending=true;
  target.pvpDragonRetaliateTargetId=source.id;
+ // The wrapper and the generic-damage observer must not count the same hit twice.
+ target.pvpDragonObservedDurability=Math.max(0,Number(target.hp)||0)+Math.max(0,Number(target.shield)||0);
  // Only the first hit skips an existing shot gate. Subsequent hits queue
  // a reply for the next PvP recovery window instead of rapid-fire spam.
  if(first){
