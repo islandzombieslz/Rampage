@@ -117,7 +117,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
    for(const clan of ['warriors','egypt']){
      const key=clan==='egypt'?'egypt':'warrior';
      const heroDef=PVP_HERO_BY_ID[clan==='egypt'?'egyptMageFemale':'mageFemale'];
-     const caster=pvpBaseEntity(heroDef,650,650,own.team,own.color,null,true);
+     const caster=pvpBaseEntity(heroDef,650,650,own.team,own.color,null,false); // Test a real human-strength PvP mage, not a half-damage minion.
      const target=pvpBaseEntity(PVP_HERO_BY_ID.warrior,790,650,'pvp-enemy','#f55',null,true);
      const t=performance.now();
      caster.pvpPowerUntil=t+2500;caster.pvpPowerNextTick=t-1;caster.pvpAimTarget=target.id;caster.pvpAimAngle=0;
