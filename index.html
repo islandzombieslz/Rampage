@@ -5276,6 +5276,7 @@ function applyRemoteGame(game){
  }
 }
 function configureGameScreenForMode(){
+ if(state.mode==='pvp')preloadPVPExactGifDurations();
  const pve=state.mode==='pve'||state.mode==='pvp';$('#gameScreen').classList.toggle('pve-mode',pve);$('#gameScreen').classList.toggle('pvp-mode',state.mode==='pvp');const pvpHud=$('#pvpCombatHud');if(pvpHud)pvpHud.hidden=state.mode!=='pvp';$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
 }
 function handleHostCommands(commands){
@@ -8496,6 +8497,8 @@ function pvpCastPower(e,targetId){
  e.pvpActionUntil=e.pvpPowerUntil;
  e.pvpPowerNextTick=now+100;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
+ // This alpha source belongs to the simulation, not the visible DOM camera.
+ pvpFlameImage(e);
  e.heading=angle;e.facing=target.x<e.x?-1:1;
  return true;
 }
@@ -8586,8 +8589,14 @@ function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.
 // Sample the current animated flame frame: transparent GIF pixels do not hurt.
 let pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
 function pvpReadFlameAlpha(e){
- const img=pvpFlameNodes.get(e.id);
- if(!img?.hasAttribute('src')||!img.complete||!img.naturalWidth)return null;
+ const displayed=pvpFlameNodes.get(e.id);
+ // Host simulation runs before rendering and may be off camera entirely.
+ // Prefer the actual displayed frame when decoded; otherwise use the
+ // independently preloaded same original GIF for opaque-pixel collision.
+ const img=displayed?.hasAttribute('src')&&displayed.complete&&displayed.naturalWidth&&
+   !displayed.classList.contains('pvp-gif-loading')&&!displayed.classList.contains('pvp-gif-failed')
+     ?displayed:pvpFlameImage(e);
+ if(!img?.complete||!img.naturalWidth)return null;
  try{
    if(!pvpFlameMaskCanvas){
      pvpFlameMaskCanvas=document.createElement('canvas');
@@ -8624,10 +8633,13 @@ function pvpTickPower(e,now,manualAngle=null){
    if(target){e.pvpAimTarget=target.id;e.pvpAimAngle=Math.atan2(target.y-e.y,target.x-e.x)}
  }
  e.heading=e.pvpAimAngle;e.facing=Math.cos(e.heading)<0?-1:1;
+ const mask=pvpReadFlameAlpha(e);
+ // No image yet: wait for the actual alpha to decode. Do not silently consume
+ // damage ticks (the old code could finish the whole flame doing zero damage).
+ if(!mask){e.pvpPowerNextTick=Math.max(e.pvpPowerNextTick,now);return}
  let ticks=0;
  while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil&&ticks++<3){
-   const mask=pvpReadFlameAlpha(e);
-   if(mask)for(const t of state.entities){
+   for(const t of state.entities){
      if(!t.alive||t.team===e.team)continue;
      if(pvpFlameTouchesTarget(mask,e,t,e.pvpAimAngle))pvpCombatHit(t,e,PVP_BASE.fireDamage);
    }
@@ -8812,6 +8824,7 @@ function startPVP(){
  if(state.mode!=='pvp')return;
  preloadExtraPVPGifDurations();
  preloadPVPExactGifDurations();
+ pvpFlameImage({clan:'warriors'});pvpFlameImage({clan:'egypt'});
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
@@ -9056,7 +9069,8 @@ const PVP_FIRE_IMAGES={};
 function pvpFlameImage(e){
  const key=e.clan==='egypt'?'egypt':'warrior';
  if(!PVP_FIRE_IMAGES[key]){
-   const image=new Image();image.src=key==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
+   const image=new Image();image.decoding='async';
+   image.src=key==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
    PVP_FIRE_IMAGES[key]=image;
  }
  return PVP_FIRE_IMAGES[key];
