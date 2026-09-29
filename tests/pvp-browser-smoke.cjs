@@ -97,6 +97,31 @@ const pvpTestHook=`window.__pvpBrowserTest={
      correctSource:state.dragonProjectiles.some(p=>p.sourceId===dragon.id),
      cleared:dragon.pvpDragonRetaliatePending===false};
  },
+ async decodedFlameFrames(){
+   const out=[];
+   if(typeof ImageDecoder==='undefined')return {available:false};
+   for(const key of ['magePower','egyptMagePower']){
+     const bytes=new Uint8Array(await (await fetch(ASSETS[key])).arrayBuffer());
+     const decoder=new ImageDecoder({data:bytes,type:'image/gif'});
+     await decoder.tracks.ready;
+     const count=decoder.tracks.selectedTrack.frameCount;
+     const picks=[0,Math.floor(count*.2),Math.floor(count*.4),Math.floor(count*.6),Math.floor(count*.8),count-1];
+     const frames=[];
+     for(const i of picks){
+       const f=await decoder.decode({frameIndex:i,completeFramesOnly:true});
+       const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
+       const g=canvas.getContext('2d',{willReadFrequently:true});g.drawImage(f.image,0,0,160,55);
+       const d=g.getImageData(0,0,160,55).data;let count=0,minX=160,maxX=-1,minY=55,maxY=-1;
+       for(let y=0;y<55;y++)for(let x=0;x<160;x++)if(d[(y*160+x)*4+3]>16){
+         count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+       }
+       frames.push({i,duration:f.image.duration,count,bbox:[minX,minY,maxX,maxY],center:d[(27*160+57)*4+3]});
+       f.image.close();
+     }
+     out.push({key,frameCount:count,frames});decoder.close();
+   }
+   return {available:true,out};
+ },
  async realFlameProbe(){
    const out=[];
    for(const [clan,key] of [['warriors','magePower'],['egypt','egyptMagePower']]){
@@ -286,6 +311,7 @@ async function main(){
      'first incoming hit must produce a real dragon projectile even during takeoff');
    const realFlames=await page.evaluate(()=>window.__pvpBrowserTest.realFlameProbe());
    console.log('REAL_PVP_FLAMES',JSON.stringify(realFlames));
+   console.log('DECODED_PVP_FLAMES',JSON.stringify(await page.evaluate(()=>window.__pvpBrowserTest.decodedFlameFrames())));
    const bothMages=await page.evaluate(()=>window.__pvpBrowserTest.flameDamageWithoutRender());
    assert.deepEqual(bothMages,[
      {clan:'warriors',hit:15,transparentHit:0,domPresent:false},
