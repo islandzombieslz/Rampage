@@ -49,6 +49,7 @@ const firebaseStub=String.raw`
 // Inject a test-only hook inside the game's closure; nothing is exported by
 // the production build and no production code is changed for browser tests.
 const pvpTestHook=`window.__pvpBrowserTest={
+ roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
  castEgyptianSpecial(){
    const hero=pvpLocalHero();
    if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
@@ -270,6 +271,7 @@ async function main(){
    await page.locator('.mode-card[data-mode="pvp"]').click();
    await page.locator('#configureBtn').click();
    await page.locator('#configScreen.active').waitFor({timeout:8000});
+   await page.locator('#configScreen [data-setting="pveTime"] button[data-value="30"]').click();
    await page.locator('#createRoomBtn').click();
    await page.locator('#lobbyScreen.active').waitFor({timeout:12000});
    const plus=page.locator('#lobbyScreen button.plus[data-target="npcs"]');
@@ -295,6 +297,9 @@ async function main(){
    await page.locator('#pvpHeroConfirm').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
+   const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
+   assert.equal(clock.duration,30,'PvP menu time must start a thirty-second round');
+   assert(clock.left>0&&clock.left<=30,'PvP match counts down from selected value');
    await page.locator('#pvpCombatHud [data-pvp-action="power"]').click();
    await page.locator('#attackBtn').click();
    await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
