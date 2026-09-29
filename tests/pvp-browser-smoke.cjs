@@ -97,49 +97,61 @@ const pvpTestHook=`window.__pvpBrowserTest={
      correctSource:state.dragonProjectiles.some(p=>p.sourceId===dragon.id),
      cleared:dragon.pvpDragonRetaliatePending===false};
  },
- async decodedFlameFrames(){
-   const out=[];
-   if(typeof ImageDecoder==='undefined')return {available:false};
-   for(const key of ['magePower','egyptMagePower']){
-     const bytes=new Uint8Array(await (await fetch(ASSETS[key])).arrayBuffer());
-     const decoder=new ImageDecoder({data:bytes,type:'image/gif'});
-     await decoder.tracks.ready;
-     const count=decoder.tracks.selectedTrack.frameCount;
-     const picks=[0,Math.floor(count*.2),Math.floor(count*.4),Math.floor(count*.6),Math.floor(count*.8),count-1];
-     const frames=[];
-     for(const i of picks){
-       const f=await decoder.decode({frameIndex:i,completeFramesOnly:true});
-       const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
-       const g=canvas.getContext('2d',{willReadFrequently:true});g.drawImage(f.image,0,0,160,55);
-       const d=g.getImageData(0,0,160,55).data;let count=0,minX=160,maxX=-1,minY=55,maxY=-1;
-       for(let y=0;y<55;y++)for(let x=0;x<160;x++)if(d[(y*160+x)*4+3]>16){
-         count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-       }
-       frames.push({i,duration:f.image.duration,count,bbox:[minX,minY,maxX,maxY],center:d[(27*160+57)*4+3]});
-       f.image.close();
-     }
-     out.push({key,frameCount:count,frames});decoder.close();
-   }
-   return {available:true,out};
+ flameFramesReady(){
+   return pvpFlameFrames.has('warriors')&&pvpFlameFrames.has('egypt');
  },
- async realFlameProbe(){
-   const out=[];
-   for(const [clan,key] of [['warriors','magePower'],['egypt','egyptMagePower']]){
-     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=ASSETS[key]+'?probe='+Date.now()});
-     const samples=[];
-     for(const delay of [0,250,500,750]){
-       if(delay)await new Promise(r=>setTimeout(r,delay));
-       const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
-       const g=canvas.getContext('2d',{willReadFrequently:true});g.drawImage(img,0,0,160,55);
-       const d=g.getImageData(0,0,160,55).data;let count=0,minX=160,maxX=-1,minY=55,maxY=-1;
-       for(let y=0;y<55;y++)for(let x=0;x<160;x++)if(d[(y*160+x)*4+3]>16){
-         count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-       }
-       samples.push({delay,count,bbox:[minX,minY,maxX,maxY],center:d[(27*160+57)*4+3]});
-     }
-     out.push({clan,dimensions:[img.naturalWidth,img.naturalHeight],samples});
+ realFlameFrameHits(){
+   const own=pvpLocalHero();if(!own)return null;
+   const result=[];
+   for(const [clan,key] of [['warriors','mageFemale'],['egypt','egyptMageFemale']]){
+     const entry=pvpFlameFrames.get(clan);
+     const frameIndex=Math.floor(entry.frames.length*.48);
+     const frame=entry.frames[frameIndex],previousEnd=frameIndex?entry.frames[frameIndex-1].end:0;
+     const elapsed=previousEnd+Math.max(1,Math.floor((frame.end-previousEnd)/2));
+     let px=-1,py=-1;
+     for(let y=12;y<43&&px<0;y++)for(let x=16;x<144;x++)
+       if(frame.data[y*160+x]>16){px=x;py=y;break}
+     if(px<0)throw Error('No visible GIF pixels for '+clan);
+     const caster=pvpBaseEntity(PVP_HERO_BY_ID[key],650,650,own.team,own.color,null,false);
+     const victim=pvpBaseEntity(PVP_HERO_BY_ID.warrior,0,0,'pvp-enemy','#f55',null,true);
+     const now=performance.now();
+     caster.pvpPowerStartedAt=now-elapsed;caster.pvpPowerUntil=now+1000;
+     caster.pvpPowerNextTick=now-1;caster.pvpAimTarget=victim.id;caster.pvpAimAngle=0;
+     victim.x=caster.x+30+(px+.5)*305/160;
+     victim.y=caster.y-13+(py+.5)*105/55-52.5;
+     const before=victim.shield+victim.hp;
+     pvpTickPower(caster,now,0);
+     const hit=before-(victim.shield+victim.hp);
+     victim.x=caster.x+400;victim.y=caster.y;
+     caster.pvpPowerNextTick=now-1;
+     const after=victim.shield+victim.hp;
+     pvpTickPower(caster,now,0);
+     const miss=after-(victim.shield+victim.hp);
+     result.push({clan,hit,miss,frames:entry.frames.length,domPresent:pvpFlameNodes.has(caster.id)});
+     state.entities=state.entities.filter(e=>e!==caster&&e!==victim);
    }
-   return out;
+   return result;
+ },
+ linearDragonShot(){
+   const own=pvpLocalHero();if(!own)return null;
+   const target=pvpBaseEntity(PVP_HERO_BY_ID.warrior,500,950,'pvp-enemy','#f55',null,true);
+   const p={id:'linear-test',kind:'dragon',x:450,y:600,vx:100,vy:0,speed:100,
+     targetId:target.id,targetX:target.x,targetY:target.y,team:own.team,sourceId:own.id,
+     damage:5,burn:false,expireAt:performance.now()+3000};
+   state.dragonProjectiles.push(p);
+   const map=new Map(state.entities.map(e=>[e.id,e]));
+   updateDragonProjectiles(.1,map);
+   const first=[p.x,p.y,p.vx,p.vy];
+   target.x=1000;target.y=200;
+   updateDragonProjectiles(.1,map);
+   const second=[p.x,p.y,p.vx,p.vy];
+   target.x=p.x+5;target.y=p.y;
+   const before=target.hp+target.shield;
+   updateDragonProjectiles(.1,map);
+   const impact=before-(target.hp+target.shield);
+   state.dragonProjectiles=state.dragonProjectiles.filter(x=>x!==p);
+   state.entities=state.entities.filter(e=>e!==target);
+   return {first,second,impact,hit:p.pvpHit===true};
  },
  missingSprites(){
    return [...document.querySelectorAll('#entityLayer img,#combatFxLayer img')]
@@ -309,9 +321,16 @@ async function main(){
    const dragon=await page.evaluate(()=>window.__pvpBrowserTest.dragonFirstHit());
    assert.deepEqual(dragon,{armed:true,shot:true,correctSource:true,cleared:true},
      'first incoming hit must produce a real dragon projectile even during takeoff');
-   const realFlames=await page.evaluate(()=>window.__pvpBrowserTest.realFlameProbe());
-   console.log('REAL_PVP_FLAMES',JSON.stringify(realFlames));
-   console.log('DECODED_PVP_FLAMES',JSON.stringify(await page.evaluate(()=>window.__pvpBrowserTest.decodedFlameFrames())));
+   await page.waitForFunction(()=>window.__pvpBrowserTest.flameFramesReady(),null,{timeout:60000});
+   const realFlameHits=await page.evaluate(()=>window.__pvpBrowserTest.realFlameFrameHits());
+   assert.deepEqual(realFlameHits.map(({clan,hit,miss,domPresent})=>({clan,hit,miss,domPresent})),[
+     {clan:'warriors',hit:15,miss:0,domPresent:false},
+     {clan:'egypt',hit:15,miss:0,domPresent:false}
+   ],'both REAL animated GIFs must damage visible pixels even offscreen');
+   assert(realFlameHits.every(e=>e.frames>20),'real animated frames were decoded');
+   const linearDragon=await page.evaluate(()=>window.__pvpBrowserTest.linearDragonShot());
+   assert.deepEqual(linearDragon,{first:[460,600,100,0],second:[470,600,100,0],impact:5,hit:true},
+     'PvP dragon projectile flies straight, misses a moving target and hits only on crossing its line');
    const bothMages=await page.evaluate(()=>window.__pvpBrowserTest.flameDamageWithoutRender());
    assert.deepEqual(bothMages,[
      {clan:'warriors',hit:15,transparentHit:0,domPresent:false},
