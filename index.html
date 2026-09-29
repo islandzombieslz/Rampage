@@ -9037,16 +9037,17 @@ function updatePVPHUD(){
  const hero=PVP_HERO_BY_ID[me?.pvpHero]||PVP_HEROES[0];
  for(const button of $$('#pvpCombatHud [data-pvp-action]')){
    const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
+   const loading=action==='power'&&!!me&&!pvpFlameReadyForCast(me);
    const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):
      action==='power'?Math.max(0,(me?.pvpPowerVisualUntil||0)-now):0;
    const duration=action==='power'?pvpFullGifDuration(me?.clan==='egypt'?'egyptMagePower':'magePower',3000):(me?.pvpSpecialWindowMs||20000);
-   button.disabled=!me||!available;
+   button.disabled=!me||!available||loading;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
    button.classList.toggle('cooling',available&&remaining>0&&remaining<1e10);
    const symbol=button.querySelector('.pvp-hud-symbol'),cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
-   if(symbol)symbol.textContent=available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
-   if(cooldown)cooldown.textContent=!available?'':remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
+   if(symbol)symbol.textContent=loading?'…':available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
+   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
  }
 }
