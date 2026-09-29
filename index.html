@@ -8343,8 +8343,72 @@ const PVP_GIF_STATES=Object.freeze({
  anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
  mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
  kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+// PvP-only: walk actual GIF blocks, instead of scanning compressed pixel
+// bytes for incidental 21 F9 04 sequences (which inflated some animation times).
+const pvpExactGifDurationMs=new Map();
+function pvpParsedGifCycleMs(buffer){
+ const b=new Uint8Array(buffer);
+ if(b.length<14||b[0]!==71||b[1]!==73||b[2]!==70||b[3]!==56)return 0;
+ let p=13,total=0,frames=0,delay=100;
+ if(b[10]&0x80)p+=3*(1<<((b[10]&7)+1));
+ const skipBlocks=()=>{
+   while(p<b.length){
+     const len=b[p++];if(!len)return true;
+     p+=len;if(p>b.length)return false;
+   }
+   return false;
+ };
+ while(p<b.length){
+   const tag=b[p++];
+   if(tag===0x3b)break;
+   if(tag===0x21){
+     if(p>=b.length)return 0;
+     const label=b[p++];
+     if(label===0xf9){
+       if(b[p++]!==4||p+5>b.length)return 0;
+       p++;delay=(b[p]|(b[p+1]<<8))*10;p+=2;p++;
+       if(b[p++]!==0)return 0;
+     }else if(!skipBlocks())return 0;
+   }else if(tag===0x2c){
+     if(p+9>b.length)return 0;
+     const packed=b[p+8];p+=9;
+     if(packed&0x80)p+=3*(1<<((packed&7)+1));
+     if(p>=b.length)return 0;
+     p++;if(!skipBlocks())return 0;
+     total+=Math.max(20,delay);delay=100;frames++;
+   }else return 0;
+ }
+ return frames?total:0;
+}
+let pvpExactGifPreloadStarted=false;
+function preloadPVPExactGifDurations(){
+ if(pvpExactGifPreloadStarted)return;
+ pvpExactGifPreloadStarted=true;
+ // War's cached duration and attack logic are never replaced.
+ const keys=['magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
+  'egyptMageSpecial','egyptFemaleMageSpecial','magePowerSpecial','egyptMagePowerSpecial',
+  'kingSpecial','kingPower','brownAttack','brownSpecial','brownPower',
+  'dragonTakeoff','dragonAttack','golemAttack','golemSpecial',
+  'najaAttack','najaSpecial','najaSpecialFinal','anubisMeleeAttack',
+  'anubisRangedAttack','isisAttack','isisSpecial','isisPower',
+  'poseidonNormal','poseidonWaveCast','poseidonSummonCast','seahorseAttack'];
+ // Two at a time: avoid holding many large GIF buffers in memory at match start.
+ let cursor=0;
+ const worker=async()=>{
+   while(state.mode==='pvp'&&cursor<keys.length){
+     const key=keys[cursor++];
+     try{
+       const response=await fetch(ASSETS[key],{cache:'force-cache'});
+       if(!response.ok)continue;
+       const ms=pvpParsedGifCycleMs(await response.arrayBuffer());
+       if(ms>=250&&ms<=30000)pvpExactGifDurationMs.set(key,ms);
+     }catch(_){}
+   }
+ };
+ worker();worker();
+}
 function pvpFullGifDuration(key,fallback=3000){
- return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
+ return pvpExactGifDurationMs.get(key)||pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
 }
 // A GIF is a playback of one action serial, not the action state itself.
 // When it finishes, remove src BEFORE the browser loops to frame zero.
@@ -8747,6 +8811,7 @@ function beginPVPRound(){
 function startPVP(){
  if(state.mode!=='pvp')return;
  preloadExtraPVPGifDurations();
+ preloadPVPExactGifDurations();
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
