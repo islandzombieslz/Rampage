@@ -102,16 +102,17 @@ assert.equal(damageCalls[0].options.knockForce,95);
 assert.equal(run('pvpBasicAttack(state.entities[0])'),false,'basic attack cooldown');
 
 const mage=run('pvpBaseEntity(PVP_HERO_BY_ID.mage,1050,500,"u2","#ffe","u2",false)');
-assert(mage.pvpSpecialReadyAt>1e13,'warrior mage cannot cast before shield break');
+assert.equal(mage.pvpSpecialReadyAt,now+40000,'warrior mage waits only for initial 40 second timer');
 mage.shield=10;
 const attacker=foe;attacker.x=1100;attacker.y=500;
 run('pvpCombatHit(state.entities[2],state.entities[1],20)');
 assert.equal(mage.shield,0);
-assert.equal(mage.pvpSpecialReadyAt,110000,'10 s shield break gate');
-now=110001;
-assert(run('pvpSpecialAttack(state.entities[2])'));
+assert.equal(mage.pvpSpecialReadyAt,now+40000,'shield break cannot change timer');
+assert.equal(run('pvpSpecialAttack(state.entities[2])'),false,'special remains timer-locked');
+now+=40001;
+assert(run('pvpSpecialAttack(state.entities[2])'),'special works even with shield intact once timer completes');
 assert.equal(mage.pvpSpecialDuration,40000);
-assert.equal(mage.pvpSpecialReadyAt,150001);
+assert.equal(mage.pvpSpecialReadyAt,now+40000);
 
 const egypt=run('pvpBaseEntity(PVP_HERO_BY_ID.egyptMage,1450,700,"u3","#e0c","u3",false)');
 assert.equal(egypt.pvpSpecialReadyAt,now+10000);
@@ -159,7 +160,14 @@ assert(html.includes('updateDragonProjectiles(dt,entityById);updateDragonBurns(n
 assert(html.includes("state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode"),'NPC damage needs PvP-only tuning');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'}];
 run('beginPVPRound()');
-assert.equal(state.pvpRoundDuration,180);
+assert.equal(state.pvpRoundDuration,60);
+for(const duration of [30,60,120]){
+ state.pveTime=duration;
+ run('beginPVPRound()');
+ assert.equal(state.pvpRoundDuration,duration,'PvP must respect the menu round duration');
+ assert.equal(state.timeLeft,duration);
+}
+state.pveTime=60;
 assert.equal(run('pvpLastWave'),0);
 assert.deepEqual([...state.entities.filter(e=>e.team==='pvp-enemy').map(e=>e.type)],['dragon','dragon']);
 assert(state.entities.filter(e=>e.type==='dragon').every(e=>e.dragonFlightState==='takeoff'));
