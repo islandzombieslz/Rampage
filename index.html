@@ -8609,7 +8609,7 @@ function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.
 // A bare HTMLImageElement freezes at a transparent first/last frame after its
 // own playback. That caused the host to score zero hits while the *new*
 // visible spell was burning. Decode once, share alpha frames across all casts.
-const pvpFlameFrames=new Map();
+const pvpFlameFrames=new Map(),pvpFlameFrameFailed=new Set();
 let pvpFlameFramesLoading=false,pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
 function pvpLoadFlameFrames(){
  if(state.mode!=='pvp'||pvpFlameFramesLoading||typeof ImageDecoder!=='function')return;
@@ -8641,13 +8641,15 @@ function pvpLoadFlameFrames(){
      }finally{frame.close()}
     }
     if(frames.length===count)pvpFlameFrames.set(clan,{frames,duration:elapsed});
-   }catch(err){pvpReportError('quadros do fogo',err)}
+   }catch(err){pvpFlameFrameFailed.add(clan);pvpReportError('quadros do fogo',err)}
    finally{try{decoder?.close()}catch(_){}}
   }
  })().finally(()=>{pvpFlameFramesLoading=false});
 }
 function pvpReadFlameAlpha(e,now=performance.now()){
- const decoded=pvpFlameFrames.get(e.clan==='egypt'?'egypt':'warriors');
+ const clan=e.clan==='egypt'?'egypt':'warriors';
+ const decoded=pvpFlameFrames.get(clan);
+ if(typeof ImageDecoder==='function'&&!decoded&&!pvpFlameFrameFailed.has(clan))return null;
  if(decoded?.frames.length&&Number.isFinite(e.pvpPowerStartedAt)&&e.pvpPowerStartedAt>0){
   const elapsed=Math.max(0,now-e.pvpPowerStartedAt);
   // Stop, do not wrap: the final transparent frame does not become frame zero.
@@ -8686,7 +8688,8 @@ function pvpFlameTouchesTarget(mask,e,t,angle){
  const top=Math.max(0,Math.floor((y-r+52.5)*h/105)),bottom=Math.min(h-1,Math.ceil((y+r+52.5)*h/105));
  for(let py=top;py<=bottom;py++)for(let px=left;px<=right;px++){
    const wx=(px+.5)*305/w,wy=(py+.5)*105/h-52.5;
-   if((wx-x)**2+(wy-y)**2<=r*r&&mask.data[(py*w+px)*4+3]>16)return true;
+   if((wx-x)**2+(wy-y)**2<=r*r&&
+      (mask.alphaOnly?mask.data[py*w+px]:mask.data[(py*w+px)*4+3])>16)return true;
  }
  return false;
 }
@@ -8700,12 +8703,12 @@ function pvpTickPower(e,now,manualAngle=null){
    if(target){e.pvpAimTarget=target.id;e.pvpAimAngle=Math.atan2(target.y-e.y,target.x-e.x)}
  }
  e.heading=e.pvpAimAngle;e.facing=Math.cos(e.heading)<0?-1:1;
- const mask=pvpReadFlameAlpha(e);
- // No image yet: wait for the actual alpha to decode. Do not silently consume
- // damage ticks (the old code could finish the whole flame doing zero damage).
- if(!mask){e.pvpPowerNextTick=Math.max(e.pvpPowerNextTick,now);return}
+ // Each scheduled hit samples its OWN GIF frame, not the permanently
+ // transparent frame of an independent HTMLImageElement.
  let ticks=0;
  while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil&&ticks++<3){
+   const mask=pvpReadFlameAlpha(e,e.pvpPowerNextTick);
+   if(!mask)return; // Decoder loading: retain the tick for the next frame.
    for(const t of state.entities){
      if(!t.alive||t.team===e.team)continue;
      if(pvpFlameTouchesTarget(mask,e,t,e.pvpAimAngle))pvpCombatHit(t,e,PVP_BASE.fireDamage);
