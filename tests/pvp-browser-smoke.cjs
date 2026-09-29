@@ -97,6 +97,25 @@ const pvpTestHook=`window.__pvpBrowserTest={
      correctSource:state.dragonProjectiles.some(p=>p.sourceId===dragon.id),
      cleared:dragon.pvpDragonRetaliatePending===false};
  },
+ async realFlameProbe(){
+   const out=[];
+   for(const [clan,key] of [['warriors','magePower'],['egypt','egyptMagePower']]){
+     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=ASSETS[key]+'?probe='+Date.now()});
+     const samples=[];
+     for(const delay of [0,250,500,750]){
+       if(delay)await new Promise(r=>setTimeout(r,delay));
+       const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
+       const g=canvas.getContext('2d',{willReadFrequently:true});g.drawImage(img,0,0,160,55);
+       const d=g.getImageData(0,0,160,55).data;let count=0,minX=160,maxX=-1,minY=55,maxY=-1;
+       for(let y=0;y<55;y++)for(let x=0;x<160;x++)if(d[(y*160+x)*4+3]>16){
+         count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+       }
+       samples.push({delay,count,bbox:[minX,minY,maxX,maxY],center:d[(27*160+57)*4+3]});
+     }
+     out.push({clan,dimensions:[img.naturalWidth,img.naturalHeight],samples});
+   }
+   return out;
+ },
  missingSprites(){
    return [...document.querySelectorAll('#entityLayer img,#combatFxLayer img')]
      .filter(img=>!img.hasAttribute('src')&&getComputedStyle(img).visibility!=='hidden')
@@ -176,6 +195,10 @@ const server=http.createServer((req,res)=>{
  // Exercise the one-time canonical fallback when a cache-busted GIF fails.
  if(name==='/assets/mage/poder-mago-especial.gif'&&new URL(req.url,'http://127.0.0.1').searchParams.has('gifStart')){
    res.writeHead(404);res.end('test-only cache-buster failure');return;
+ }
+ if(name==='/assets/mage/poder-mago.gif'||name==='/assets/egypt/mage/power-normal.gif'){
+   res.writeHead(200,{'Content-Type':'image/gif','Cache-Control':'no-store'});
+   res.end(fs.readFileSync(path.join(root,name.slice(1))));return;
  }
  if(/\.(gif|png|webp|jpg|jpeg|svg)$/i.test(name)){res.writeHead(200,{'Content-Type':'image/gif'});res.end(gif);return}
  if(/\.(mp3|wav|ogg)$/i.test(name)){res.writeHead(200,{'Content-Type':'audio/mpeg'});res.end(Buffer.alloc(0));return}
@@ -261,6 +284,8 @@ async function main(){
    const dragon=await page.evaluate(()=>window.__pvpBrowserTest.dragonFirstHit());
    assert.deepEqual(dragon,{armed:true,shot:true,correctSource:true,cleared:true},
      'first incoming hit must produce a real dragon projectile even during takeoff');
+   const realFlames=await page.evaluate(()=>window.__pvpBrowserTest.realFlameProbe());
+   console.log('REAL_PVP_FLAMES',JSON.stringify(realFlames));
    const bothMages=await page.evaluate(()=>window.__pvpBrowserTest.flameDamageWithoutRender());
    assert.deepEqual(bothMages,[
      {clan:'warriors',hit:15,transparentHit:0,domPresent:false},
