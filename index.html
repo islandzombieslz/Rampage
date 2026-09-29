@@ -10005,6 +10005,24 @@ function beginDragonTakeoff(e){
              }
              const candidate=entityById.get(p.targetId);
              const target=candidate&&candidate.alive&&candidate.team!==p.team?candidate:null;
+             if(state.mode==='pvp'&&p.kind==='dragon'){
+               // PvP only: keep the launch velocity. Moving targets can dodge.
+               if(now>Number(p.expireAt||0)){list.splice(i,1);continue}
+               const sx=p.x,sy=p.y,vx=Number(p.vx)||0,vy=Number(p.vy)||0;
+               const nx=sx+vx*dt,ny=sy+vy*dt;
+               const hit=!!target&&distanceToSegment(target.x,target.y,sx,sy,nx,ny)<=Math.max(1,Number(target.r)||30)+14;
+               p.x=nx;p.y=ny;
+               if(!hit){
+                 if(p.x<-80||p.x>state.world.w+80||p.y<-80||p.y>state.world.h+80)list.splice(i,1);
+                 continue;
+               }
+               const source=entityById.get(p.sourceId)||{id:p.sourceId,type:'dragon',team:p.team,x:sx,y:sy,heading:0,lastCombatAt:0};
+               const impactDamage=Number.isFinite(Number(p.damage))?Number(p.damage):DRAGON_FIREBALL_DAMAGE;
+               applyCombatHit(target,source,impactDamage,{knockForce:105,knockTime:.06,tilt:6,allowFlying:true});
+               if(p.burn!==false&&target.alive)igniteDragonBurn(target,source);
+               p.pvpHit=true;p.pvpVisualUntil=now+400;
+               continue;
+             }
              if(target){p.targetX=target.x;p.targetY=target.y}
              const tx=Number(p.targetX),ty=Number(p.targetY);
              if(!Number.isFinite(tx)||!Number.isFinite(ty)||now>Number(p.expireAt||0)){list.splice(i,1);continue}
