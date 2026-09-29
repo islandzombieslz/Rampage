@@ -52,6 +52,16 @@ ctx.rebuildWarEntityIdMap=()=>new Map(state.entities.map(e=>[e.id,e]));
 ctx.updateDragonProjectiles=()=>{};
 ctx.updateDragonBurns=()=>{};
 const run=expr=>vm.runInContext(expr,ctx);
+// An image-data sub-block can contain 21 F9 04 without being a GIF frame.
+const syntheticGif=new Uint8Array([
+ 71,73,70,56,57,97,1,0,1,0,0,0,0,
+ 33,249,4,0,50,0,0,0,
+ 44,0,0,0,0,1,0,1,0,0,2,7,33,249,4,0,255,255,0,0,
+ 33,249,4,0,70,0,0,0,
+ 44,0,0,0,0,1,0,1,0,0,2,1,0,0,59
+]);
+ctx.syntheticGif=syntheticGif.buffer;
+assert.equal(run('pvpParsedGifCycleMs(syntheticGif)'),1200,'PvP must parse real GIF blocks, not false markers in compressed bytes');
 const heroes=run('PVP_HEROES'),base=run('PVP_BASE');
 assert.equal(heroes.length,8);
 assert.deepEqual(Array.from(run('PVP_SELECTABLE_HEROES'),h=>h.id),['warrior','mageFemale','egyptMageFemale']);
@@ -216,6 +226,15 @@ ctx.launchDragonFireball=e=>{retaliatoryShots++;e.dragonAttackSerial=(e.dragonAt
 run('pvpBotAction(state.entities.find(e=>e.id==='+defendingDragon.id+'),.016)');
 assert.equal(retaliatoryShots,1,'PvP dragon releases a projectile when hit');
 assert(defendingDragon.pvpNpcNextAttackAt>now,'retaliation observes complete GIF recovery');
+defendingDragon.pvpDragonFirstHitSeen=true;defendingDragon.pvpDragonRetaliatePending=false;
+defendingDragon.pvpDragonObservedDurability=defendingDragon.hp+defendingDragon.shield;
+defendingDragon.shield-=10;
+run('pvpObserveDragonDamage(state.entities.find(e=>e.id==='+defendingDragon.id+'))');
+assert(defendingDragon.pvpDragonRetaliatePending,'direct NPC hits also queue dragon fire');
+assert(!defendingDragon.pvpDragonRetaliateImmediate,'later hits retain their cooldown');
+now=defendingDragon.pvpNpcNextAttackAt+1;defendingDragon.knockTime=0;
+run('pvpBotAction(state.entities.find(e=>e.id==='+defendingDragon.id+'),.016)');
+assert.equal(retaliatoryShots,2,'dragon attacks again after a subsequent hit');
 state.pvpDamageSeq=0;state.pvpDamageEvents=[];
 run('recordPVPDamage(state.entities[0],15)');
 assert.equal(state.pvpDamageEvents[0].amount,15);
@@ -265,7 +284,7 @@ ctx.restartGif=(image,key,serial)=>{image._src='gif';fxRestarts++;return true};
 ctx.stopGif=image=>{if(image._src){image._src='';fxStops++}};
 ctx.entityCameraLayer={appendChild(){}};ctx.combatCameraLayer={appendChild(){}};ctx.renderFrameNow=now;
 // PvP effect maps/functions were already loaded with the isolated PvP section.
-royal.pvpSpecialFxUntil=now+3000;
+royal.pvpSpecialFxStartedAt=now;royal.pvpSpecialFxUntil=now+3000;
 run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxRestarts,1);
 now+=880;ctx.renderFrameNow=now;run('syncPVPSpecialEffects(0,0,1,2000,1600)');
@@ -284,7 +303,7 @@ run('drawPVPEffects(effectCtx,performance.now())');
 assert(drawnRadii.some(r=>r>=90&&r<=240),'long special draws its area circle');
 assert.equal(canvasSaveCount,0,'PvP visuals restore Canvas state');
 state.entities=oldEntities;royal.pvpSpecialVisualUntil=0;
-royal.pvpSpecialSerial++;royal.pvpSpecialFxUntil=now+3000;
+royal.pvpSpecialSerial++;royal.pvpSpecialFxStartedAt=now;royal.pvpSpecialFxUntil=now+3000;
 run('syncPVPSpecialEffects(0,0,1,2000,1600)');
 assert.equal(fxRestarts,2,'a genuinely new activation plays a new effect');
 royal.pvpSpecialFxUntil=now-1;run('syncPVPSpecialEffects(0,0,1,2000,1600)');

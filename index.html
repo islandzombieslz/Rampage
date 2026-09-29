@@ -4933,6 +4933,14 @@ function applyRemoteGame(game){
         out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
         out.pvpSpecialFxStartedAt=localNow-Math.max(0,Number(out.pvpSpecialFxElapsedMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
+       // A delayed snapshot of the SAME special cannot extend its timeline.
+       if(old&&Number(old.pvpSpecialSerial)===Number(out.pvpSpecialSerial)){
+         if(Number(old.pvpSpecialFxUntil)>0)out.pvpSpecialFxUntil=Math.min(old.pvpSpecialFxUntil,out.pvpSpecialFxUntil);
+         if(Number(old.pvpSpecialVisualUntil)>0)out.pvpSpecialVisualUntil=Math.min(old.pvpSpecialVisualUntil,out.pvpSpecialVisualUntil);
+         if(Number(old.pvpSpecialFxStartedAt)>0)out.pvpSpecialFxStartedAt=Math.min(old.pvpSpecialFxStartedAt,out.pvpSpecialFxStartedAt);
+       }
+       if(old&&Number(old.pvpPowerSerial)===Number(out.pvpPowerSerial)&&Number(old.pvpPowerVisualUntil)>0)
+         out.pvpPowerVisualUntil=Math.min(old.pvpPowerVisualUntil,out.pvpPowerVisualUntil);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
      }
@@ -5276,6 +5284,7 @@ function applyRemoteGame(game){
  }
 }
 function configureGameScreenForMode(){
+ if(state.mode==='pvp')preloadPVPExactGifDurations();
  const pve=state.mode==='pve'||state.mode==='pvp';$('#gameScreen').classList.toggle('pve-mode',pve);$('#gameScreen').classList.toggle('pvp-mode',state.mode==='pvp');const pvpHud=$('#pvpCombatHud');if(pvpHud)pvpHud.hidden=state.mode!=='pvp';$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
 }
 function handleHostCommands(commands){
@@ -8296,6 +8305,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
+ if(e.type==='dragon')e.pvpDragonObservedDurability=e.hp+e.shield;
  state.entities.push(e);return e;
 }
 function pvpHeroForPlayer(p){return PVP_SELECTABLE_BY_ID[p.pvpHero]||PVP_SELECTABLE_HEROES[0]}
@@ -8343,8 +8353,72 @@ const PVP_GIF_STATES=Object.freeze({
  anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
  mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
  kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+// PvP-only: walk actual GIF blocks, instead of scanning compressed pixel
+// bytes for incidental 21 F9 04 sequences (which inflated some animation times).
+const pvpExactGifDurationMs=new Map();
+function pvpParsedGifCycleMs(buffer){
+ const b=new Uint8Array(buffer);
+ if(b.length<14||b[0]!==71||b[1]!==73||b[2]!==70||b[3]!==56)return 0;
+ let p=13,total=0,frames=0,delay=100;
+ if(b[10]&0x80)p+=3*(1<<((b[10]&7)+1));
+ const skipBlocks=()=>{
+   while(p<b.length){
+     const len=b[p++];if(!len)return true;
+     p+=len;if(p>b.length)return false;
+   }
+   return false;
+ };
+ while(p<b.length){
+   const tag=b[p++];
+   if(tag===0x3b)break;
+   if(tag===0x21){
+     if(p>=b.length)return 0;
+     const label=b[p++];
+     if(label===0xf9){
+       if(b[p++]!==4||p+5>b.length)return 0;
+       p++;delay=(b[p]|(b[p+1]<<8))*10;p+=2;p++;
+       if(b[p++]!==0)return 0;
+     }else if(!skipBlocks())return 0;
+   }else if(tag===0x2c){
+     if(p+9>b.length)return 0;
+     const packed=b[p+8];p+=9;
+     if(packed&0x80)p+=3*(1<<((packed&7)+1));
+     if(p>=b.length)return 0;
+     p++;if(!skipBlocks())return 0;
+     total+=Math.max(20,delay);delay=100;frames++;
+   }else return 0;
+ }
+ return frames?total:0;
+}
+let pvpExactGifPreloadStarted=false;
+function preloadPVPExactGifDurations(){
+ if(pvpExactGifPreloadStarted)return;
+ pvpExactGifPreloadStarted=true;
+ // War's cached duration and attack logic are never replaced.
+ const keys=['magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
+  'egyptMageSpecial','egyptFemaleMageSpecial','magePowerSpecial','egyptMagePowerSpecial',
+  'kingSpecial','kingPower','brownAttack','brownSpecial','brownPower',
+  'dragonTakeoff','dragonAttack','golemAttack','golemSpecial',
+  'najaAttack','najaSpecial','najaSpecialFinal','anubisMeleeAttack',
+  'anubisRangedAttack','isisAttack','isisSpecial','isisPower',
+  'poseidonNormal','poseidonWaveCast','poseidonSummonCast','seahorseAttack'];
+ // Two at a time: avoid holding many large GIF buffers in memory at match start.
+ let cursor=0;
+ const worker=async()=>{
+   while(state.mode==='pvp'&&cursor<keys.length){
+     const key=keys[cursor++];
+     try{
+       const response=await fetch(ASSETS[key],{cache:'force-cache'});
+       if(!response.ok)continue;
+       const ms=pvpParsedGifCycleMs(await response.arrayBuffer());
+       if(ms>=250&&ms<=30000)pvpExactGifDurationMs.set(key,ms);
+     }catch(_){}
+   }
+ };
+ worker();worker();
+}
 function pvpFullGifDuration(key,fallback=3000){
- return pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
+ return pvpExactGifDurationMs.get(key)||pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
 }
 // A GIF is a playback of one action serial, not the action state itself.
 // When it finishes, remove src BEFORE the browser loops to frame zero.
@@ -8359,12 +8433,14 @@ function pvpRememberGifCycle(img,key,serial){
  const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
  const el=img.closest?.('.entity-visual');if(!el)return;
  const now=performance.now(),duration=pvpFullGifDuration(key,3000);
- el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration,done:false};
+ el._pvpGifCycle={state:spriteState,img,key,serial,startedAt:now,until:now+duration,done:false};
 }
 function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
  const cycle=el._pvpGifCycle;if(!cycle)return desired;
  const now=performance.now();
+ if(!cycle.done&&Number.isFinite(cycle.startedAt))
+   cycle.until=Math.min(cycle.until,cycle.startedAt+pvpFullGifDuration(cycle.key,3000));
  if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
  if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
@@ -8386,21 +8462,30 @@ function pvpDamageForRange(distance,special=false,multiplier=1){
  const far=special?PVP_BASE.specialMin:PVP_BASE.damageMin;
  return (far+(near-far)*clamp(1-distance/(special?270:PVP_BASE.meleeRange),0,1))*multiplier;
 }
-function pvpCombatHit(target,source,damage){
- if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
- const oldShield=target.shield,oldHp=target.hp;
- applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
- if(target.type==='dragon'&&target.alive&&!target.pvpDragonFirstHitSeen&&
-    (target.shield<oldShield||target.hp<oldHp)){
-   // Remember the FIRST incoming PvP hit even during takeoff/knockback.
-   // The projectile is released once the dragon is flying, not lost to AI gates.
-   target.pvpDragonFirstHitSeen=true;
-   target.pvpDragonRetaliatePending=true;
-   target.pvpDragonRetaliateTargetId=source.id;
+function pvpArmDragonRetaliation(target,source){
+ if(state.mode!=='pvp'||!target?.alive||target.type!=='dragon'||!target.pvpMode||
+    !source||source.team===target.team)return;
+ const first=!target.pvpDragonFirstHitSeen;
+ target.pvpDragonFirstHitSeen=true;
+ target.pvpDragonRetaliatePending=true;
+ target.pvpDragonRetaliateTargetId=source.id;
+ // The wrapper and the generic-damage observer must not count the same hit twice.
+ target.pvpDragonObservedDurability=Math.max(0,Number(target.hp)||0)+Math.max(0,Number(target.shield)||0);
+ // Only the first hit skips an existing shot gate. Subsequent hits queue
+ // a reply for the next PvP recovery window instead of rapid-fire spam.
+ if(first){
+   target.pvpDragonRetaliateImmediate=true;
    target.pvpNpcNextAttackAt=0;
    target.dragonNextShotAt=0;
    target.dragonCloseShotAt=0;
  }
+}
+function pvpCombatHit(target,source,damage){
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
+ const oldShield=target.shield,oldHp=target.hp;
+ applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
+ if(target.type==='dragon'&&target.alive&&(target.shield<oldShield||target.hp<oldHp))
+   pvpArmDragonRetaliation(target,source);
  if(oldShield>0&&target.shield<=0&&target.type==='mage'&&target.clan==='warriors'&&
     target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
 }
@@ -8432,6 +8517,8 @@ function pvpCastPower(e,targetId){
  e.pvpActionUntil=e.pvpPowerUntil;
  e.pvpPowerNextTick=now+100;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
+ // This alpha source belongs to the simulation, not the visible DOM camera.
+ pvpFlameImage(e);
  e.heading=angle;e.facing=target.x<e.x?-1:1;
  return true;
 }
@@ -8522,8 +8609,14 @@ function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.
 // Sample the current animated flame frame: transparent GIF pixels do not hurt.
 let pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
 function pvpReadFlameAlpha(e){
- const img=pvpFlameNodes.get(e.id);
- if(!img?.hasAttribute('src')||!img.complete||!img.naturalWidth)return null;
+ const displayed=pvpFlameNodes.get(e.id);
+ // Host simulation runs before rendering and may be off camera entirely.
+ // Prefer the actual displayed frame when decoded; otherwise use the
+ // independently preloaded same original GIF for opaque-pixel collision.
+ const img=displayed?.hasAttribute('src')&&displayed.complete&&displayed.naturalWidth&&
+   !displayed.classList.contains('pvp-gif-loading')&&!displayed.classList.contains('pvp-gif-failed')
+     ?displayed:pvpFlameImage(e);
+ if(!img?.complete||!img.naturalWidth)return null;
  try{
    if(!pvpFlameMaskCanvas){
      pvpFlameMaskCanvas=document.createElement('canvas');
@@ -8560,10 +8653,13 @@ function pvpTickPower(e,now,manualAngle=null){
    if(target){e.pvpAimTarget=target.id;e.pvpAimAngle=Math.atan2(target.y-e.y,target.x-e.x)}
  }
  e.heading=e.pvpAimAngle;e.facing=Math.cos(e.heading)<0?-1:1;
+ const mask=pvpReadFlameAlpha(e);
+ // No image yet: wait for the actual alpha to decode. Do not silently consume
+ // damage ticks (the old code could finish the whole flame doing zero damage).
+ if(!mask){e.pvpPowerNextTick=Math.max(e.pvpPowerNextTick,now);return}
  let ticks=0;
  while(e.pvpPowerNextTick<=now&&e.pvpPowerNextTick<e.pvpPowerUntil&&ticks++<3){
-   const mask=pvpReadFlameAlpha(e);
-   if(mask)for(const t of state.entities){
+   for(const t of state.entities){
      if(!t.alive||t.team===e.team)continue;
      if(pvpFlameTouchesTarget(mask,e,t,e.pvpAimAngle))pvpCombatHit(t,e,PVP_BASE.fireDamage);
    }
@@ -8622,19 +8718,32 @@ function pvpNPCRecovery(e,now){
  const visualEnd=e.type==='naja'&&kind==='special'?(Number(pending?.emergeAt)||now)+fullVisual:now+fullVisual;
  return Math.max(now,Number(pending?.endAt)||now,visualEnd)+(e.type==='seahorse'?850:1100);
 }
+function pvpObserveDragonDamage(e){
+ if(e.type!=='dragon'||!e.alive)return;
+ const durability=Math.max(0,Number(e.hp)||0)+Math.max(0,Number(e.shield)||0);
+ if(Number.isFinite(e.pvpDragonObservedDurability)&&durability<e.pvpDragonObservedDurability){
+   // War-style NPC attacks call applyCombatHit directly. Detect those hits
+   // here, without changing any Clan War damage/AI implementation.
+   const source=pvpNearestEnemy(e,e.pvpDragonRetaliateTargetId);
+   if(source)pvpArmDragonRetaliation(e,source);
+ }
+ e.pvpDragonObservedDurability=durability;
+}
 function pvpBotAction(e,dt){
  if(!e.alive)return;
  const now=performance.now();
  if(e.type==='dragon'){
+   pvpObserveDragonDamage(e);
    // War's aiFightDragon exits on knockback BEFORE advancing takeoff;
    // PvP must advance the visual flight state even while being hit.
    updateDragonState(e,now);
-   if(e.pvpDragonRetaliatePending&&e.dragonFlightState==='flying'&&!e.pendingDragonAttack){
+   if(e.pvpDragonRetaliatePending&&e.dragonFlightState==='flying'&&!e.pendingDragonAttack&&
+      (e.pvpDragonRetaliateImmediate||now>=Number(e.pvpNpcNextAttackAt||0))){
      const target=pvpNearestEnemy(e,e.pvpDragonRetaliateTargetId);
      if(target){
-       e.dragonNextShotAt=0;e.dragonCloseShotAt=0;
+       if(e.pvpDragonRetaliateImmediate){e.dragonNextShotAt=0;e.dragonCloseShotAt=0}
        if(launchDragonFireball(e,target,{emergency:Math.hypot(target.x-e.x,target.y-e.y)<DRAGON_CLOSE_RANGE})){
-         e.pvpDragonRetaliatePending=false;
+         e.pvpDragonRetaliatePending=false;e.pvpDragonRetaliateImmediate=false;
          e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
          e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,e.pvpNpcNextAttackAt);
          e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,e.pvpNpcNextAttackAt);
@@ -8667,6 +8776,7 @@ function pvpBotAction(e,dt){
  if(pvpNPCSerial(e)!==before){
   e.pvpNpcNextAttackAt=pvpNPCRecovery(e,now);
   if(e.type==='dragon'){
+    e.pvpDragonRetaliatePending=false;e.pvpDragonRetaliateImmediate=false;
     e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,e.pvpNpcNextAttackAt);
     e.dragonCloseShotAt=e.pvpNpcNextAttackAt;
   }
@@ -8747,6 +8857,8 @@ function beginPVPRound(){
 function startPVP(){
  if(state.mode!=='pvp')return;
  preloadExtraPVPGifDurations();
+ preloadPVPExactGifDurations();
+ pvpFlameImage({clan:'warriors'});pvpFlameImage({clan:'egypt'});
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
  navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
@@ -8928,13 +9040,15 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
    const key=pvpSpecialEffectKey(e),old=pvpSpecialFxNodes.get(e.id);
    const serialNumber=Number(e.pvpSpecialSerial)||0,serial=String(serialNumber);
    const end=Number(e.pvpSpecialFxUntil)||0;
-   if(!e.alive||!key||serialNumber<=0||now>=end-PVP_GIF_END_MARGIN_MS)continue;
+   const castStart=Number(e.pvpSpecialFxStartedAt)||0;
+   const playbackEnd=Math.min(end,castStart>0?castStart+pvpFullGifDuration(key,3200)-45:end);
+   if(!e.alive||!key||serialNumber<=0||now>=playbackEnd-PVP_GIF_END_MARGIN_MS)continue;
    // A stopped effect remains in the map until the original cast deadline.
    // Never re-create a consumed serial, including after culling or snapshots.
    if(!old&&serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0))continue;
    active.add(e.id);
    if(old&&old.dataset.serial===serial&&
-      (now>=Math.min(Number(old._visualEndAt)||end,end)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
+      (now>=Math.min(Number(old._visualEndAt)||playbackEnd,playbackEnd)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
      stopGif(old);old.style.visibility='hidden';old.style.opacity='0';continue;
    }
    const ox=e.pvpSpecialOriginX??e.x,oy=e.pvpSpecialOriginY??e.y;
@@ -8958,10 +9072,11 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      img.dataset.serial=serial;
      // Like War, a cast has one fixed body/power timeline. Do not extend
      // it every frame or on a delayed snapshot; stop before frame zero repeats.
-     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200)-45);
+     img._visualEndAt=Math.min(playbackEnd,now+pvpFullGifDuration(key,3200)-45);
      pvpSpecialFxPlayedSerial.set(e.id,serialNumber);
    }
-   if(now>=Math.min(img._visualEndAt,end)-PVP_GIF_END_MARGIN_MS){
+   img._visualEndAt=Math.min(img._visualEndAt,playbackEnd);
+   if(now>=img._visualEndAt-PVP_GIF_END_MARGIN_MS){
      stopGif(img);img.style.visibility='hidden';img.style.opacity='0';continue;
    }
    let size,alpha=1;
@@ -8975,7 +9090,7 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      // Keep the power fully opaque during the action; fade only at its
    // actual beginning/end, rather than dimming it for long GIF percentages.
    const started=Number(e.pvpSpecialFxStartedAt)||end-duration;
-   alpha=Math.min(clamp((now-started)/180,0,1),clamp((end-now)/220,0,1));
+   alpha=Math.min(clamp((now-started)/180,0,1),clamp((playbackEnd-now)/220,0,1));
    }else size=(key==='kingPower'?430:190)*zoom;
    img.style.left=x+'px';img.style.top=y+'px';
    img.style.width=size+'px';img.style.height=size+'px';
@@ -8991,7 +9106,8 @@ const PVP_FIRE_IMAGES={};
 function pvpFlameImage(e){
  const key=e.clan==='egypt'?'egypt':'warrior';
  if(!PVP_FIRE_IMAGES[key]){
-   const image=new Image();image.src=key==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
+   const image=new Image();image.decoding='async';
+   image.src=key==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
    PVP_FIRE_IMAGES[key]=image;
  }
  return PVP_FIRE_IMAGES[key];
