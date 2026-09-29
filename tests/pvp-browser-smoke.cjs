@@ -101,6 +101,66 @@ const pvpTestHook=`window.__pvpBrowserTest={
    return [...document.querySelectorAll('#entityLayer img,#combatFxLayer img')]
      .filter(img=>!img.hasAttribute('src')&&getComputedStyle(img).visibility!=='hidden')
      .length;
+ },
+ async flameDamageWithoutRender(){
+   const own=pvpLocalHero();if(!own||!state.running)return null;
+   const canvas=document.createElement('canvas');canvas.width=2;canvas.height=2;
+   const g=canvas.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,2,2);
+   const load=src=>new Promise((resolve,reject)=>{
+     const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src;
+   });
+   const opaque=await load(canvas.toDataURL('image/png'));
+   g.clearRect(0,0,2,2);
+   const transparent=await load(canvas.toDataURL('image/png'));
+   const saved={egypt:PVP_FIRE_IMAGES.egypt,warrior:PVP_FIRE_IMAGES.warrior};
+   const result=[];
+   for(const clan of ['warriors','egypt']){
+     const key=clan==='egypt'?'egypt':'warrior';
+     const heroDef=PVP_HERO_BY_ID[clan==='egypt'?'egyptMageFemale':'mageFemale'];
+     const caster=pvpBaseEntity(heroDef,650,650,own.team,own.color,null,true);
+     const target=pvpBaseEntity(PVP_HERO_BY_ID.warrior,790,650,'pvp-enemy','#f55',null,true);
+     const t=performance.now();
+     caster.pvpPowerUntil=t+2500;caster.pvpPowerNextTick=t-1;caster.pvpAimTarget=target.id;caster.pvpAimAngle=0;
+     PVP_FIRE_IMAGES[key]=opaque;
+     const before=target.shield+target.hp;
+     pvpTickPower(caster,t,null);
+     const hit=before-(target.shield+target.hp);
+     caster.pvpPowerNextTick=t-1;
+     PVP_FIRE_IMAGES[key]=transparent;
+     const middle=target.shield+target.hp;
+     pvpTickPower(caster,t,null);
+     const transparentHit=middle-(target.shield+target.hp);
+     result.push({clan,hit,transparentHit,domPresent:pvpFlameNodes.has(caster.id)});
+     state.entities=state.entities.filter(e=>e!==caster&&e!==target);
+   }
+   for(const key of ['egypt','warrior']){
+     if(saved[key])PVP_FIRE_IMAGES[key]=saved[key];else delete PVP_FIRE_IMAGES[key];
+   }
+   return result;
+ },
+ dragonSecondHit(){
+   const dragon=state.entities.find(e=>e.type==='dragon'&&e.alive&&e.pvpDragonFirstHitSeen);
+   if(!dragon)return {queued:false,shot:false};
+   dragon.pvpDragonRetaliatePending=false;dragon.pvpDragonRetaliateImmediate=false;
+   dragon.pvpDragonObservedDurability=dragon.shield+dragon.hp;
+   dragon.shield=Math.max(0,dragon.shield-10);
+   const before=state.dragonProjectiles.length;
+   pvpObserveDragonDamage(dragon);
+   const queued=dragon.pvpDragonRetaliatePending&&!dragon.pvpDragonRetaliateImmediate;
+   dragon.pendingDragonAttack=null;dragon.dragonFlightState='flying';dragon.knockTime=0;
+   dragon.pvpNpcNextAttackAt=performance.now()-1;
+   dragon.dragonNextShotAt=0;dragon.dragonCloseShotAt=0;
+   pvpBotAction(dragon,.016);
+   return {queued,shot:state.dragonProjectiles.length===before+1,cleared:!dragon.pvpDragonRetaliatePending};
+ },
+ enforceSpecialCycle(){
+   const ally=state.entities.find(e=>e.pvpAllyBot&&e.pvpHero==='mageFemale');
+   if(!ally)return false;
+   pvpExactGifDurationMs.set('magePowerSpecial',400);
+   ally.pvpSpecialFxStartedAt=performance.now()-500;
+   syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
+   syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
+   return !pvpSpecialFxNodes.has(ally.id)&&pvpSpecialFxPlayedSerial.get(ally.id)===ally.pvpSpecialSerial;
  }
 
 };`;
@@ -201,12 +261,22 @@ async function main(){
    const dragon=await page.evaluate(()=>window.__pvpBrowserTest.dragonFirstHit());
    assert.deepEqual(dragon,{armed:true,shot:true,correctSource:true,cleared:true},
      'first incoming hit must produce a real dragon projectile even during takeoff');
+   const bothMages=await page.evaluate(()=>window.__pvpBrowserTest.flameDamageWithoutRender());
+   assert.deepEqual(bothMages,[
+     {clan:'warriors',hit:15,transparentHit:0,domPresent:false},
+     {clan:'egypt',hit:15,transparentHit:0,domPresent:false}
+   ],'both PvP flame types must damage opaque pixels with no DOM sprite and ignore transparent pixels');
+   const secondShot=await page.evaluate(()=>window.__pvpBrowserTest.dragonSecondHit());
+   assert.deepEqual(secondShot,{queued:true,shot:true,cleared:true},
+     'PvP dragon must continue launching projectiles after a second direct hit');
+   assert(await page.evaluate(()=>window.__pvpBrowserTest.enforceSpecialCycle()),
+     'accurate PvP GIF duration stops a special even if its old gameplay window remains');
    const replayed=await page.evaluate(()=>window.__pvpBrowserTest.expireAndReplayWarriorFx());
    assert.equal(replayed,false,'spent PvP special never recreates its GIF on a late snapshot');
    assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas, first-hit dragon ball, decoded image fallback and no GIF replay');
+   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas, first-hit dragon ball, decoded image fallback, both flame collisions, repeated dragon shots and no GIF replay');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
