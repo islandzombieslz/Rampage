@@ -8296,9 +8296,9 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
  e.pvpMode=true;e.pvpMinion=!!minion;e.pvpWarAI=!!minion;e.pvpHero=hero.id||hero.type;
  e.pvpSpecialReadyAt=hero.type==='mage'?
-   (hero.clan==='egypt'?performance.now()+10000:1e14):0;
+   performance.now()+(hero.clan==='egypt'?10000:40000):0;
  e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
- e.pvpSpecialWindowMs=hero.type==='mage'?10000:20000;
+ e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
  e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
@@ -8486,8 +8486,7 @@ function pvpCombatHit(target,source,damage){
  applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
  if(target.type==='dragon'&&target.alive&&(target.shield<oldShield||target.hp<oldHp))
    pvpArmDragonRetaliation(target,source);
- if(oldShield>0&&target.shield<=0&&target.type==='mage'&&target.clan==='warriors'&&
-    target.pvpSpecialReadyAt>=1e13){target.pvpSpecialReadyAt=performance.now()+10000;target.pvpSpecialWindowMs=10000;}
+
 }
 function pvpBasicAttack(e){
  if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
@@ -8831,8 +8830,8 @@ function beginPVPRound(){
  warBurningEntities.clear();warFrameEnemiesByTeam.clear();
  state.pvpDamageEvents=[];
  clearEntityVisuals();
- // PvP attack GIFs last several seconds; allow time to clear the four encounters.
- state.pvpRoundDuration=Math.max(state.pveTime,180);
+ // Honor the exact duration selected in the PvP configuration (30/60/120).
+ state.pvpRoundDuration=[30,60,120].includes(Number(state.pveTime))?Number(state.pveTime):60;
  state.timeLeft=state.pvpRoundDuration;pvpLastWave=-1;pvpNextWaveAt=0;
  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
  $('#gameScreen').classList.remove('spectator-mode');
@@ -8948,11 +8947,6 @@ function updatePVP(dt){
      e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpActionUntil=0;
      e.pvpSpecialFxUntil=0;e.moving=false;
    }
- }
- // Real NPC attacks bypass pvpCombatHit; arm the mage on shield break too.
- for(const e of state.entities)if(e.alive&&e.type==='mage'&&e.clan==='warriors'&&
-   e.pvpMode&&e.shield<=0&&e.pvpSpecialReadyAt>=1e13){
-   e.pvpSpecialReadyAt=now+10000;e.pvpSpecialWindowMs=10000;
  }
  pvpExpireSummons(now);
  state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
