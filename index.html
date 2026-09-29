@@ -5519,12 +5519,13 @@ function gameViewportSize(){
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp')preloadExtraPVPGifDurations();});
+$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}});
 $('#configureBtn').onclick=async()=>{
   if(state.mode==='war'){
     await createCurrentRoom($('#configureBtn'));
     return;
   }
+  if(state.mode==='pvp')pvpLoadFlameFrames();
   $('#pveConfig').style.display='grid';
   $('#configTitle').textContent=state.mode==='pvp'?'Configurar PvP':'Configurar Players vs Inimigos';
   const configScreen=$('#configScreen');
@@ -8507,6 +8508,7 @@ function pvpBasicAttack(e){
  return true;
 }
 function pvpCastPower(e,targetId){
+ if(!pvpFlameReadyForCast(e)){pvpLoadFlameFrames();return false}
  if(!e?.alive||e.type!=='mage'||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
  const target=pvpNearestEnemy(e,targetId);if(!target)return false;
  const now=performance.now(),angle=Math.atan2(target.y-e.y,target.x-e.x);
@@ -8603,7 +8605,7 @@ function pvpLocalHero(){
 }
 function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&e.attackCooldown<=0&&
   performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
-function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.attackCooldown<=0&&
+function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&pvpFlameReadyForCast(e)&&e.attackCooldown<=0&&
   performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
 // PvP-only, deterministic per-frame masks from the actual animated assets.
 // A bare HTMLImageElement freezes at a transparent first/last frame after its
@@ -8611,22 +8613,27 @@ function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.
 // visible spell was burning. Decode once, share alpha frames across all casts.
 const pvpFlameFrames=new Map(),pvpFlameFrameFailed=new Set();
 let pvpFlameFramesLoading=false,pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
+function pvpFlameReadyForCast(e){
+ const clan=e?.clan==='egypt'?'egypt':'warriors';
+ return typeof ImageDecoder!=='function'||pvpFlameFrames.has(clan)||pvpFlameFrameFailed.has(clan);
+}
 function pvpLoadFlameFrames(){
  if(state.mode!=='pvp'||pvpFlameFramesLoading||typeof ImageDecoder!=='function')return;
  pvpFlameFramesLoading=true;
  (async()=>{
   for(const [clan,key] of [['warriors','magePower'],['egypt','egyptMagePower']]){
+   if(pvpFlameFrames.has(clan)||pvpFlameFrameFailed.has(clan))continue;
    let decoder=null;
    try{
     const response=await fetch(ASSETS[key],{cache:'force-cache'});
-    if(!response.ok)continue;
+    if(!response.ok)throw Error('HTTP '+response.status+' '+key);
     decoder=new ImageDecoder({data:new Uint8Array(await response.arrayBuffer()),type:'image/gif'});
     await decoder.tracks.ready;
     const count=decoder.tracks.selectedTrack.frameCount;
-    if(!Number.isFinite(count)||count<1||count>1000)continue;
+    if(!Number.isFinite(count)||count<1||count>1000)throw Error('Contagem inválida de quadros: '+key);
     const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
     const context=canvas.getContext('2d',{willReadFrequently:true});
-    if(!context)continue;
+    if(!context)throw Error('Canvas 2D indisponível: '+key);
     const frames=[];let elapsed=0;
     for(let i=0;i<count;i++){
      const result=await decoder.decode({frameIndex:i,completeFramesOnly:true});
@@ -8640,7 +8647,8 @@ function pvpLoadFlameFrames(){
       frames.push({end:elapsed,data:alpha});
      }finally{frame.close()}
     }
-    if(frames.length===count)pvpFlameFrames.set(clan,{frames,duration:elapsed});
+    if(frames.length!==count)throw Error('GIF incompleto: '+key);
+    pvpFlameFrames.set(clan,{frames,duration:elapsed});
    }catch(err){pvpFlameFrameFailed.add(clan);pvpReportError('quadros do fogo',err)}
    finally{try{decoder?.close()}catch(_){}}
   }
