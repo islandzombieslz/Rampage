@@ -4933,6 +4933,14 @@ function applyRemoteGame(game){
         out.pvpSpecialFxUntil=localNow+Math.max(0,Number(out.pvpSpecialFxRemainingMs)||0);
         out.pvpSpecialFxStartedAt=localNow-Math.max(0,Number(out.pvpSpecialFxElapsedMs)||0);
        out.pvpSpecialVisualUntil=localNow+Math.max(0,Number(out.pvpSpecialVisualRemainingMs)||0);
+       // A delayed snapshot of the SAME special cannot extend its timeline.
+       if(old&&Number(old.pvpSpecialSerial)===Number(out.pvpSpecialSerial)){
+         if(Number(old.pvpSpecialFxUntil)>0)out.pvpSpecialFxUntil=Math.min(old.pvpSpecialFxUntil,out.pvpSpecialFxUntil);
+         if(Number(old.pvpSpecialVisualUntil)>0)out.pvpSpecialVisualUntil=Math.min(old.pvpSpecialVisualUntil,out.pvpSpecialVisualUntil);
+         if(Number(old.pvpSpecialFxStartedAt)>0)out.pvpSpecialFxStartedAt=Math.min(old.pvpSpecialFxStartedAt,out.pvpSpecialFxStartedAt);
+       }
+       if(old&&Number(old.pvpPowerSerial)===Number(out.pvpPowerSerial)&&Number(old.pvpPowerVisualUntil)>0)
+         out.pvpPowerVisualUntil=Math.min(old.pvpPowerVisualUntil,out.pvpPowerVisualUntil);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
      }
@@ -8427,12 +8435,14 @@ function pvpRememberGifCycle(img,key,serial){
  const spriteState=PVP_GIF_STATES[key];if(!spriteState)return;
  const el=img.closest?.('.entity-visual');if(!el)return;
  const now=performance.now(),duration=pvpFullGifDuration(key,3000);
- el._pvpGifCycle={state:spriteState,img,key,serial,until:now+duration,done:false};
+ el._pvpGifCycle={state:spriteState,img,key,serial,startedAt:now,until:now+duration,done:false};
 }
 function pvpPreserveGifState(el,desired){
  if(state.mode!=='pvp')return desired;
  const cycle=el._pvpGifCycle;if(!cycle)return desired;
  const now=performance.now();
+ if(!cycle.done&&Number.isFinite(cycle.startedAt))
+   cycle.until=Math.min(cycle.until,cycle.startedAt+pvpFullGifDuration(cycle.key,3000));
  if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
  if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
@@ -9018,13 +9028,15 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
    const key=pvpSpecialEffectKey(e),old=pvpSpecialFxNodes.get(e.id);
    const serialNumber=Number(e.pvpSpecialSerial)||0,serial=String(serialNumber);
    const end=Number(e.pvpSpecialFxUntil)||0;
-   if(!e.alive||!key||serialNumber<=0||now>=end-PVP_GIF_END_MARGIN_MS)continue;
+   const castStart=Number(e.pvpSpecialFxStartedAt)||0;
+   const playbackEnd=Math.min(end,castStart>0?castStart+pvpFullGifDuration(key,3200)-45:end);
+   if(!e.alive||!key||serialNumber<=0||now>=playbackEnd-PVP_GIF_END_MARGIN_MS)continue;
    // A stopped effect remains in the map until the original cast deadline.
    // Never re-create a consumed serial, including after culling or snapshots.
    if(!old&&serialNumber<=(pvpSpecialFxPlayedSerial.get(e.id)||0))continue;
    active.add(e.id);
    if(old&&old.dataset.serial===serial&&
-      (now>=Math.min(Number(old._visualEndAt)||end,end)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
+      (now>=Math.min(Number(old._visualEndAt)||playbackEnd,playbackEnd)-PVP_GIF_END_MARGIN_MS||!old.hasAttribute('src'))){
      stopGif(old);old.style.visibility='hidden';old.style.opacity='0';continue;
    }
    const ox=e.pvpSpecialOriginX??e.x,oy=e.pvpSpecialOriginY??e.y;
@@ -9048,10 +9060,11 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      img.dataset.serial=serial;
      // Like War, a cast has one fixed body/power timeline. Do not extend
      // it every frame or on a delayed snapshot; stop before frame zero repeats.
-     img._visualEndAt=Math.min(end,now+pvpFullGifDuration(key,3200)-45);
+     img._visualEndAt=Math.min(playbackEnd,now+pvpFullGifDuration(key,3200)-45);
      pvpSpecialFxPlayedSerial.set(e.id,serialNumber);
    }
-   if(now>=Math.min(img._visualEndAt,end)-PVP_GIF_END_MARGIN_MS){
+   img._visualEndAt=Math.min(img._visualEndAt,playbackEnd);
+   if(now>=img._visualEndAt-PVP_GIF_END_MARGIN_MS){
      stopGif(img);img.style.visibility='hidden';img.style.opacity='0';continue;
    }
    let size,alpha=1;
@@ -9065,7 +9078,7 @@ function syncPVPSpecialEffects(left,top,zoom,screenW,screenH){
      // Keep the power fully opaque during the action; fade only at its
    // actual beginning/end, rather than dimming it for long GIF percentages.
    const started=Number(e.pvpSpecialFxStartedAt)||end-duration;
-   alpha=Math.min(clamp((now-started)/180,0,1),clamp((end-now)/220,0,1));
+   alpha=Math.min(clamp((now-started)/180,0,1),clamp((playbackEnd-now)/220,0,1));
    }else size=(key==='kingPower'?430:190)*zoom;
    img.style.left=x+'px';img.style.top=y+'px';
    img.style.width=size+'px';img.style.height=size+'px';
