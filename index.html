@@ -5284,7 +5284,7 @@ function applyRemoteGame(game){
  }
 }
 function configureGameScreenForMode(){
- if(state.mode==='pvp')preloadPVPExactGifDurations();
+ if(state.mode==='pvp'){preloadPVPExactGifDurations();pvpLoadFlameFrames()}
  const pve=state.mode==='pve'||state.mode==='pvp';$('#gameScreen').classList.toggle('pve-mode',pve);$('#gameScreen').classList.toggle('pvp-mode',state.mode==='pvp');const pvpHud=$('#pvpCombatHud');if(pvpHud)pvpHud.hidden=state.mode!=='pvp';$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
 }
 function handleHostCommands(commands){
@@ -8301,7 +8301,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
  e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
- e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerStartedAt=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
@@ -8514,10 +8514,10 @@ function pvpCastPower(e,targetId){
  const duration=pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000);
  e.pvpPowerUntil=now+duration;e.pvpPowerVisualUntil=e.pvpPowerUntil;
  e.pvpActionUntil=e.pvpPowerUntil;
- e.pvpPowerNextTick=now+100;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
+ e.pvpPowerNextTick=now+100;e.pvpPowerStartedAt=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
  e.pvpPowerSerial++;e.attackCooldown=.7;e.mageAttackSerial++;
- // This alpha source belongs to the simulation, not the visible DOM camera.
- pvpFlameImage(e);
+ // Decode actual GIF frames independently of the visible DOM camera.
+ pvpLoadFlameFrames();pvpFlameImage(e);
  e.heading=angle;e.facing=target.x<e.x?-1:1;
  return true;
 }
@@ -8605,9 +8605,57 @@ function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special
   performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
 function pvpCanPower(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.power&&e.attackCooldown<=0&&
   performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}
-// Sample the current animated flame frame: transparent GIF pixels do not hurt.
-let pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
-function pvpReadFlameAlpha(e){
+// PvP-only, deterministic per-frame masks from the actual animated assets.
+// A bare HTMLImageElement freezes at a transparent first/last frame after its
+// own playback. That caused the host to score zero hits while the *new*
+// visible spell was burning. Decode once, share alpha frames across all casts.
+const pvpFlameFrames=new Map();
+let pvpFlameFramesLoading=false,pvpFlameMaskCanvas=null,pvpFlameMaskCtx=null;
+function pvpLoadFlameFrames(){
+ if(state.mode!=='pvp'||pvpFlameFramesLoading||typeof ImageDecoder!=='function')return;
+ pvpFlameFramesLoading=true;
+ (async()=>{
+  for(const [clan,key] of [['warriors','magePower'],['egypt','egyptMagePower']]){
+   let decoder=null;
+   try{
+    const response=await fetch(ASSETS[key],{cache:'force-cache'});
+    if(!response.ok)continue;
+    decoder=new ImageDecoder({data:new Uint8Array(await response.arrayBuffer()),type:'image/gif'});
+    await decoder.tracks.ready;
+    const count=decoder.tracks.selectedTrack.frameCount;
+    if(!Number.isFinite(count)||count<1||count>1000)continue;
+    const canvas=document.createElement('canvas');canvas.width=160;canvas.height=55;
+    const context=canvas.getContext('2d',{willReadFrequently:true});
+    if(!context)continue;
+    const frames=[];let elapsed=0;
+    for(let i=0;i<count;i++){
+     const result=await decoder.decode({frameIndex:i,completeFramesOnly:true});
+     const frame=result.image;
+     try{
+      context.clearRect(0,0,160,55);context.drawImage(frame,0,0,160,55);
+      const rgba=context.getImageData(0,0,160,55).data;
+      const alpha=new Uint8Array(160*55);
+      for(let j=0;j<alpha.length;j++)alpha[j]=rgba[j*4+3];
+      elapsed+=Math.max(20,Math.round((Number(frame.duration)||20000)/1000));
+      frames.push({end:elapsed,data:alpha});
+     }finally{frame.close()}
+    }
+    if(frames.length===count)pvpFlameFrames.set(clan,{frames,duration:elapsed});
+   }catch(err){pvpReportError('quadros do fogo',err)}
+   finally{try{decoder?.close()}catch(_){}}
+  }
+ })().finally(()=>{pvpFlameFramesLoading=false});
+}
+function pvpReadFlameAlpha(e,now=performance.now()){
+ const decoded=pvpFlameFrames.get(e.clan==='egypt'?'egypt':'warriors');
+ if(decoded?.frames.length&&Number.isFinite(e.pvpPowerStartedAt)&&e.pvpPowerStartedAt>0){
+  const elapsed=Math.max(0,now-e.pvpPowerStartedAt);
+  // Stop, do not wrap: the final transparent frame does not become frame zero.
+  const frame=decoded.frames.find(frame=>elapsed<frame.end);
+  if(frame)return {width:160,height:55,data:frame.data,alphaOnly:true};
+  return {width:160,height:55,data:decoded.frames.at(-1).data,alphaOnly:true};
+ }
+
  const displayed=pvpFlameNodes.get(e.id);
  // Host simulation runs before rendering and may be off camera entirely.
  // Prefer the actual displayed frame when decoded; otherwise use the
@@ -8857,6 +8905,7 @@ function startPVP(){
  if(state.mode!=='pvp')return;
  preloadExtraPVPGifDurations();
  preloadPVPExactGifDurations();
+ pvpLoadFlameFrames();
  pvpFlameImage({clan:'warriors'});pvpFlameImage({clan:'egypt'});
  beginMatchTracking();state.pvpDamageSeq=0;state.round=1;state.phase='combat';state.running=true;
  state.players.forEach(p=>{p.score=0});
