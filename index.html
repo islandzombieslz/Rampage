@@ -8661,6 +8661,7 @@ function pvpSpecialEffectKey(e){
  return null;
 }
 function pvpBodySpecialKey(e){
+ if(pvpIsWarriorHero(e))return 'pvpWarriorSpecial';
  if(e.type==='king')return 'kingSpecial';
  if(e.type==='brownWarrior')return 'brownSpecial';
  if(e.type==='mage'){
@@ -8669,10 +8670,56 @@ function pvpBodySpecialKey(e){
  }
  return null;
 }
+function pvpStartWarriorSpecial(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.pvpWarriorSpecialUnlocked||now<Number(e.pvpSpecialReadyAt)||e.knockTime>0)return false;
+ const duration=pvpFullGifDuration('pvpWarriorSpecial',PVP_WARRIOR.specialFallbackMs);
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboRequestUntil=0;e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpWarriorChargeStartedAt=now;e.pvpWarriorChargeUntil=now+duration;
+ e.pvpWarriorChargeAngle=Number.isFinite(Number(e.heading))?Number(e.heading):(e.facing<0?Math.PI:0);
+ e.pvpWarriorChargeHitIds=[];
+ e.pvpActionUntil=e.pvpWarriorChargeUntil;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;
+ e.pvpSpecialBodyDuration=duration;e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1;
+ e.pvpSpecialFxUntil=0;e.pvpSpecialReadyAt=now+PVP_WARRIOR.specialCooldownMs;
+ e.pvpSpecialDuration=PVP_WARRIOR.specialCooldownMs;e.pvpSpecialWindowMs=PVP_WARRIOR.specialCooldownMs;
+ e.attackCooldown=0;e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ const before=e.hp;e.hp=Math.min(e.maxHp,e.hp+PVP_WARRIOR.specialHeal);
+ if(e.hp>before)e.regenSerial=(Number(e.regenSerial)||0)+1;
+ pvpPersistWarriorProgress(e);
+ return true;
+}
+function pvpTickWarriorSpecial(e,input,dt,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||!(Number(e.pvpWarriorChargeUntil)>now)){
+   if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>0&&now>=Number(e.pvpWarriorChargeUntil)){
+     e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeHitIds=[];e.moving=false;
+     if(Number(e.pvpActionUntil)<=now)e.pvpActionUntil=0;
+   }
+   return false;
+ }
+ let dx=clamp(Number(input?.dx)||0,-1,1),dy=clamp(Number(input?.dy)||0,-1,1),len=Math.hypot(dx,dy);
+ if(len>.12){
+   if(len>1){dx/=len;dy/=len}
+   e.pvpWarriorChargeAngle=Math.atan2(dy,dx);
+ }
+ const angle=Number(e.pvpWarriorChargeAngle)||0,speed=e.speed*PVP_WARRIOR.specialSpeedMultiplier;
+ const b=pvpArenaBounds(e.r||30);
+ e.x=clamp(e.x+Math.cos(angle)*speed*dt,b.left,b.right);
+ e.y=clamp(e.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+ e.heading=angle;e.facing=Math.cos(angle)<0?-1:1;e.moving=true;
+ e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ const touched=e.pvpWarriorChargeHitIds||(e.pvpWarriorChargeHitIds=[]);
+ for(const target of state.entities){
+   if(!target.alive||target===e||target.team===e.team||touched.includes(target.id))continue;
+   if(Math.hypot(target.x-e.x,target.y-e.y)>e.r+target.r+10)continue;
+   const damage=PVP_WARRIOR.specialDamageMin+Math.floor(Math.random()*(PVP_WARRIOR.specialDamageMax-PVP_WARRIOR.specialDamageMin+1));
+   pvpCombatHit(target,e,damage);touched.push(target.id);
+ }
+ return true;
+}
 function pvpSpecialAttack(e){
  if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||e.attackCooldown>0||
     e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
+ if(pvpIsWarriorHero(e))return pvpStartWarriorSpecial(e,now);
  const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
  e.pvpSpecialBodyDuration=bodyDuration;
  e.pvpSpecialOriginX=e.x;e.pvpSpecialOriginY=e.y;
