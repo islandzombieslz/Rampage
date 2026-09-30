@@ -8542,27 +8542,98 @@ function pvpArmDragonRetaliation(target,source){
  }
 }
 function pvpCombatHit(target,source,damage){
- if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
- const oldShield=target.shield,oldHp=target.hp;
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return 0;
+ const oldShield=target.shield,oldHp=target.hp,before=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
  applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
  if(target.type==='dragon'&&target.alive&&(target.shield<oldShield||target.hp<oldHp))
    pvpArmDragonRetaliation(target,source);
-
+ return Math.max(0,before-(Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0)));
+}
+function pvpIsWarriorHero(e){
+ return !!(e?.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female'&&e.pvpHero==='warrior'&&!e.pvpMinion);
+}
+function pvpPersistWarriorProgress(e){
+ const player=state.players.find(p=>p.id===e?.ownerId);if(!player)return;
+ player.pvpWarriorSpecialHits=Number(e.pvpWarriorSpecialHits)||0;
+ player.pvpWarriorSpecialUnlocked=!!e.pvpWarriorSpecialUnlocked;
+ player.pvpWarriorSpecialReadyAt=Number(e.pvpSpecialReadyAt)||0;
+}
+function pvpRegisterWarriorBasicHit(e){
+ if(!pvpIsWarriorHero(e)||e.pvpWarriorSpecialUnlocked)return;
+ e.pvpWarriorSpecialHits=Math.min(PVP_WARRIOR.specialUnlockHits,(Number(e.pvpWarriorSpecialHits)||0)+1);
+ if(e.pvpWarriorSpecialHits>=PVP_WARRIOR.specialUnlockHits){
+   e.pvpWarriorSpecialUnlocked=true;e.pvpSpecialReadyAt=0;
+   if(e.controlled)flash('ESPECIAL DO GUERREIRO LIBERADO',1.1);
+ }
+ pvpPersistWarriorProgress(e);
+}
+function pvpStartWarriorCombo(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||Number(e.pvpWarriorChargeUntil)>now)return false;
+ const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
+ e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
+ e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
+ e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+ e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
+ e.attackCooldown=0;e.attackAnim=Math.min(.45,duration/1000);e.lastAttackAt=now;e.lastCombatAt=now;e.attackSerial++;
+ return true;
+}
+function pvpTickWarriorCombo(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||!(Number(e.pvpWarriorComboUntil)>0))return false;
+ const end=Number(e.pvpWarriorComboUntil)||0,start=Number(e.pvpWarriorComboStartedAt)||now;
+ const duration=Math.max(1,end-start),fractions=[.18,.50,.82];
+ while((Number(e.pvpWarriorComboHitIndex)||0)<fractions.length&&
+       now>=start+duration*fractions[Number(e.pvpWarriorComboHitIndex)||0]){
+   const target=pvpNearestEnemy(e);
+   if(target){
+     const distance=Math.hypot(target.x-e.x,target.y-e.y);
+     e.heading=Math.atan2(target.y-e.y,target.x-e.x);
+     if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
+     if(distance<=PVP_WARRIOR.comboRange+target.r*.36){
+       const dealt=pvpCombatHit(target,e,pvpDamageForRange(distance,false,1));
+       if(dealt>0)pvpRegisterWarriorBasicHit(e);
+     }
+   }
+   e.pvpWarriorComboHitIndex=(Number(e.pvpWarriorComboHitIndex)||0)+1;
+ }
+ if(now<end)return true;
+ const repeat=Number(e.pvpWarriorComboRequestUntil)>=now;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
+ e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
+ if(repeat)return pvpStartWarriorCombo(e,now);
+ e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
+ return false;
 }
 function pvpBasicAttack(e){
- if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
+ if(!e?.alive)return false;
  const now=performance.now();
+ if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now)return false;
+ if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorComboUntil)>now){
+   e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+   return true;
+ }
+ if(pvpIsWarriorHero(e)){
+   const last=Number(e.pvpWarriorLastBasicAt)||0;
+   if(last>0&&now-last>=120&&now-last<=PVP_WARRIOR.comboChainMs)
+     return pvpStartWarriorCombo(e,now);
+ }
+ if(e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>now||e.pvpActionUntil>now)return false;
  e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
  e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
- e.pvpMeleeVisualUntil=now+360;
- let target=pvpNearestEnemy(e);
- // Player and minion swings use the same immediate basic attack speed and reach.
+ if(pvpIsWarriorHero(e)){
+   e.pvpWarriorLastBasicAt=now;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   e.pvpWarriorSingleUntil=now+pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
+   e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
+ }else e.pvpMeleeVisualUntil=now+360;
+ const target=pvpNearestEnemy(e);
  if(target){
    const distance=Math.hypot(target.x-e.x,target.y-e.y);
    e.heading=Math.atan2(target.y-e.y,target.x-e.x);
    if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
    if(distance<=PVP_BASE.meleeRange+target.r*.36){
-     pvpCombatHit(target,e,pvpDamageForRange(distance,false,e.pvpMinion?.5:1));
+     const dealt=pvpCombatHit(target,e,pvpDamageForRange(distance,false,e.pvpMinion?.5:1));
+     if(dealt>0)pvpRegisterWarriorBasicHit(e);
    }
  }
  return true;
