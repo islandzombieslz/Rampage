@@ -96,6 +96,7 @@ const allyBot=run('pvpBaseEntity(PVP_HERO_BY_ID.mageFemale,360,360,"u1","#9cf","
 const foe=run('pvpBaseEntity({...PVP_ENEMY_HEROES.naja,id:"naja"},595,500,"pvp-enemy","#f77",null,true)');
 assert.equal(hero.maxHp,350);assert.equal(hero.maxShield,250);assert.equal(hero.speed,195);
 assert.equal(allyBot.maxHp,250);assert.equal(allyBot.maxShield,150,'allied NPC keeps old durability');
+state.entities=state.entities.filter(e=>e!==allyBot);
 assert.equal(foe.maxHp,300);assert.equal(foe.maxShield,250);assert.equal(foe.speed,117);
 assert.equal(foe.pvpDamageBonus,10);
 assert.equal(foe.damage,20);assert.equal(foe.controlled,false);
