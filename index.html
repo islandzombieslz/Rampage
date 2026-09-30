@@ -4952,7 +4952,8 @@ function applyRemoteGame(game){
  if(Array.isArray(game.players))state.players=game.players.map(p=>{
    const out={...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId};
    if(state.mode==='pvp'){
-     out.pvpReviveAt=remoteNow+Math.max(0,Number(p.pvpReviveRemainingMs)||0);
+     const reviveRemaining=Math.max(0,Number(p.pvpReviveRemainingMs)||0);
+     out.pvpReviveAt=reviveRemaining>0?remoteNow+reviveRemaining:0;
      delete out.pvpReviveRemainingMs;
    }
    return out;
@@ -5596,6 +5597,7 @@ $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&N
 $$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}});
 $('#configureBtn').onclick=async()=>{
   if(state.mode==='war'){
+    state.rounds=Math.max(2,Number(state.rounds)||2);
     await createCurrentRoom($('#configureBtn'));
     return;
   }
@@ -9426,8 +9428,10 @@ function endPVPRound(forcedWinner=null){
  if(!winnerId){
    if(humans.length===1)winnerId=humans[0].id;
    else{
+     const eligible=humans.filter(p=>!p.pvpEliminated);
+     const contenders=eligible.length?eligible:humans;
      let best=-Infinity;
-     for(const player of humans){
+     for(const player of contenders){
        const stat=matchStatsFor(player.id),score=Number(stat.damage)||0;
        if(score>best+.001){best=score;winnerId=player.id}
        else if(Math.abs(score-best)<=.001)winnerId=null;
