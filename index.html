@@ -842,6 +842,20 @@ html,body{
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo,
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special,
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-death{object-fit:contain}
+/* Os novos GIFs têm canvases/proporções diferentes. Cada estado recebe sua
+   própria caixa visual para manter o Guerreiro com tamanho aparente estável. */
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack{
+  width:104px;height:122px;left:-13px;top:-15px;
+}
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo{
+  width:132px;height:146px;left:-27px;top:-27px;
+}
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special{
+  width:126px;height:144px;left:-24px;top:-26px;
+}
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-death{
+  width:116px;height:136px;left:-19px;top:-22px;
+}
 
 
 /* Regeneração entre rodadas no PVE */
@@ -3391,10 +3405,10 @@ const ASSETS = {
   walk:'assets/warrior/guerreiro-andando.gif',
   sword:'assets/warrior/espada-guerreiro.png',
   // PvP — novas animações exclusivas do Guerreiro homem.
-  pvpWarriorDeath:'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif',
-  pvpWarriorAttack:'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif',
-  pvpWarriorCombo:'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif',
-  pvpWarriorSpecial:'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif',
+  pvpWarriorDeath:'assets/warrior/pvp/guerreiro-morrendo.gif',
+  pvpWarriorAttack:'assets/warrior/pvp/guerreiro-ataque-unico.gif',
+  pvpWarriorCombo:'assets/warrior/pvp/combo-ataque-guerreiro.gif',
+  pvpWarriorSpecial:'assets/warrior/pvp/especial-guerreiro.gif',
 
   // Variação feminina da tropa Guerreiro
   femaleIdle:'assets/warrior/guerreira-parada.gif',
@@ -6308,7 +6322,10 @@ attackBtn.addEventListener('pointerdown',e=>{
     stopPVPAttackHold();
     pvpAttackHoldPointerId=e.pointerId;
     attackBtn.setPointerCapture?.(e.pointerId);
-    pvpAttackHoldNextAt=0;pvpHeldBasicAttack();
+    // Um toque curto sempre executa SOMENTE o ataque único original.
+    // O combo só começa se o botão continuar realmente pressionado após o GIF inicial.
+    pvpAttackHoldNextAt=performance.now()+700;
+    pvpTriggerAttack('attack');
     pvpAttackHoldTimer=setInterval(pvpHeldBasicAttack,45);
   }else attackControlled();
 });
@@ -8302,7 +8319,7 @@ const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax
  meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
 const PVP_WARRIOR=Object.freeze({
- comboChainMs:650,comboContinueMs:460,comboRange:136,
+ comboChainMs:950,comboContinueMs:460,comboRange:136,
  singleFallbackMs:650,comboFallbackMs:1350,specialFallbackMs:1800,deathFallbackMs:1400,
  specialUnlockHits:5,specialCooldownMs:20000,specialSpeedMultiplier:1.45,
  specialDamageMin:50,specialDamageMax:70,specialHeal:30,
