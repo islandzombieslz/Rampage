@@ -204,7 +204,7 @@ assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
 assert(html.includes('PVP_BASIC_HOLD_REPEAT_MS=300'),'holding attack must repeat PvP basics');
 assert(html.includes("pvpControls.aimPointerId!==event.pointerId"),'flame aim must use a dedicated pointer');
 assert(html.includes("joystick.pointerId===event.pointerId"),'joystick pointer must never steer the flame');
-assert(html.includes("state.mode==='pvp'?pvpCameraZoom(vw,vh):1.80"));
+assert(html.includes("const baseZoom=pvpCameraZoom(vw,vh)")&&html.includes("specialCameraZoom"),'PvP camera keeps its base zoom and adds the Warrior special cinematic');
 assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
 assert(html.includes("syncPVPPowerEffects(domCamera.left"),'animated mage power');
