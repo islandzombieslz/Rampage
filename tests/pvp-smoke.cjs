@@ -214,16 +214,21 @@ assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs mus
 assert(html.includes("if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now))"),'real NPC attack state must reach remote peers');
 assert(html.includes('updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);'),'PvP projectiles and burns must simulate');
 assert(html.includes("state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode"),'NPC damage needs PvP-only tuning');
+assert(!html.includes('state.timeLeft-=dt;'),'PvP simulation must not decrement a round timer');
+assert(html.includes("if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound()"),
+ 'a PvP round ends only after the final clan/wave cycle is cleared');
+assert(html.includes("humans.length===1&&humans[0].pvpEliminated"),
+ 'solo second death ends the match');
+assert(html.includes("humans.length>1&&!humans.some(p=>pvpHumanStillInRound(p))"),
+ 'online PvP keeps going while at least one real player can still fight or revive');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'}];
 run('beginPVPRound()');
-assert.equal(state.pvpRoundDuration,60);
-for(const duration of [30,60,120]){
- state.pveTime=duration;
- run('beginPVPRound()');
- assert.equal(state.pvpRoundDuration,duration,'PvP must respect the menu round duration');
- assert.equal(state.timeLeft,duration);
-}
-state.pveTime=60;
+assert.equal(state.pvpRoundDuration,0,'PvP rounds are untimed');
+assert.equal(state.timeLeft,0,'PvP no longer counts down a round clock');
+assert(html.includes('id="pvpTimeConfig"')&&html.includes('id="pvpSpeedConfig"')&&html.includes('pvp-simple-config'),
+ 'PvP configuration hides time and speed controls');
+assert(html.includes("const minRounds=state.mode==='pvp'&&!b.closest('#warLobbySettings')?1:2"),
+ 'PvP round selector allows one round while War keeps two as minimum');
 assert.equal(run('pvpLastWave'),0);
 assert.deepEqual([...state.entities.filter(e=>e.team==='pvp-enemy').map(e=>e.type)],['dragon','dragon']);
 assert(state.entities.filter(e=>e.type==='dragon').every(e=>e.dragonFlightState==='takeoff'));
@@ -251,6 +256,29 @@ assert.equal(run('PVP_DIFFICULTY.normal.waves[2][0][1]'),5);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[0][0][1]'),6);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[1][1][1]'),11);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[3][0][1]'),4);
+assert.equal(run('PVP_REVIVE_DELAY_MS'),10000,'each participant receives one ten-second revive per round');
+let roundHero=state.entities.find(e=>e.ownerId==='u1'&&!e.pvpMinion);
+assert(roundHero&&roundHero.alive);
+run('pvpRegisterRoundDeath(state.entities.find(e=>e.ownerId==="u1"&&!e.pvpMinion),performance.now())');
+roundHero.alive=false;
+assert.equal(state.players[0].pvpRoundDeaths,1);
+assert.equal(state.players[0].pvpEliminated,false);
+assert.equal(state.players[0].pvpReviveAt,now+10000);
+now+=9999;run('pvpProcessRoundRevives(performance.now())');
+assert.equal(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1'),false,'first death waits ten seconds');
+now+=2;run('pvpProcessRoundRevives(performance.now())');
+roundHero=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1');
+assert(roundHero,'first death respawns the participant in the same round');
+assert.equal(state.players[0].pvpRoundDeaths,1);
+run('pvpRegisterRoundDeath(state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==="u1"),performance.now())');
+roundHero.alive=false;
+assert.equal(state.players[0].pvpRoundDeaths,2);
+assert.equal(state.players[0].pvpEliminated,true,'second death eliminates the participant for the current round');
+assert.equal(state.players[0].pvpReviveAt,0);
+run('beginPVPRound()');
+assert.equal(state.players[0].pvpRoundDeaths,0,'new round restores the extra life');
+assert.equal(state.players[0].pvpEliminated,false);
+assert(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1'),'new round restores full participant spawn');
 state.difficulty='normal';
 run('beginPVPRound()');
 assert.equal(state.entities.filter(e=>e.team==='pvp-enemy').length,5);
