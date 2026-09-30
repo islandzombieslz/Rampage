@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/vendor-warrior-pvp-assets.yml'
+      - 'index.html'
   workflow_dispatch:
 
 permissions:
