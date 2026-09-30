@@ -8543,7 +8543,10 @@ function pvpPreserveGifState(el,desired){
  if(!cycle.done&&Number.isFinite(cycle.startedAt))
    cycle.until=Math.min(cycle.until,cycle.startedAt+pvpFullGifDuration(cycle.key,3000));
  if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
- if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
+ if(el.classList.contains('dying')&&cycle.state!=='warriorDeath'){
+   if(!cycle.done){cycle.done=true;stopGif(cycle.img)}
+   return desired;
+ }
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
  const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
  if(!cycle.done&&(now>=cycle.until-PVP_GIF_END_MARGIN_MS||underground)){
@@ -8551,7 +8554,10 @@ function pvpPreserveGifState(el,desired){
  }
  if(cycle.done){
   // The same pending attack/late network snapshot must never show or restart a spent GIF.
-  if(desired===cycle.state)return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  if(desired===cycle.state){
+    if(cycle.state==='warriorDeath')return 'warriorDeath';
+    return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  }
   return desired;
  }
  if(desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly'||
@@ -12349,7 +12355,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      el._facing.style.setProperty('--death-mid',(deathSign*42)+'deg');
      el._facing.style.setProperty('--death-end',(deathSign*84)+'deg');
      el.classList.add('dying');
-     setTimeout(()=>{
+     const customWarriorDeath=state.mode==='pvp'&&e.pvpMode&&e.pvpHero==='warrior'&&e.type==='warrior'&&e.clan==='warriors';
+     if(!customWarriorDeath)setTimeout(()=>{
        if(document.body.contains(el))el.classList.add('death-blink');
      },760);
    }
@@ -12374,34 +12381,75 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    }
 
    if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI){
-      const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
-      const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
-      const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
-      // Start a new serial before setting the visual state. A spent old
-      // cycle cannot swallow the first frame of the next PvP special.
-      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
-        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
-        if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+      if(pvpIsWarriorHero(e)){
+        const deathActive=!!e.deathStarted&&localNow>=Number(e.pvpWarriorDeathGifAt||Infinity);
+        const special=e.alive&&Number(e.pvpWarriorChargeUntil)>localNow;
+        const combo=e.alive&&Number(e.pvpWarriorComboUntil)>localNow;
+        const single=e.alive&&!combo&&Number(e.pvpWarriorSingleUntil)>localNow;
+        let desired=visualMoving?'walk':'idle';
+        if(deathActive)desired='warriorDeath';
+        else if(special)desired='warriorSpecial';
+        else if(combo)desired='warriorCombo';
+        else if(single)desired='warriorSingle';
+
+        if(deathActive&&el.dataset.pvpWarriorDeathSerial!==String(e.pvpWarriorDeathSerial||0)){
+          el.dataset.pvpWarriorDeathSerial=String(e.pvpWarriorDeathSerial||0);
+          restartGif(el._pvpWarriorDeath,'pvpWarriorDeath',e.pvpWarriorDeathSerial||1);
+        }else if(special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
           el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-      }
-      const desired=special&&el._gifKeys?.special?'special':
-        melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
-      setEntitySpriteState(el,desired);
-      if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
-        el.dataset.pvpAttackSerial=String(e.attackSerial||0);
-        const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
-        if(attackImage)restartGif(attackImage,attackKey,e.attackSerial);
-      }
-      if(e.type==='mage'&&el._mageStaff&&el.dataset.pvpStaffSerial!==String(e.attackSerial||0)){
-        el.dataset.pvpStaffSerial=String(e.attackSerial||0);
-        if(e.attackSerial>0){
-          el._mageStaff.classList.remove('pvp-staff-strike');
-          void el._mageStaff.offsetWidth;
-          el._mageStaff.classList.add('pvp-staff-strike');
+          restartGif(el._pvpWarriorSpecial,'pvpWarriorSpecial',e.pvpSpecialSerial||1);
+        }else if(combo&&el.dataset.pvpWarriorComboSerial!==String(e.pvpWarriorComboSerial||0)){
+          el.dataset.pvpWarriorComboSerial=String(e.pvpWarriorComboSerial||0);
+          restartGif(el._pvpWarriorCombo,'pvpWarriorCombo',e.pvpWarriorComboSerial||1);
+        }else if(single&&el.dataset.pvpWarriorSingleSerial!==String(e.pvpWarriorSingleSerial||0)){
+          el.dataset.pvpWarriorSingleSerial=String(e.pvpWarriorSingleSerial||0);
+          restartGif(el._pvpWarriorAttack,'pvpWarriorAttack',e.pvpWarriorSingleSerial||1);
         }
+        setEntitySpriteState(el,desired);
+        if(deathActive){
+          el.classList.add('pvp-warrior-death-gif');
+          const remaining=Math.max(0,Number(e.pvpWarriorDeathUntil)-localNow);
+          el.style.opacity=String(clamp(remaining/PVP_WARRIOR.deathFadeMs,0,1));
+        }else{
+          el.classList.remove('pvp-warrior-death-gif');
+          if(el.style.opacity!=='1')el.style.opacity='1';
+        }
+        if(el._weaponFacing){
+          const hideWeapon=deathActive||special||combo;
+          el._weaponFacing.style.visibility=hideWeapon?'hidden':'visible';
+          if(!hideWeapon){
+            el._sword?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
+            el._slash?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
+          }
+        }
+      }else{
+        const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
+        const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
+        const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
+        if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+          const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
+          if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+            el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
+        }
+        const desired=special&&el._gifKeys?.special?'special':
+          melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
+        setEntitySpriteState(el,desired);
+        if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
+          el.dataset.pvpAttackSerial=String(e.attackSerial||0);
+          const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
+          if(attackImage)restartGif(attackImage,attackKey,e.attackSerial);
+        }
+        if(e.type==='mage'&&el._mageStaff&&el.dataset.pvpStaffSerial!==String(e.attackSerial||0)){
+          el.dataset.pvpStaffSerial=String(e.attackSerial||0);
+          if(e.attackSerial>0){
+            el._mageStaff.classList.remove('pvp-staff-strike');
+            void el._mageStaff.offsetWidth;
+            el._mageStaff.classList.add('pvp-staff-strike');
+          }
+        }
+        if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
+          (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
       }
-      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
-        (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
     }else if(e.type==='poseidon'||e.type==='seahorse'){
       const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
       const kind=active?p.kind:null;
