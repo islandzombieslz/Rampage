@@ -3380,6 +3380,11 @@ const ASSETS = {
   idle:'assets/warrior/guerreiro-parado.gif',
   walk:'assets/warrior/guerreiro-andando.gif',
   sword:'assets/warrior/espada-guerreiro.png',
+  // PvP — novas animações exclusivas do Guerreiro homem.
+  pvpWarriorDeath:'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif',
+  pvpWarriorAttack:'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif',
+  pvpWarriorCombo:'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif',
+  pvpWarriorSpecial:'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif',
 
   // Variação feminina da tropa Guerreiro
   femaleIdle:'assets/warrior/guerreira-parada.gif',
@@ -5675,7 +5680,7 @@ function renderWarLobbySettings(){
 /* ==================== PVP: LOBBY AND HERO SELECTION ====================
    This registry and its functions are never called by mode='war'. */
 const PVP_HEROES=Object.freeze([
- {id:'warrior',name:'Guerreiro',type:'warrior',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-guerreiros.png',power:false,special:false},
+ {id:'warrior',name:'Guerreiro',type:'warrior',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-guerreiros.png',power:false,special:true},
  {id:'egyptWarrior',name:'Guerreiro do Egito',type:'warrior',clan:'egypt',variant:'male',card:'assets/egypt/warrior/card.png',power:false,special:false},
  {id:'mage',name:'Mago Guerreiro',type:'mage',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
  {id:'mageFemale',name:'Maga Guerreira',type:'mage',clan:'warriors',variant:'female',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
@@ -5686,7 +5691,7 @@ const PVP_HEROES=Object.freeze([
 ]);
 const PVP_HERO_BY_ID=Object.freeze(Object.fromEntries(PVP_HEROES.map(hero=>[hero.id,hero])));
 // The PvP picker is restricted independently of every other game mode.
-const PVP_SELECTABLE_HEROES=Object.freeze(PVP_HEROES.filter(hero=>['warrior','mageFemale','egyptMageFemale'].includes(hero.id)));
+const PVP_SELECTABLE_HEROES=Object.freeze(PVP_HEROES.filter(hero=>['warrior','mageFemale'].includes(hero.id)));
 const PVP_SELECTABLE_BY_ID=Object.freeze(Object.fromEntries(PVP_SELECTABLE_HEROES.map(hero=>[hero.id,hero])));
 const PVP_ENEMY_HERO_IDS=Object.freeze(['naja','poseidon','anubis','golem','dragon']);
 const PVP_ENEMY_HEROES=Object.freeze({
@@ -8248,6 +8253,13 @@ function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entiti
 const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
+const PVP_WARRIOR=Object.freeze({
+ comboChainMs:650,comboContinueMs:460,comboRange:136,
+ singleFallbackMs:650,comboFallbackMs:1350,specialFallbackMs:1800,deathFallbackMs:1400,
+ specialUnlockHits:5,specialCooldownMs:20000,specialSpeedMultiplier:1.45,
+ specialDamageMin:50,specialDamageMax:70,specialHeal:30,
+ deathFallMs:720,deathFadeMs:340
+});
 const pvpControls={selected:'attack',action:'attack',targetId:null,aimAngle:null,aimManual:false,aimPointerId:null};
 // In PvP, the next enemy group enters only after the current group is defeated.
 // Difficulty belongs exclusively to PvP. Easy preserves the existing waves.
@@ -8379,7 +8391,9 @@ const PVP_GIF_STATES=Object.freeze({
  golemAttack:'attack',golemSpecial:'special',brownAttack:'attack',brownSpecial:'special',
  anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
  mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
- kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+ kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack',
+ pvpWarriorAttack:'warriorSingle',pvpWarriorCombo:'warriorCombo',
+ pvpWarriorSpecial:'warriorSpecial',pvpWarriorDeath:'warriorDeath'});
 // PvP-only: walk actual GIF blocks, instead of scanning compressed pixel
 // bytes for incidental 21 F9 04 sequences (which inflated some animation times).
 const pvpExactGifDurationMs=new Map();
@@ -8424,6 +8438,7 @@ function preloadPVPExactGifDurations(){
  // War's cached duration and attack logic are never replaced.
  const keys=['magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
   'egyptMageSpecial','egyptFemaleMageSpecial','magePowerSpecial','egyptMagePowerSpecial',
+  'pvpWarriorDeath','pvpWarriorAttack','pvpWarriorCombo','pvpWarriorSpecial',
   'kingSpecial','kingPower','brownAttack','brownSpecial','brownPower',
   'dragonTakeoff','dragonAttack','golemAttack','golemSpecial',
   'najaAttack','najaSpecial','najaSpecialFinal','anubisMeleeAttack',
