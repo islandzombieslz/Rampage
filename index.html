@@ -6777,8 +6777,17 @@ function startEntityDeath(e,dx=0,dy=0){
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
- // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
- e.removeAt=now+1900;
+ const pvpWarriorDeath=state.mode==='pvp'&&e.pvpMode&&e.pvpHero==='warrior'&&e.type==='warrior'&&e.clan==='warriors';
+ if(pvpWarriorDeath){
+   const deathDuration=pvpFullGifDuration('pvpWarriorDeath',PVP_WARRIOR.deathFallbackMs);
+   e.pvpWarriorDeathSerial=(Number(e.pvpWarriorDeathSerial)||0)+1;
+   e.pvpWarriorDeathGifAt=now+PVP_WARRIOR.deathFallMs;
+   e.pvpWarriorDeathUntil=e.pvpWarriorDeathGifAt+deathDuration;
+   e.removeAt=e.pvpWarriorDeathUntil+60;
+ }else{
+   // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
+   e.removeAt=now+1900;
+ }
  burst(e.x,e.y,e.color);
 
  // O player local NÃO troca imediatamente de câmera ao morrer.
@@ -6790,8 +6799,13 @@ function startEntityDeath(e,dx=0,dy=0){
    s.transitioning=true;
    s.deathEntityId=e.id;
    s.targetId=null;
-   s.fadeStart=now+1250;
-   s.activateAt=now+1800;
+   if(pvpWarriorDeath){
+     s.fadeStart=Math.max(now+1250,e.pvpWarriorDeathUntil-PVP_WARRIOR.deathFadeMs);
+     s.activateAt=e.pvpWarriorDeathUntil+40;
+   }else{
+     s.fadeStart=now+1250;
+     s.activateAt=now+1800;
+   }
  }
 
  // A limpeza é agrupada no fim do frame. Em mortes em área isso evita
