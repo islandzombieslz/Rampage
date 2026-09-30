@@ -6253,13 +6253,37 @@ joystickArea.addEventListener('pointermove',e=>{
 joystickArea.addEventListener('pointerup',releaseJoystick);
 joystickArea.addEventListener('pointercancel',releaseJoystick);
 const attackBtn=$('#attackBtn');
+let pvpAttackHoldPointerId=null,pvpAttackHoldTimer=0,pvpAttackHoldNextAt=0;
+const PVP_BASIC_HOLD_REPEAT_MS=300;
+function stopPVPAttackHold(e=null){
+ if(e&&pvpAttackHoldPointerId!==null&&e.pointerId!==pvpAttackHoldPointerId)return;
+ pvpAttackHoldPointerId=null;pvpAttackHoldNextAt=0;
+ if(pvpAttackHoldTimer){clearInterval(pvpAttackHoldTimer);pvpAttackHoldTimer=0}
+}
+function pvpHeldBasicAttack(){
+ if(pvpAttackHoldPointerId===null||state.mode!=='pvp'||!state.running||state.phase!=='combat'||pvpControls.selected!=='attack'){
+   stopPVPAttackHold();return;
+ }
+ const now=performance.now();if(now<pvpAttackHoldNextAt)return;
+ pvpAttackHoldNextAt=now+PVP_BASIC_HOLD_REPEAT_MS;
+ pvpTriggerAttack('attack');
+}
 attackBtn.onclick=null;
 attackBtn.addEventListener('pointerdown',e=>{
-  e.preventDefault();
-  e.stopPropagation();
-  // Pode atacar com um segundo dedo sem soltar o joystick.
-  attackControlled();
+  e.preventDefault();e.stopPropagation();
+  // PvP: basic attack fires immediately and repeats while held.
+  // Powers remain single-cast actions.
+  if(state.mode==='pvp'&&pvpControls.selected==='attack'){
+    stopPVPAttackHold();
+    pvpAttackHoldPointerId=e.pointerId;
+    attackBtn.setPointerCapture?.(e.pointerId);
+    pvpAttackHoldNextAt=0;pvpHeldBasicAttack();
+    pvpAttackHoldTimer=setInterval(pvpHeldBasicAttack,45);
+  }else attackControlled();
 });
+attackBtn.addEventListener('pointerup',stopPVPAttackHold);
+attackBtn.addEventListener('pointercancel',stopPVPAttackHold);
+attackBtn.addEventListener('lostpointercapture',stopPVPAttackHold);
 attackBtn.addEventListener('contextmenu',e=>e.preventDefault());
 
 function entityBase(type,x,y,team,color){
@@ -8222,9 +8246,9 @@ function pvpArenaBounds(r=0){const b=PVP_ARENA.inset;return {left:b.left+r,right
 function pvpClampEntity(e){if(state.mode!=='pvp'||!e?.alive)return;const b=pvpArenaBounds(e.r||30);e.x=clamp(e.x,b.left,b.right);e.y=clamp(e.y,b.top,b.bottom)}
 function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entities)pvpClampEntity(e)}
 const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
- meleeRange:112,meleeCooldown:.70,knockForce:95,knockTime:.10,
+ meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
-const pvpControls={selected:'attack',action:'attack',targetId:null,aimAngle:null,aimManual:false};
+const pvpControls={selected:'attack',action:'attack',targetId:null,aimAngle:null,aimManual:false,aimPointerId:null};
 // In PvP, the next enemy group enters only after the current group is defeated.
 // Difficulty belongs exclusively to PvP. Easy preserves the existing waves.
 const PVP_DIFFICULTY=Object.freeze({
@@ -8289,8 +8313,10 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  const enemy=minion&&team==='pvp-enemy',bossBoost=enemy&&['golem','naja','poseidon'].includes(hero.type);
  const bossVitality=enemy?(['naja','poseidon'].includes(hero.type)?200:hero.type==='dragon'?150:bossBoost?50:0):0;
  const difficulty=enemy?pvpDifficulty():PVP_DIFFICULTY.easy;
- e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*(minion?.5:1))+bossVitality+difficulty.bonusHp;
- e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*(minion?.5:1))+bossVitality+difficulty.bonusShield;
+ const humanPlayer=!minion&&ownerId!=null&&state.players.some(p=>p.id===ownerId&&p.human!==false);
+ const playerHpBonus=humanPlayer?100:0,playerShieldBonus=humanPlayer?100:0;
+ e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*(minion?.5:1))+bossVitality+difficulty.bonusHp+playerHpBonus;
+ e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*(minion?.5:1))+bossVitality+difficulty.bonusShield+playerShieldBonus;
  e.damage=PVP_BASE.damageMax*(minion?.5:1);e.speed=PVP_BASE.speed*(minion?.5:1)*(bossBoost?1.20:1);
  e.pvpEnemy=!!enemy;e.pvpDamageBonus=enemy?difficulty.bonusDamage+(['naja','poseidon'].includes(hero.type)?10:0):0;
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
@@ -8581,24 +8607,38 @@ function pvpHandleAction(e,action,targetId){
  if(action==='power')return pvpCastPower(e,targetId);
  return pvpBasicAttack(e);
 }
+function pvpPreviewBasicAttack(e){
+ if(!e?.alive)return;
+ const now=performance.now(),target=pvpNearestEnemy(e);
+ e.attackAnim=.24;e.lastAttackAt=now;e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
+ e.pvpMeleeVisualUntil=now+280;
+ if(target){
+   e.heading=Math.atan2(target.y-e.y,target.x-e.x);
+   if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
+ }
+}
 function pvpTriggerAttack(override=null){
- if(state.mode!=='pvp'||!state.running||state.phase!=='combat')return;
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat')return false;
  const action=override||pvpControls.selected;
- if(action==='special'&&!pvpCanSpecial(pvpLocalHero()))return;
- if(action==='power'&&!pvpCanPower(pvpLocalHero()))return;
+ if(action==='special'&&!pvpCanSpecial(pvpLocalHero()))return false;
+ if(action==='power'&&!pvpCanPower(pvpLocalHero()))return false;
  pvpControls.action=action;
- if(action==='power'){pvpControls.aimAngle=null;pvpControls.aimManual=false}
+ if(action==='power'){pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null}
  NetworkAdapter.attackSeq++;
  const me=pvpLocalHero();
- if(NetworkAdapter.online&&!NetworkAdapter.isHost){sendLocalPVEInput(true);return}
+ if(NetworkAdapter.online&&!NetworkAdapter.isHost){
+   if(action==='attack')pvpPreviewBasicAttack(me);
+   sendLocalPVEInput(true);return true;
+ }
  if(me){
    me.pvpLastAttackSeq=NetworkAdapter.attackSeq;
-   try{pvpHandleAction(me,action,pvpControls.targetId)}
+   try{return !!pvpHandleAction(me,action,pvpControls.targetId)}
    catch(err){
      pvpReportError('ação local',err);
      me.pvpPowerUntil=0;me.pvpPowerVisualUntil=0;me.pvpActionUntil=0;me.pvpSpecialFxUntil=0;
    }
  }
+ return false;
 }
 function pvpLocalHero(){
  return state.entities.find(e=>e.ownerId===NetworkAdapter.localPlayerId&&e.alive&&!e.pvpMinion)||null;
@@ -8910,7 +8950,7 @@ function beginPVPRound(){
    e.pvpAllyBot=true;e.controlled=false;
  });
  pvpSpawnWave(0);
- pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;
+ pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null;
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
@@ -9212,8 +9252,35 @@ $$('#pvpCombatHud [data-pvp-action]').forEach(button=>button.onclick=()=>{
  else{pvpControls.selected=action;if(action==='power')pvpControls.targetId=pvpNearestEnemy(pvpLocalHero())?.id??null}
  updatePVPHUD();
 });
-$('#gameScreen').addEventListener('pointerdown',event=>{
- if(state.mode!=='pvp'||pvpControls.selected!=='power'||!state.running)return;
+const pvpGameScreen=$('#gameScreen');
+function pvpAimFromPointer(event){
+ const me=pvpLocalHero();if(!me?.alive||!(me.pvpPowerUntil>performance.now()))return false;
+ const pt=screenPointToGame(event.clientX,event.clientY);
+ const x=state.camera.x+pt.x/state.camera.zoom,y=state.camera.y+pt.y/state.camera.zoom;
+ const desired=Math.atan2(y-me.y,x-me.x);
+ pvpControls.aimAngle=desired;pvpControls.aimManual=true;me.pvpAimAngle=desired;
+ return true;
+}
+function pvpBeginAimPointer(event){
+ if(joystick.pointerId===event.pointerId)return false;
+ if(event.target.closest?.('#attackBtn,#touchControls,#pvpCombatHud,button,input,select'))return false;
+ const me=pvpLocalHero();if(!me?.alive||!(me.pvpPowerUntil>performance.now()))return false;
+ if(pvpControls.aimPointerId!==null&&pvpControls.aimPointerId!==event.pointerId)return false;
+ pvpControls.aimPointerId=event.pointerId;
+ try{pvpGameScreen.setPointerCapture?.(event.pointerId)}catch(_){}
+ return pvpAimFromPointer(event);
+}
+function pvpEndAimPointer(event){
+ if(pvpControls.aimPointerId!==event.pointerId)return;
+ pvpControls.aimPointerId=null;
+ try{pvpGameScreen.releasePointerCapture?.(event.pointerId)}catch(_){}
+}
+pvpGameScreen.addEventListener('pointerdown',event=>{
+ if(state.mode!=='pvp'||!state.running)return;
+ // A flame uses its own pointer. The joystick pointer is never reused for aim,
+ // allowing left-thumb movement + right-thumb aiming at the same time.
+ if(pvpBeginAimPointer(event)){event.stopPropagation();event.preventDefault();return}
+ if(pvpControls.selected!=='power')return;
  if(event.target.closest?.('#attackBtn,#touchControls,#pvpCombatHud,button,input,select'))return;
  const me=pvpLocalHero();if(!me)return;
  let target=null;
@@ -9226,17 +9293,21 @@ $('#gameScreen').addEventListener('pointerdown',event=>{
  }
  if(!target)return;
  event.stopPropagation();event.preventDefault();
- if(pvpControls.targetId===target.id)pvpTriggerAttack('power');
- else pvpControls.targetId=target.id;
+ if(pvpControls.targetId===target.id){
+   if(pvpTriggerAttack('power')){
+     pvpControls.aimPointerId=event.pointerId;
+     try{pvpGameScreen.setPointerCapture?.(event.pointerId)}catch(_){}
+     pvpAimFromPointer(event);
+   }
+ }else pvpControls.targetId=target.id;
 },true);
-$('#gameScreen').addEventListener('pointermove',event=>{
- if(state.mode!=='pvp'||!state.running||!pvpLocalHero()?.pvpPowerUntil||!event.buttons)return;
- const pt=screenPointToGame(event.clientX,event.clientY),me=pvpLocalHero();
- const x=state.camera.x+pt.x/state.camera.zoom,y=state.camera.y+pt.y/state.camera.zoom;
- const desired=Math.atan2(y-me.y,x-me.x);
- pvpControls.aimAngle=desired;pvpControls.aimManual=true;me.pvpAimAngle=desired;
- event.preventDefault();event.stopPropagation();
+pvpGameScreen.addEventListener('pointermove',event=>{
+ if(state.mode!=='pvp'||!state.running||pvpControls.aimPointerId!==event.pointerId)return;
+ if(joystick.pointerId===event.pointerId)return;
+ if(pvpAimFromPointer(event)){event.preventDefault();event.stopPropagation()}
 },true);
+pvpGameScreen.addEventListener('pointerup',pvpEndAimPointer,true);
+pvpGameScreen.addEventListener('pointercancel',pvpEndAimPointer,true);
 
 /* ==================== PVE ==================== */
 function startPVE(){

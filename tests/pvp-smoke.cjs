@@ -71,7 +71,7 @@ assert.equal(new Set(heroes.map(h=>h.id)).size,8);
 assert.equal(run('PVP_ENEMY_HERO_IDS.length'),5);
 assert.equal(base.hp,250);assert.equal(base.shield,150);
 assert.equal(base.damageMin,25);assert.equal(base.damageMax,40);
-assert.equal(base.meleeCooldown,.70);assert.equal(base.specialCooldown,20000);
+assert.equal(base.meleeCooldown,.30);assert.equal(base.specialCooldown,20000);
 assert.equal(run('pvpDamageForRange(0)'),40);
 assert.equal(run('pvpDamageForRange(112)'),25);
 assert.equal(run('pvpDamageForRange(0,true)'),100);
@@ -90,9 +90,13 @@ assert(html.includes('drawPVPDamageNumbers(pvpDamageCtx,renderFrameNow)'),'foreg
 assert.equal(run('pvpCameraZoom(1920,1080)'),1.8);
 mobile=true;assert(run('pvpCameraZoom(850,390)')<1.8);
 
+state.players=[{id:'u1',human:true,pvpHero:'warrior'},{id:'ally-bot',human:false,pvpHero:'mageFemale'}];
 const hero=run('pvpBaseEntity(PVP_HERO_BY_ID.warrior,500,500,"u1","#aaa","u1",false)');
+const allyBot=run('pvpBaseEntity(PVP_HERO_BY_ID.mageFemale,360,360,"u1","#9cf","ally-bot",false)');
 const foe=run('pvpBaseEntity({...PVP_ENEMY_HEROES.naja,id:"naja"},595,500,"pvp-enemy","#f77",null,true)');
-assert.equal(hero.maxHp,250);assert.equal(hero.maxShield,150);assert.equal(hero.speed,195);
+assert.equal(hero.maxHp,350);assert.equal(hero.maxShield,250);assert.equal(hero.speed,195);
+assert.equal(allyBot.maxHp,250);assert.equal(allyBot.maxShield,150,'allied NPC keeps old durability');
+state.entities=state.entities.filter(e=>e!==allyBot);
 assert.equal(foe.maxHp,300);assert.equal(foe.maxShield,250);assert.equal(foe.speed,117);
 assert.equal(foe.pvpDamageBonus,10);
 assert.equal(foe.damage,20);assert.equal(foe.controlled,false);
@@ -100,6 +104,8 @@ assert(run('pvpBasicAttack(state.entities[0])'));
 assert.equal(damageCalls.length,1);assert(damageCalls[0].damage>=25&&damageCalls[0].damage<=40);
 assert.equal(damageCalls[0].options.knockForce,95);
 assert.equal(run('pvpBasicAttack(state.entities[0])'),false,'basic attack cooldown');
+now+=301;hero.attackCooldown=0;
+assert(run('pvpBasicAttack(state.entities[0])'),'basic resumes at fast PvP cadence');
 
 const mage=run('pvpBaseEntity(PVP_HERO_BY_ID.mage,1050,500,"u2","#ffe","u2",false)');
 assert.equal(mage.pvpSpecialReadyAt,now+40000,'warrior mage waits only for initial 40 second timer');
@@ -149,6 +155,9 @@ assert.equal(power.pvpAimAngle,Math.PI/2,'manual direction does not oscillate');
 assert.equal(run('pvpCanPower(state.entities.find(e=>e.id==='+hero.id+'))'),false);
 
 assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
+assert(html.includes('PVP_BASIC_HOLD_REPEAT_MS=300'),'holding attack must repeat PvP basics');
+assert(html.includes("pvpControls.aimPointerId!==event.pointerId"),'flame aim must use a dedicated pointer');
+assert(html.includes("joystick.pointerId===event.pointerId"),'joystick pointer must never steer the flame');
 assert(html.includes("state.mode==='pvp'?pvpCameraZoom(vw,vh):1.80"));
 assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');

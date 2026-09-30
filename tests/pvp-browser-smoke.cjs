@@ -218,6 +218,30 @@ const pvpTestHook=`window.__pvpBrowserTest={
    syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
    syncPVPSpecialEffects(state.camera.x,state.camera.y,state.camera.zoom,innerWidth,innerHeight);
    return !pvpSpecialFxNodes.has(ally.id)&&pvpSpecialFxPlayedSerial.get(ally.id)===ally.pvpSpecialSerial;
+ },
+ durability(){
+   const hero=pvpLocalHero();
+   const allies=state.entities.filter(e=>e.alive&&e.pvpAllyBot);
+   return {player:[hero?.maxHp,hero?.maxShield],allies:allies.map(e=>[e.maxHp,e.maxShield])};
+ },
+ basicSerial(){return pvpLocalHero()?.attackSerial||0},
+ touchAimIsolation(){
+   const hero=pvpLocalHero();if(!hero)return null;
+   const world=document.querySelector('#world'),r=world.getBoundingClientRect();
+   hero.pvpPowerUntil=performance.now()+1200;hero.pvpAimAngle=0;
+   joystick.active=true;joystick.pointerId=41;joystick.x=.62;joystick.y=-.31;
+   pvpControls.aimPointerId=null;pvpControls.aimManual=false;pvpControls.aimAngle=null;
+   const fake=(pointerId,x,y)=>({pointerId,target:world,clientX:x,clientY:y});
+   const blocked=pvpBeginAimPointer(fake(41,r.left+r.width*.8,r.top+r.height*.3));
+   const accepted=pvpBeginAimPointer(fake(42,r.left+r.width*.82,r.top+r.height*.28));
+   const input=getLocalMovement();
+   const result={blocked,accepted,aimPointer:pvpControls.aimPointerId,
+     dx:Math.round(input.dx*100)/100,dy:Math.round(input.dy*100)/100,
+     manual:pvpControls.aimManual,angle:Number.isFinite(input.pvpAimAngle)};
+   pvpEndAimPointer({pointerId:42});
+   joystick.active=false;joystick.pointerId=null;joystick.x=0;joystick.y=0;
+   hero.pvpPowerUntil=0;pvpControls.aimManual=false;pvpControls.aimAngle=null;
+   return result;
  }
 
 };`;
@@ -300,6 +324,21 @@ async function main(){
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.equal(clock.duration,30,'PvP menu time must start a thirty-second round');
    assert(clock.left>0&&clock.left<=30,'PvP match counts down from selected value');
+   const durability=await page.evaluate(()=>window.__pvpBrowserTest.durability());
+   assert.deepEqual(durability.player,[350,250],'human PvP player gets +100 HP and +100 shield');
+   assert(durability.allies.length===3&&durability.allies.every(v=>v[0]===250&&v[1]===150),
+     'allied NPC durability must remain unchanged');
+   const beforeBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
+   const attackButton=page.locator('#attackBtn');
+   await attackButton.hover();await page.mouse.down();
+   const immediateBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
+   assert(immediateBasic>beforeBasic,'normal attack reacts immediately on press');
+   await page.waitForTimeout(720);await page.mouse.up();
+   const heldBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
+   assert(heldBasic>=beforeBasic+3,'holding attack must produce repeated basic attacks');
+   const touchAim=await page.evaluate(()=>window.__pvpBrowserTest.touchAimIsolation());
+   assert.deepEqual(touchAim,{blocked:false,accepted:true,aimPointer:42,dx:.62,dy:-.31,manual:true,angle:true},
+     'joystick pointer cannot steer flame; a second touch aims while movement stays active');
    await page.locator('#pvpCombatHud [data-pvp-action="power"]').click();
    await page.locator('#attackBtn').click();
    await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
@@ -351,7 +390,7 @@ async function main(){
    assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: login/profile, lobby, hero selection, solo PvP gameplay, mage flame, Egyptian/Warrior specials, fullscreen Canvas, first-hit dragon ball, decoded image fallback, both flame collisions, repeated dragon shots and no GIF replay');
+   console.log('BROWSER PASS: PvP round clock, +100 human durability, unchanged allied NPCs, immediate held basics, independent touch movement/aim, mage flames, linear dragon balls and one-shot specials');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
