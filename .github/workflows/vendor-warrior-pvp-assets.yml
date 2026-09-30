@@ -28,13 +28,26 @@ jobs:
           test -s assets/warrior/pvp/guerreiro-ataque-unico.gif
           test -s assets/warrior/pvp/combo-ataque-guerreiro.gif
           test -s assets/warrior/pvp/especial-guerreiro.gif
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          pairs={
+            'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif':'assets/warrior/pvp/guerreiro-morrendo.gif',
+            'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif':'assets/warrior/pvp/guerreiro-ataque-unico.gif',
+            'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif':'assets/warrior/pvp/combo-ataque-guerreiro.gif',
+            'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif':'assets/warrior/pvp/especial-guerreiro.gif',
+          }
+          for old,new in pairs.items(): s=s.replace(old,new)
+          p.write_text(s)
+          PY
       - name: Commit vendored assets
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add assets/warrior/pvp/*.gif
+          git add assets/warrior/pvp/*.gif index.html
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'assets(pvp): vendor Warrior GIFs locally'
           git push
