@@ -1249,6 +1249,16 @@ html,body{
   padding-left:10px;
   padding-right:10px;
 }
+#pveConfig.pvp-simple-config{
+  grid-template-columns:minmax(0,1fr);
+}
+#pveConfig.pvp-simple-config #pvpTimeConfig,
+#pveConfig.pvp-simple-config #pvpSpeedConfig{
+  display:none !important;
+}
+#gameScreen.pvp-mode #timer{
+  display:none !important;
+}
 
 
 @media (pointer:fine){
@@ -2947,7 +2957,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   <div class="card">
     <h2 id="configTitle">Configurar partida</h2>
     <div id="pveConfig" class="stack">
-      <div class="config">
+      <div class="config" id="pvpTimeConfig">
         <div class="label">Tempo de cada rodada</div>
         <div class="row option-group" data-setting="pveTime">
           <button data-value="30">30 seg</button>
@@ -2966,9 +2976,9 @@ window.dispatchEvent(new Event('firebase-ready'));
           <button data-value="normal">Normal</button>
           <button data-value="hard">Difícil</button>
         </div>
-        <div class="small">No Difícil, novas ondas surgem a cada 15 segundos.</div>
+        <div class="small">A dificuldade altera a quantidade e a resistência dos inimigos em cada ciclo.</div>
       </div>
-      <div class="config">
+      <div class="config" id="pvpSpeedConfig">
         <div class="label">Velocidade dos jogadores/NPCs</div>
         <div class="row option-group" data-setting="speed">
           <button data-value="slow">Lento</button>
@@ -3186,7 +3196,7 @@ const NetworkAdapter = {
     if(this.createPromise)return this.createPromise;
     this.createPromise=(async()=>{
       const F=await this.waitFirebase(),user=await this.ensureAuth();
-      const settings={mode:snapshot.mode,pveTime:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.speed,gems:normalizeWarStartingGems(snapshot.gems)};
+      const settings={mode:snapshot.mode,pveTime:snapshot.mode==='pvp'?0:snapshot.pveTime,warTime:snapshot.warTime,rounds:snapshot.rounds,difficulty:snapshot.difficulty,speed:snapshot.mode==='pvp'?'normal':snapshot.speed,gems:normalizeWarStartingGems(snapshot.gems)};
       // Uma sala antiga nunca pode reutilizar configurações anteriores numa criação nova.
       if(this.roomId)await this.leaveRoom();
       const roomCandidates=[...ROOM_CODES].sort(()=>Math.random()-.5);
@@ -4796,6 +4806,14 @@ function serializeWarEntityForNetwork(e,now){
 
 function serializeGame(){
  const now=performance.now();
+ const networkPlayers=state.players.map(p=>{
+   const out={...p,local:false};
+   if(state.mode==='pvp'){
+     out.pvpReviveRemainingMs=Math.max(0,(Number(p.pvpReviveAt)||0)-now);
+     delete out.pvpReviveAt;
+   }
+   return out;
+ });
  const entities=state.mode==='war'
    ? state.entities.map(e=>serializeWarEntityForNetwork(e,now))
    : state.entities.map(e=>{
@@ -4868,7 +4886,7 @@ function serializeGame(){
    kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED,
     ...(state.mode==='pvp'?{pvpHit:!!p.pvpHit}:{})
  }));
- return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:state.players.map(p=>({...p,local:false})),entities,dragonProjectiles,
+ return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:networkPlayers,entities,dragonProjectiles,
    matchId:state.matchId,matchResult:state.matchResult,matchStats:state.matchStats,
    warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents,pvpDamageEvents};
 }
@@ -4931,7 +4949,14 @@ function applyRemoteGame(game){
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
- if(Array.isArray(game.players))state.players=game.players.map(p=>({...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId}));
+ if(Array.isArray(game.players))state.players=game.players.map(p=>{
+   const out={...p,human:p.human!==false,local:p.id===NetworkAdapter.localPlayerId};
+   if(state.mode==='pvp'){
+     out.pvpReviveAt=remoteNow+Math.max(0,Number(p.pvpReviveRemainingMs)||0);
+     delete out.pvpReviveRemainingMs;
+   }
+   return out;
+ });
  if(game.matchId&&game.matchId!==state.matchId){state.matchResult=null;state.warGoalSerial=0;state.warGoalEvents=[];pvpRemoteDamageSeen=0;state.pvpDamageEvents=[];clearWarGoalToasts()}
  state.matchId=game.matchId||state.matchId;
  if(game.matchResult)state.matchResult=game.matchResult;
@@ -5319,9 +5344,11 @@ function applyRemoteGame(game){
  }
  if(state.mode==='pvp'&&!firstFrame&&Number(state.round)!==previousRound&&state.phase==='combat'){
   state.particles=[];clearEntityVisuals();
-  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
-  $('#gameScreen').classList.remove('spectator-mode');
-  const fade=$('#deathFade');if(fade){fade.classList.remove('fade-in','fade-out');fade.style.opacity='0'}
+  pvpResetLocalSpectatorAfterRevive();
+ }
+ if(state.mode==='pvp'&&state.phase==='combat'){
+   const localRevived=state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId);
+   if(localRevived&&(state.spectator.active||state.spectator.transitioning))pvpResetLocalSpectatorAfterRevive();
  }
  if(firstFrame){navigateScreen('gameScreen');configureGameScreenForMode();if(state.mode==='war')beginWarCameraIntro()}
  if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){
@@ -5573,7 +5600,9 @@ $('#configureBtn').onclick=async()=>{
     return;
   }
   if(state.mode==='pvp')pvpLoadFlameFrames();
-  $('#pveConfig').style.display='grid';
+  const pveConfig=$('#pveConfig');
+  pveConfig.style.display='grid';
+  pveConfig.classList.toggle('pvp-simple-config',state.mode==='pvp');
   $('#configTitle').textContent=state.mode==='pvp'?'Configurar PvP':'Configurar Players vs Inimigos';
   const configScreen=$('#configScreen');
   configScreen.classList.add('pve-config');
@@ -5603,7 +5632,10 @@ function applyStepperButton(b){
   const beforeGems=state.gems;
   const beforeNpcCount=state.players.filter(p=>!p.human).length;
 
-  if(b.dataset.target==='rounds') state.rounds=clamp(state.rounds+dir,2,10);
+  if(b.dataset.target==='rounds'){
+    const minRounds=state.mode==='pvp'&&!b.closest('#warLobbySettings')?1:2;
+    state.rounds=clamp(state.rounds+dir,minRounds,10);
+  }
   if(b.dataset.target==='gems') state.gems=normalizeWarStartingGems((Number(state.gems)||300)+dir*100);
   if((b.dataset.target==='rounds'||b.dataset.target==='gems')&&b.closest('#warLobbySettings'))scheduleWarLobbySettingsSync();
 
@@ -6835,6 +6867,8 @@ function startEntityDeath(e,dx=0,dy=0){
    e.removeAt=now+1900;
  }
  burst(e.x,e.y,e.color);
+
+ if(state.mode==='pvp'&&e.pvpMode&&!e.pvpMinion&&e.ownerId)pvpRegisterRoundDeath(e,now);
 
  // O player local NÃO troca imediatamente de câmera ao morrer.
  // Primeiro assiste à própria queda + piscadas; depois a tela escurece
@@ -9287,31 +9321,71 @@ function pvpSpawnWave(index){
  flash('PVP • ONDA '+(index+1)+'/'+PVP_ENEMY_WAVES.length+' • '+wave.name,1.4);
  return true;
 }
+const PVP_REVIVE_DELAY_MS=10000;
+function pvpResetLocalSpectatorAfterRevive(){
+ state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
+ $('#gameScreen').classList.remove('spectator-mode');
+ const fade=$('#deathFade');
+ if(fade){fade.classList.remove('fade-in','fade-out');fade.style.opacity='0'}
+}
+function pvpSpawnRoundParticipant(player){
+ if(!player)return null;
+ const humans=state.players.filter(p=>p.human);
+ const allies=state.players.filter(p=>!p.human);
+ const human=player.human!==false;
+ const group=human?humans:allies,index=Math.max(0,group.findIndex(p=>p.id===player.id));
+ const radius=human?150:100;
+ const angle=index*Math.PI*2/Math.max(1,group.length);
+ const host=humans.find(p=>p.id===NetworkAdapter.hostUid)||humans[0];
+ const team=human?player.id:(host?.id||'players');
+ const e=pvpBaseEntity(pvpHeroForPlayer(player),state.world.w/2+Math.cos(angle)*radius,state.world.h/2+Math.sin(angle)*radius,
+   team,player.color,player.id,false);
+ if(!human){e.pvpAllyBot=true;e.controlled=false}
+ return e;
+}
+function pvpRegisterRoundDeath(e,now=performance.now()){
+ if(state.mode!=='pvp'||!e?.pvpMode||e.pvpMinion||!e.ownerId)return false;
+ const player=state.players.find(p=>p.id===e.ownerId);if(!player)return false;
+ const deaths=Math.min(2,(Number(player.pvpRoundDeaths)||0)+1);
+ player.pvpRoundDeaths=deaths;
+ if(deaths===1){
+   player.pvpReviveAt=now+PVP_REVIVE_DELAY_MS;
+   player.pvpEliminated=false;
+ }else{
+   player.pvpReviveAt=0;
+   player.pvpEliminated=true;
+ }
+ return true;
+}
+function pvpProcessRoundRevives(now=performance.now()){
+ for(const player of state.players){
+   if(player.pvpEliminated||Number(player.pvpRoundDeaths)!==1)continue;
+   const reviveAt=Number(player.pvpReviveAt)||0;
+   if(!(reviveAt>0&&now>=reviveAt))continue;
+   if(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId===player.id)){player.pvpReviveAt=0;continue}
+   pvpSpawnRoundParticipant(player);
+   player.pvpReviveAt=0;
+   if(player.id===NetworkAdapter.localPlayerId)pvpResetLocalSpectatorAfterRevive();
+   flash((player.name||'JOGADOR')+' REVIVEU',.9);
+ }
+}
+function pvpHumanStillInRound(player){
+ if(!player?.human||player.pvpEliminated)return false;
+ if(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId===player.id))return true;
+ return Number(player.pvpRoundDeaths)===1&&Number(player.pvpReviveAt)>0;
+}
 function beginPVPRound(){
  state.world.w=PVP_ARENA.w;state.world.h=PVP_ARENA.h;state.entities=[];state.particles=[];state.dragonProjectiles=[];
  warBurningEntities.clear();warFrameEnemiesByTeam.clear();
  state.pvpDamageEvents=[];
  clearEntityVisuals();
- // Honor the exact duration selected in the PvP configuration (30/60/120).
- state.pvpRoundDuration=[30,60,120].includes(Number(state.pveTime))?Number(state.pveTime):60;
- state.timeLeft=state.pvpRoundDuration;pvpLastWave=-1;pvpNextWaveAt=0;
- state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
- $('#gameScreen').classList.remove('spectator-mode');
- const deathFade=$('#deathFade');if(deathFade){deathFade.classList.remove('fade-in','fade-out');deathFade.style.opacity='0'}
- const humans=state.players.filter(p=>p.human);
- humans.forEach((p,i)=>{
-   const a=i*Math.PI*2/Math.max(1,humans.length);
-   pvpBaseEntity(pvpHeroForPlayer(p),state.world.w/2+Math.cos(a)*150,state.world.h/2+Math.sin(a)*150,p.id,p.color,p.id,false);
- });
- // Lobby NPCs are full-stat PvP heroes controlled by AI on the host's team.
- const host=humans.find(p=>p.id===NetworkAdapter.hostUid)||humans[0];
- const allies=state.players.filter(p=>!p.human);
- allies.forEach((bot,i)=>{
-   const a=i*Math.PI*2/Math.max(1,allies.length);
-   const e=pvpBaseEntity(pvpHeroForPlayer(bot),state.world.w/2+Math.cos(a)*100,state.world.h/2+Math.sin(a)*100,
-     host?.id||'players',bot.color,bot.id,false);
-   e.pvpAllyBot=true;e.controlled=false;
- });
+ // Uma rodada PvP agora é o ciclo COMPLETO de clãs/ondas. Não existe cronômetro.
+ state.pvpRoundDuration=0;state.timeLeft=0;pvpLastWave=-1;pvpNextWaveAt=0;
+ pvpResetLocalSpectatorAfterRevive();
+ for(const p of state.players){
+   p.pvpRoundDeaths=0;p.pvpReviveAt=0;p.pvpEliminated=false;
+   pvpSpawnRoundParticipant(p);
+ }
  pvpSpawnWave(0);
  pvpControls.selected='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null;
 }
@@ -9319,6 +9393,7 @@ function startPVP(){
  if(state.mode!=='pvp')return;
  for(const p of state.players){
    p.pvpWarriorSpecialHits=0;p.pvpWarriorSpecialUnlocked=false;p.pvpWarriorSpecialReadyAt=0;
+   p.pvpRoundDeaths=0;p.pvpReviveAt=0;p.pvpEliminated=false;
  }
  preloadExtraPVPGifDurations();
  preloadPVPWarriorVisuals();
@@ -9336,37 +9411,33 @@ function pvpResult(winnerId){
  for(const player of humans){
    if(winnerId!==player.id){awards[player.id]=50;continue}
    const stats=matchStatsFor(player.id),damage=clamp(stats.damage/1200,0,1);
-   const speed=stats.victoryTimeLimit?clamp(1-stats.victorySeconds/stats.victoryTimeLimit,0,1):0;
    const low=pvp?200:100,high=pvp?400:200;
-   awards[player.id]=Math.round(low+(high-low)*(.7*damage+.3*speed));
+   awards[player.id]=Math.round(low+(high-low)*damage);
  }
  return {id:state.matchId,mode:'pvp',winnerId:winnerId||null,winnerName:winner?.name||'',
    winnerClan:winner?.clan||pvpLastEnemyClan,pvp,humanCount:humans.length,awards};
 }
-function endPVPRound(){
+function endPVPRound(forcedWinner=null){
  if(state.phase!=='combat')return;
  state.phase='between';state.running=false;
- const humans=state.players.filter(p=>p.human),aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
- const humanAlive=aliveHeroes.filter(e=>humans.some(p=>p.id===e.ownerId));
- const alliedAlive=aliveHeroes.filter(e=>e.pvpAllyBot);
+ const humans=state.players.filter(p=>p.human);
  const npcAlive=state.entities.filter(e=>e.alive&&e.team==='pvp-enemy');
- let winnerId=null;
- if(!humanAlive.length)winnerId=alliedAlive.length?(humans.find(p=>p.id===alliedAlive[0].team)?.id||'enemy'):'enemy';
- else if(humans.length===1)winnerId=humanAlive[0].ownerId;
- else if(humanAlive.length===1)winnerId=humanAlive[0].ownerId;
- else{
-   let best=-Infinity;
-   for(const hero of humanAlive){
-     const stat=matchStatsFor(hero.ownerId),score=stat.damage+(hero.hp+hero.shield)*.5;
-     if(score>best+.001){best=score;winnerId=hero.ownerId}
-     else if(Math.abs(score-best)<=.001)winnerId=null;
+ let winnerId=forcedWinner;
+ if(!winnerId){
+   if(humans.length===1)winnerId=humans[0].id;
+   else{
+     let best=-Infinity;
+     for(const player of humans){
+       const stat=matchStatsFor(player.id),score=Number(stat.damage)||0;
+       if(score>best+.001){best=score;winnerId=player.id}
+       else if(Math.abs(score-best)<=.001)winnerId=null;
+     }
    }
  }
  if(winnerId==='enemy'&&npcAlive.length)pvpLastEnemyClan=npcAlive[0].clan;
  if(winnerId&&winnerId!=='enemy'){
    const p=state.players.find(p=>p.id===winnerId);if(p)p.score=(p.score||0)+1;
-   const stat=matchStatsFor(winnerId);stat.wonRounds++;stat.victorySeconds+=(state.pvpRoundDuration||state.pveTime)-Math.max(0,state.timeLeft);
-   stat.victoryTimeLimit+=(state.pvpRoundDuration||state.pveTime);
+   matchStatsFor(winnerId).wonRounds++;
  }
  if(state.round>=state.rounds){
    const best=Math.max(...humans.map(p=>p.score||0));
@@ -9374,7 +9445,7 @@ function endPVPRound(){
    const champion=best>0&&leaders.length===1?leaders[0].id:winnerId==='enemy'?'enemy':null;
    finishGame('',pvpResult(champion));return;
  }
- flash(winnerId==='enemy'?'NPCS VENCERAM':winnerId?'RODADA VENCIDA':'EMPATE',1.4);
+ flash(winnerId==='enemy'?'NPCS VENCERAM':'RODADA CONCLUÍDA',1.4);
  setTimeout(()=>{
    if(state.mode!=='pvp'||state.phase!=='between')return;
    state.round++;state.phase='combat';state.running=true;beginPVPRound();
@@ -9434,31 +9505,42 @@ function updatePVP(dt){
    }
  }
  pvpExpireSummons(now);
+ pvpProcessRoundRevives(now);
  state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
- state.timeLeft-=dt;
  const enemiesAlive=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
  if(enemiesAlive)pvpNextWaveAt=0;
  else if(pvpLastWave<PVP_ENEMY_WAVES.length-1){
    if(!pvpNextWaveAt)pvpNextWaveAt=now+1200;
    else if(now>=pvpNextWaveAt)pvpSpawnWave(pvpLastWave+1);
  }
- const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
- const humans=state.players.filter(p=>p.human).length;
- const aliveNPCs=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
- if(state.timeLeft<=0||aliveHeroes.length===0||
-    (humans>1&&aliveHeroes.length===1)||
-    (humans===1&&!aliveNPCs&&pvpLastWave===PVP_ENEMY_WAVES.length-1))endPVPRound();
+
+ const humans=state.players.filter(p=>p.human);
+ // Solo + aliados NPC: a segunda morte do jogador encerra a PARTIDA.
+ if(humans.length===1&&humans[0].pvpEliminated){
+   pvpLastEnemyClan=state.entities.find(e=>e.alive&&e.team==='pvp-enemy')?.clan||pvpLastEnemyClan;
+   state.running=false;state.phase='between';finishGame('',pvpResult('enemy'));return;
+ }
+ // Online: um jogador eliminado continua espectando. A rodada só é perdida quando
+ // TODOS os jogadores reais já gastaram a vida extra.
+ if(humans.length>1&&!humans.some(p=>pvpHumanStillInRound(p))){
+   endPVPRound('enemy');return;
+ }
+ // O ciclo completo de quatro grupos define uma rodada. Só termina após o último grupo.
+ if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound();
  }catch(err){pvpReportError('simulação',err)}
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
+ const localPlayer=state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||null;
+ const reviveRemaining=Math.max(0,(Number(localPlayer?.pvpReviveAt)||0)-now);
  const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
- perfSetText($('#pvpHP'),me?Math.ceil(Math.max(0,me.hp))+'/'+me.maxHp:'0/0');
+ perfSetText($('#pvpHP'),me?Math.ceil(Math.max(0,me.hp))+'/'+me.maxHp:
+   localPlayer?.pvpEliminated?'ELIMINADO':reviveRemaining>0?'REVIVE '+Math.ceil(reviveRemaining/1000)+'s':'0/0');
  perfSetText($('#pvpShield'),me?Math.ceil(Math.max(0,me.shield))+'/'+me.maxShield:'0/0');
  perfSetText($('#pvpRoundCounter'),state.round+'/'+state.rounds);
  perfSetText(hudMainPerfEl,state.round+'/'+state.rounds);
  perfSetText(hudSubPerfEl,'⚔ '+aliveHeroes.length+'  💀 '+state.entities.filter(e=>e.alive&&e.team==='pvp-enemy').length);
- perfSetText(timerPerfEl,fmt(state.timeLeft));perfSetText(aliveCountPerfEl,'');
+ perfSetText(timerPerfEl,'');perfSetText(aliveCountPerfEl,'');
  const hero=PVP_HERO_BY_ID[me?.pvpHero]||PVP_HEROES[0];
  for(const button of $$('#pvpCombatHud [data-pvp-action]')){
    const action=button.dataset.pvpAction,available=action==='attack'||(action==='power'?hero.power:hero.special);
