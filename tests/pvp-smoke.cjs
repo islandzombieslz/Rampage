@@ -132,18 +132,27 @@ assert(hero.pvpWarriorChargeUntil>specialAt&&hero.pvpWarriorChargeHitIds.length=
 foe.x=hero.x+55;foe.y=hero.y;foe.alive=true;
 const foeBefore=foe.hp+foe.shield;
 run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
-const chargeDamage=foeBefore-(foe.hp+foe.shield);
-assert(chargeDamage>=50&&chargeDamage<=70,'charge contact deals 50-70 damage');
+let chargeDamage=foeBefore-(foe.hp+foe.shield);
+assert(chargeDamage>=50&&chargeDamage<=70,'first Warrior special contact deals 50-70 damage');
+assert.equal(damageCalls.at(-1).options.knockForce,0,'first four Warrior special hits keep the target in the sequence');
+for(let hit=2;hit<=5;hit++){
+  now+=90;
+  run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
+}
+chargeDamage=foeBefore-(foe.hp+foe.shield);
+assert(chargeDamage>=250&&chargeDamage<=350,'Warrior special deals five consecutive 50-70 damage hits');
+assert.equal(hero.pvpWarriorChargeHitState[foe.id].count,5,'same enemy receives exactly five special hits');
 const specialHit=damageCalls.at(-1);
-assert.equal(specialHit.options.knockForce,560,'Warrior special uses its stronger PvP-only shove');
-assert.equal(specialHit.options.tilt,20,'Warrior special uses a stronger impact tilt');
+assert.equal(specialHit.options.knockForce,560,'fifth Warrior special hit uses the stronger PvP-only shove');
+assert.equal(specialHit.options.tilt,20,'final Warrior special hit uses the stronger impact tilt');
 assert.equal(foe.hitTilt,20,'Warrior special leaves the target visibly tilted');
-assert(Math.hypot(foe.knockVX,foe.knockVY)>550,'Warrior special overrides the target with a strong lateral velocity');
+assert(Math.hypot(foe.knockVX,foe.knockVY)>550,'Warrior special finishes with a strong lateral velocity');
 assert(html.includes('pvpWarriorSpecialCinematic')&&html.includes('specialCameraZoom:1.12')&&html.includes('specialSceneDim:.26'),
  'Warrior special includes PvP-only linear zoom and scene dimming');
-const afterFirstCharge=foe.hp+foe.shield;
+const afterFifthCharge=foe.hp+foe.shield;
+now+=90;
 run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
-assert.equal(foe.hp+foe.shield,afterFirstCharge,'same enemy is damaged once per special pass');
+assert.equal(foe.hp+foe.shield,afterFifthCharge,'same enemy is capped at five hits per special');
 assert(html.includes("target.pvpHero==='warrior'")&&html.includes('amount=2')&&html.includes('knockForce:0,knockTime:0'),
  'Warrior special converts incoming PvP hits to 2 damage with no knockback');
 assert(html.includes("Number(a.pvpWarriorChargeUntil)>now||Number(b.pvpWarriorChargeUntil)>now"),
@@ -202,7 +211,11 @@ assert.equal(power.pvpAimAngle,Math.PI/2,'manual direction does not oscillate');
 assert.equal(run('pvpCanPower(state.entities.find(e=>e.id==='+hero.id+'))'),false);
 
 assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
-assert(html.includes('PVP_BASIC_HOLD_REPEAT_MS=300'),'holding attack must repeat PvP basics');
+assert(html.includes('PVP_BASIC_HOLD_REPEAT_MS=300'),'holding attack must keep PvP combo continuity');
+assert(html.includes("?220\n      :PVP_BASIC_HOLD_REPEAT_MS"),'holding Warrior attack must enter combo without repeated taps');
+assert(html.includes('comboRange:148'),'Warrior combo has the slightly larger requested hitbox');
+assert(html.includes('top:-43px'),'Warrior combo GIF is shifted slightly upward');
+assert(html.includes('img===previousImg&&previous!==desired'),'Warrior sprite handoff keeps the previous frame visible during GIF changes');
 assert(html.includes("pvpControls.aimPointerId!==event.pointerId"),'flame aim must use a dedicated pointer');
 assert(html.includes("joystick.pointerId===event.pointerId"),'joystick pointer must never steer the flame');
 assert(html.includes("const baseZoom=pvpCameraZoom(vw,vh)")&&html.includes("specialCameraZoom"),'PvP camera keeps its base zoom and adds the Warrior special cinematic');
