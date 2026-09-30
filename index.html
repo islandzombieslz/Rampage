@@ -849,8 +849,8 @@ html,body{
   width:76px;height:90px;left:1px;top:0;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo{
-  /* Combo maior para destacar a sequência sem alterar colisão ou alcance. */
-  width:148px;height:164px;left:-35px;top:-36px;
+  /* Combo maior e levemente mais alto; colisão continua independente do sprite. */
+  width:148px;height:164px;left:-35px;top:-43px;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special{
   width:126px;height:144px;left:-24px;top:-26px;
@@ -6371,11 +6371,11 @@ attackBtn.addEventListener('pointerdown',e=>{
     pvpAttackHoldPointerId=e.pointerId;
     pvpAttackHoldDidRepeat=false;
     attackBtn.setPointerCapture?.(e.pointerId);
-    // Um toque curto executa SOMENTE o ataque único. Se continuar segurando,
-    // a próxima entrada chega no fim do próprio GIF, sem voltar ao idle no meio.
+    // Um toque curto continua sendo ataque único. Se o Guerreiro permanecer
+    // segurando, a segunda entrada chega cedo e transforma a ação em combo.
     const holdHero=pvpLocalHero();
     const firstRepeatDelay=pvpIsWarriorHero(holdHero)
-      ?Math.max(180,pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs)-35)
+      ?220
       :PVP_BASIC_HOLD_REPEAT_MS;
     pvpAttackHoldNextAt=performance.now()+firstRepeatDelay;
     pvpTriggerAttack('attack');
@@ -8389,10 +8389,10 @@ const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax
  meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
 const PVP_WARRIOR=Object.freeze({
- comboChainMs:950,comboContinueMs:460,comboRange:136,
+ comboChainMs:950,comboContinueMs:460,comboRange:148,
  singleFallbackMs:650,comboFallbackMs:1350,specialFallbackMs:1800,deathFallbackMs:1400,
  specialUnlockHits:5,specialCooldownMs:20000,specialSpeedMultiplier:1.45,
- specialDamageMin:50,specialDamageMax:70,specialHeal:30,
+ specialDamageMin:50,specialDamageMax:70,specialDamageHits:5,specialHitIntervalMs:90,specialHeal:30,
  specialCameraZoom:1.12,specialSceneDim:.26,
  specialKnockForce:560,specialKnockTime:.34,specialHitTilt:20,
  deathFallMs:720,deathFadeMs:340
@@ -8507,7 +8507,7 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerStartedAt=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
  e.pvpWarriorSingleUntil=0;e.pvpWarriorSingleSerial=0;e.pvpWarriorLastBasicAt=0;
  e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboSerial=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=0;
- e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;e.pvpWarriorChargeAngle=0;e.pvpWarriorChargeHitIds=[];
+ e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;e.pvpWarriorChargeAngle=0;e.pvpWarriorChargeHitIds=[];e.pvpWarriorChargeHitState={};
  e.pvpWarriorDeathGifAt=0;e.pvpWarriorDeathUntil=0;e.pvpWarriorDeathSerial=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
@@ -8894,7 +8894,7 @@ function pvpStartWarriorSpecial(e,now=performance.now()){
  e.pvpWarriorComboUntil=0;e.pvpWarriorComboRequestUntil=0;e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpWarriorChargeStartedAt=now;e.pvpWarriorChargeUntil=now+duration;
  e.pvpWarriorChargeAngle=Number.isFinite(Number(e.heading))?Number(e.heading):(e.facing<0?Math.PI:0);
- e.pvpWarriorChargeHitIds=[];
+ e.pvpWarriorChargeHitIds=[];e.pvpWarriorChargeHitState={};
  e.pvpActionUntil=e.pvpWarriorChargeUntil;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;
  e.pvpSpecialBodyDuration=duration;e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1;
  e.pvpSpecialFxUntil=0;e.pvpSpecialReadyAt=now+PVP_WARRIOR.specialCooldownMs;
@@ -8908,7 +8908,7 @@ function pvpStartWarriorSpecial(e,now=performance.now()){
 function pvpTickWarriorSpecial(e,input,dt,now=performance.now()){
  if(!pvpIsWarriorHero(e)||!e.alive||!(Number(e.pvpWarriorChargeUntil)>now)){
    if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>0&&now>=Number(e.pvpWarriorChargeUntil)){
-     e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeHitIds=[];e.moving=false;
+     e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeHitIds=[];e.pvpWarriorChargeHitState={};e.moving=false;
      if(Number(e.pvpActionUntil)<=now)e.pvpActionUntil=0;
    }
    return false;
@@ -8925,25 +8925,36 @@ function pvpTickWarriorSpecial(e,input,dt,now=performance.now()){
  e.heading=angle;e.facing=Math.cos(angle)<0?-1:1;e.moving=true;
  e.knockTime=0;e.knockVX=0;e.knockVY=0;
  const touched=e.pvpWarriorChargeHitIds||(e.pvpWarriorChargeHitIds=[]);
+ const hitState=e.pvpWarriorChargeHitState||(e.pvpWarriorChargeHitState={});
  for(const target of state.entities){
-   if(!target.alive||target===e||target.team===e.team||touched.includes(target.id))continue;
-   if(Math.hypot(target.x-e.x,target.y-e.y)>e.r+target.r+10)continue;
+   if(!target.alive||target===e||target.team===e.team)continue;
+   const contact=Math.hypot(target.x-e.x,target.y-e.y)<=e.r+target.r+10;
+   if(contact&&!hitState[target.id]){
+     hitState[target.id]={count:0,nextAt:now};
+     if(!touched.includes(target.id))touched.push(target.id);
+   }
+   const sequence=hitState[target.id];
+   if(!sequence||sequence.count>=PVP_WARRIOR.specialDamageHits||now<sequence.nextAt)continue;
    const damage=PVP_WARRIOR.specialDamageMin+Math.floor(Math.random()*(PVP_WARRIOR.specialDamageMax-PVP_WARRIOR.specialDamageMin+1));
-   // A corrida "abre caminho": quem é tocado é arremessado para um dos lados
-   // da trajetória e inclina mais forte no impacto.
-   const sideAxisX=-Math.sin(angle),sideAxisY=Math.cos(angle);
-   const sideDot=(target.x-e.x)*sideAxisX+(target.y-e.y)*sideAxisY;
-   const side=sideDot===0?(((Number(target.id)||0)&1)?1:-1):(sideDot>0?1:-1);
-   let knockX=sideAxisX*side,knockY=sideAxisY*side;
-   // Em corrida quase horizontal, mantém um componente X pequeno para a inclinação
-   // visual também indicar claramente para que lado o inimigo foi jogado.
-   if(Math.abs(knockX)<.20)knockX=.20*side;
-   const knockLen=Math.hypot(knockX,knockY)||1;knockX/=knockLen;knockY/=knockLen;
-   pvpCombatHit(target,e,damage,{
-     knockForce:PVP_WARRIOR.specialKnockForce,knockTime:PVP_WARRIOR.specialKnockTime,
-     tilt:PVP_WARRIOR.specialHitTilt,knockDirX:knockX,knockDirY:knockY,forceKnockback:true
-   });
-   touched.push(target.id);
+   sequence.count++;
+   sequence.nextAt=now+PVP_WARRIOR.specialHitIntervalMs;
+   const finalHit=sequence.count>=PVP_WARRIOR.specialDamageHits;
+   if(finalHit){
+     // O quinto impacto conclui a sequência com o arremesso lateral forte.
+     const sideAxisX=-Math.sin(angle),sideAxisY=Math.cos(angle);
+     const sideDot=(target.x-e.x)*sideAxisX+(target.y-e.y)*sideAxisY;
+     const side=sideDot===0?(((Number(target.id)||0)&1)?1:-1):(sideDot>0?1:-1);
+     let knockX=sideAxisX*side,knockY=sideAxisY*side;
+     if(Math.abs(knockX)<.20)knockX=.20*side;
+     const knockLen=Math.hypot(knockX,knockY)||1;knockX/=knockLen;knockY/=knockLen;
+     pvpCombatHit(target,e,damage,{
+       knockForce:PVP_WARRIOR.specialKnockForce,knockTime:PVP_WARRIOR.specialKnockTime,
+       tilt:PVP_WARRIOR.specialHitTilt,knockDirX:knockX,knockDirY:knockY,forceKnockback:true
+     });
+   }else{
+     // Os quatro primeiros danos mantêm o alvo na sequência; o arremesso fica para o final.
+     pvpCombatHit(target,e,damage,{knockForce:0,knockTime:0,tilt:4});
+   }
  }
  return true;
 }
@@ -12424,21 +12435,24 @@ function setEntitySpriteState(el,desired){
  el._spriteSwitchToken=token;
  el.dataset.anim=desired;
 
+ const previousImg=entitySpriteForState(el,previous);
  for(const [img,stateName] of sprites){
    if(stateName===desired){
      img.style.display='block';
      img.style.opacity='1';
      img.classList.add('active-sprite');
+   }else if(strictPvpWarrior&&img===previousImg&&previous!==desired){
+     // Mantém o frame anterior por uma única pintura. Assim o navegador nunca
+     // mostra um quadro vazio enquanto o novo GIF local começa a decodificar.
+     img.style.display='block';
+     img.style.opacity='1';
+     img.classList.add('active-sprite');
    }else if(strictPvpWarrior||stateName!==previous){
-     // No Guerreiro PvP a troca é um corte atômico: o sprite anterior some
-     // no MESMO frame em que o próximo entra. Isso impede idle/ataque/combo/
-     // especial de aparecerem um sobre o outro.
      img.style.display='none';
      img.style.opacity='0';
      img.classList.remove('active-sprite');
    }
  }
- if(strictPvpWarrior)enforcePvpWarriorSpriteExclusive(el,desired);
 
  const finalize=()=>{
    if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
@@ -12465,7 +12479,16 @@ function setEntitySpriteState(el,desired){
  const settle=()=>requestAnimationFrame(finalize);
 
  if(!desiredImg)finalize();
- else if(desiredImg.complete&&desiredImg.naturalWidth>0)settle();
+ else if(strictPvpWarrior){
+   // Mesmo já estando em cache, deixa pelo menos um frame de sobreposição.
+   // Em carga fria, o load conclui a troca; o timeout evita prender o fallback.
+   if(desiredImg.complete&&desiredImg.naturalWidth>0)settle();
+   else{
+     desiredImg.addEventListener('load',settle,{once:true});
+     desiredImg.addEventListener('error',settle,{once:true});
+     setTimeout(settle,250);
+   }
+ }else if(desiredImg.complete&&desiredImg.naturalWidth>0)settle();
  else{
    desiredImg.addEventListener('load',settle,{once:true});
    desiredImg.addEventListener('error',settle,{once:true});
