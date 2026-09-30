@@ -845,12 +845,12 @@ html,body{
 /* Os novos GIFs têm canvases/proporções diferentes. Cada estado recebe sua
    própria caixa visual para manter o Guerreiro com tamanho aparente estável. */
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack{
-  /* O conteúdo deste GIF ocupa mais canvas que o idle; caixa quase igual ao
-     Guerreiro parado para o tamanho aparente não crescer durante o golpe. */
-  width:84px;height:99px;left:-3px;top:-4px;
+  /* Ataque único um pouco menor para ficar proporcional ao idle. */
+  width:76px;height:90px;left:1px;top:0;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo{
-  width:132px;height:146px;left:-27px;top:-27px;
+  /* Combo maior para destacar a sequência sem alterar colisão ou alcance. */
+  width:148px;height:164px;left:-35px;top:-36px;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special{
   width:126px;height:144px;left:-24px;top:-26px;
@@ -3919,7 +3919,7 @@ setTimeout(()=>{anubisAttackAssetsReady=true},4000);
 setTimeout(()=>{brownAttackAssetsReady=true},12000);
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function screen(id){ $$('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');if(xp)xp.hidden=id==='gameScreen'; if(id!=='gameScreen'&&typeof refreshAccountXP==='function')refreshAccountXP(); }
+function screen(id){ $('.screen').forEach(e=>{e.classList.remove('active');e.style.display='none'}); const el=$('#'+id);el.classList.add('active');el.style.display='flex'; const xp=$('#accountXpHud');const showXpInPvp=id==='gameScreen'&&state.mode==='pvp';if(xp)xp.hidden=id==='gameScreen'&&!showXpInPvp; if((id!=='gameScreen'||showXpInPvp)&&typeof refreshAccountXP==='function')refreshAccountXP(); }
 const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScreen','lobbyScreen','clanScreen']);
 
 /* ==================== TRILHA SONORA ==================== */
@@ -4332,7 +4332,7 @@ function showAccountXPReward(){
 function renderAccountXP(totalXp=accountProgress.totalXp,immediate=false){
  const hud=$('#accountXpHud'),bar=$('#accountXpFill'),label=$('#accountXpLevel'),counter=$('#accountXpText');
  if(!hud||!bar||!label||!counter)return;
- hud.hidden=isGameScreenVisible();
+ hud.hidden=isGameScreenVisible()&&state.mode!=='pvp';
  updateAccountXPSyncStatus();
  if(totalXp===null||!accountProgress.verified){
    accountProgress.animation++;
@@ -9410,10 +9410,17 @@ function startPVP(){
 function pvpResult(winnerId){
  const humans=state.players.filter(p=>p.human),winner=state.players.find(p=>p.id===winnerId);
  const pvp=humans.length>1,awards={};
+ const rewardByDifficulty={
+   easy:{loss:50,winMultiplier:1},
+   normal:{loss:70,winMultiplier:1.25},
+   hard:{loss:100,winMultiplier:1.5}
+ };
+ const rewardCfg=rewardByDifficulty[state.difficulty]||rewardByDifficulty.easy;
  for(const player of humans){
-   if(winnerId!==player.id){awards[player.id]=50;continue}
+   if(winnerId!==player.id){awards[player.id]=rewardCfg.loss;continue}
    const stats=matchStatsFor(player.id),damage=clamp(stats.damage/1200,0,1);
-   const low=pvp?200:100,high=pvp?400:200;
+   const baseLow=pvp?200:100,baseHigh=pvp?400:200;
+   const low=Math.round(baseLow*rewardCfg.winMultiplier),high=Math.round(baseHigh*rewardCfg.winMultiplier);
    awards[player.id]=Math.round(low+(high-low)*damage);
  }
  return {id:state.matchId,mode:'pvp',winnerId:winnerId||null,winnerName:winner?.name||'',
