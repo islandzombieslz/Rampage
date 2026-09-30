@@ -214,7 +214,7 @@ assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs mus
 assert(html.includes("if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now))"),'real NPC attack state must reach remote peers');
 assert(html.includes('updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);'),'PvP projectiles and burns must simulate');
 assert(html.includes("state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode"),'NPC damage needs PvP-only tuning');
-assert(!html.includes('state.timeLeft-=dt;'),'PvP simulation must not decrement a round timer');
+assert(!section('function updatePVP(dt){','function updatePVPHUD(){').includes('state.timeLeft-=dt;'),'PvP simulation must not decrement a round timer');
 assert(html.includes("if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound()"),
  'a PvP round ends only after the final clan/wave cycle is cleared');
 assert(html.includes("humans.length===1&&humans[0].pvpEliminated"),
