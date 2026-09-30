@@ -832,6 +832,16 @@ html,body{
   opacity:0 !important;
   visibility:hidden !important;
 }
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-death-gif .entity-facing{
+  animation:none !important;
+  transform:scaleX(var(--face)) !important;
+  transform-origin:50% 88%;
+  filter:none !important;
+}
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-death{object-fit:contain}
 
 
 /* Regeneração entre rodadas no PVE */
@@ -11841,7 +11851,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
  }else{
    const egypt=e.type==='warrior'&&e.clan==='egypt';
+   const pvpWarrior=state.mode==='pvp'&&e.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female';
    if(egypt)el.classList.add('egypt-unit');
+   if(pvpWarrior)el.classList.add('pvp-warrior-hero');
    if(e.egyptSummoned)el.classList.add('egypt-summoned-spawn');
    const bodyIdle=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorIdle:ASSETS.femaleIdle):(egypt?ASSETS.egyptWarriorIdle:ASSETS.idle);
    const bodyWalk=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorWalk:ASSETS.femaleWalk):(egypt?ASSETS.egyptWarriorWalk:ASSETS.walk);
@@ -11852,6 +11864,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        <!-- Guerreiro/Guerreira compartilham toda a lógica; clã troca somente os sprites. -->
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
        <img class="entity-body entity-walk" draggable="false" style="opacity:0">
+       ${pvpWarrior?`<img class="entity-body entity-pvp-warrior-attack" data-asset-key="pvpWarriorAttack" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-combo" data-asset-key="pvpWarriorCombo" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-special" data-asset-key="pvpWarriorSpecial" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-death" data-asset-key="pvpWarriorDeath" draggable="false" style="opacity:0">`:''}
      </div>
      <div class="entity-weapon-facing">
        <div class="entity-slash"></div>
@@ -11874,6 +11890,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._weaponFacing=el.querySelector('.entity-weapon-facing');
  el._idle=el.querySelector('.entity-idle');
  el._walk=el.querySelector('.entity-walk');
+ el._pvpWarriorAttack=el.querySelector('.entity-pvp-warrior-attack');
+ el._pvpWarriorCombo=el.querySelector('.entity-pvp-warrior-combo');
+ el._pvpWarriorSpecial=el.querySelector('.entity-pvp-warrior-special');
+ el._pvpWarriorDeath=el.querySelector('.entity-pvp-warrior-death');
  el._sword=el.querySelector('.entity-sword');
  el._slash=el.querySelector('.entity-slash');
  el._poseidonNormal=el.querySelector('.entity-poseidon-normal');
@@ -11930,7 +11950,12 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  else if(e.type==='mage'){const egypt=e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleMageIdle':'femaleMageIdle'):(egypt?'egyptMageIdle':'mageIdle'),walk:e.variant==='female'?(egypt?'egyptFemaleMageWalk':'femaleMageWalk'):(egypt?'egyptMageWalk':'mageWalk'),special:e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial')}}
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
- else {const egypt=e.type==='warrior'&&e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleWarriorIdle':'femaleIdle'):(egypt?'egyptWarriorIdle':'idle'),walk:e.variant==='female'?(egypt?'egyptFemaleWarriorWalk':'femaleWalk'):(egypt?'egyptWarriorWalk':'walk')}};
+ else {
+   const egypt=e.type==='warrior'&&e.clan==='egypt';
+   const pvpWarrior=state.mode==='pvp'&&e.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female';
+   el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleWarriorIdle':'femaleIdle'):(egypt?'egyptWarriorIdle':'idle'),walk:e.variant==='female'?(egypt?'egyptFemaleWarriorWalk':'femaleWalk'):(egypt?'egyptWarriorWalk':'walk')};
+   if(pvpWarrior)Object.assign(el._gifKeys,{warriorSingle:'pvpWarriorAttack',warriorCombo:'pvpWarriorCombo',warriorSpecial:'pvpWarriorSpecial',warriorDeath:'pvpWarriorDeath'});
+ };
  for(const img of el.querySelectorAll('img'))img.decoding='async';
  // O nó nasce em idle/ground. O segundo loop pesado só recebe src quando virar ativo.
  if(el._walk)stopGif(el._walk);
@@ -11941,7 +11966,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._poseidonNormal,el._poseidonWaveCast,el._poseidonSummonCast,el._seahorseAttack,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._pvpWarriorAttack,el._pvpWarriorCombo,el._pvpWarriorSpecial,el._pvpWarriorDeath,el._poseidonNormal,el._poseidonWaveCast,el._poseidonSummonCast,el._seahorseAttack,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -11987,6 +12012,10 @@ function entitySpriteForState(el,stateName){
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
  if(stateName==='attack')return (state.mode==='pvp'?el._anubisMelee:null)||el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(state.mode==='pvp'&&stateName==='warriorSingle')return el._pvpWarriorAttack;
+ if(state.mode==='pvp'&&stateName==='warriorCombo')return el._pvpWarriorCombo;
+ if(state.mode==='pvp'&&stateName==='warriorSpecial')return el._pvpWarriorSpecial;
+ if(state.mode==='pvp'&&stateName==='warriorDeath')return el._pvpWarriorDeath;
  if(state.mode==='pvp'&&stateName==='anubisRanged')return el._anubisRanged;
  if(stateName==='waveCast')return el._poseidonWaveCast;
  if(stateName==='summonCast')return el._poseidonSummonCast;
@@ -12079,6 +12108,7 @@ function setEntitySpriteState(el,desired){
    [el._idle,'idle'],[el._walk,'walk'],[el._poseidonNormal,'attack'],[el._seahorseAttack,'attack'],
     [el._poseidonWaveCast,'waveCast'],[el._poseidonSummonCast,'summonCast'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
    [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
+   [el._pvpWarriorAttack,'warriorSingle'],[el._pvpWarriorCombo,'warriorCombo'],[el._pvpWarriorSpecial,'warriorSpecial'],[el._pvpWarriorDeath,'warriorDeath'],
    [el._kingSpecial,'special'],[el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ].filter(entry=>!!entry[0]));
  const token=(el._spriteSwitchToken||0)+1;
