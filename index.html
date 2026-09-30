@@ -9267,7 +9267,7 @@ function pvpBeginAimPointer(event){
  const me=pvpLocalHero();if(!me?.alive||!(me.pvpPowerUntil>performance.now()))return false;
  if(pvpControls.aimPointerId!==null&&pvpControls.aimPointerId!==event.pointerId)return false;
  pvpControls.aimPointerId=event.pointerId;
- pvpGameScreen.setPointerCapture?.(event.pointerId);
+ try{pvpGameScreen.setPointerCapture?.(event.pointerId)}catch(_){}
  return pvpAimFromPointer(event);
 }
 function pvpEndAimPointer(event){
@@ -9296,7 +9296,7 @@ pvpGameScreen.addEventListener('pointerdown',event=>{
  if(pvpControls.targetId===target.id){
    if(pvpTriggerAttack('power')){
      pvpControls.aimPointerId=event.pointerId;
-     pvpGameScreen.setPointerCapture?.(event.pointerId);
+     try{pvpGameScreen.setPointerCapture?.(event.pointerId)}catch(_){}
      pvpAimFromPointer(event);
    }
  }else pvpControls.targetId=target.id;
