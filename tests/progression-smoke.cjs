@@ -61,6 +61,33 @@ assert.equal(game.matchResultMessage(result,'u1'),'Você venceu!');
 result=game.makeMatchResult('enemy');
 assert.equal(result.awards.u1,50);
 
+// PvP keeps the solo/multiplayer reward bands, scaled only by selected difficulty.
+const pvpRewardState={mode:'pvp',difficulty:'easy',matchId:'m_pvp_rewards',players:[
+ {id:'u1',name:'Alice',clan:'warriors',human:true}
+],matchStats:{u1:{damage:1200}}};
+const pvpRewards=vm.createContext({
+ Math,state:pvpRewardState,pvpLastEnemyClan:'egypt',
+ clamp:(value,low,high)=>Math.max(low,Math.min(high,value)),
+ matchStatsFor:uid=>pvpRewardState.matchStats[uid]||{damage:0}
+});
+vm.runInContext(section('function pvpResult(', 'function endPVPRound('),pvpRewards);
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,200,'easy solo max unchanged');
+assert.equal(pvpRewards.pvpResult('enemy').awards.u1,50,'easy loss');
+pvpRewardState.difficulty='normal';
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,250,'normal solo win +25%');
+assert.equal(pvpRewards.pvpResult('enemy').awards.u1,70,'normal loss');
+pvpRewardState.difficulty='hard';
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,300,'hard solo win +50%');
+assert.equal(pvpRewards.pvpResult('enemy').awards.u1,100,'hard loss');
+pvpRewardState.players.push({id:'u2',name:'Beto',clan:'water',human:true});
+pvpRewardState.matchStats.u2={damage:0};
+pvpRewardState.difficulty='easy';
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,400,'easy multiplayer max unchanged');
+pvpRewardState.difficulty='normal';
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,500,'normal multiplayer max +25%');
+pvpRewardState.difficulty='hard';
+assert.equal(pvpRewards.pvpResult('u1').awards.u1,600,'hard multiplayer max +50%');
+
 const goalState={mode:'war',phase:'combat',round:1,players:[{id:'u1',bonusGems:0}],warGoalSerial:0,warGoalEvents:[]};
 const goals=vm.createContext({Math,Object,state:goalState,
  $:()=>null,localWarTeamId:()=>null});
@@ -79,7 +106,7 @@ assert.equal(goalState.warGoalEvents.at(-1).serial,4);
 assert(html.includes("F.runTransaction(F.ref(F.firebaseDb,'profiles/'+uid),current=>"),'Firebase atomic XP claim');
 assert(html.includes("'profiles/'+uid"),'independent profile location');
 assert(html.includes("ap.settled.add(id)"),'prevent repeat claims in cloud');
-assert(html.includes("id==='gameScreen'"),'XP HUD not displayed during matches');
+assert(html.includes("showXpInPvp"),'XP HUD visibility must distinguish PvP from other matches');
 assert(html.includes('id="warGoalToasts"'),'goal toast container');
 assert(!/<section id="gameScreen" class="screen active"/.test(html),'hidden game must not be marked active on boot');
 assert(/<div id="accountXpHud" aria-label="Nível da conta">/.test(html),'XP HUD must start visible');
@@ -88,8 +115,9 @@ assert(html.includes('firebaseAccountUIStarted=true'),'register authentication l
 const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
  id,style:{display:'none'},classList:{classes:new Set(),add(value){this.classes.add(value)},remove(value){this.classes.delete(value)},contains(value){return this.classes.has(value)}}
 }));
-const xpHud={hidden:true};
+const xpHud={hidden:true},navState={mode:'war'};
 const screenCtx=vm.createContext({
+ state:navState,
  $:selector=>selector==='#accountXpHud'?xpHud:screens.find(item=>selector==='#'+item.id),
  [String.fromCharCode(36,36)]:selector=>selector==='.screen'?screens:[],
  window:{FirebaseBridge:{firebaseAuth:{currentUser:{uid:'test-user'}}}}
@@ -103,7 +131,10 @@ screenCtx.screen('joinScreen');
 assert.equal(screens.filter(item=>item.style.display==='flex').length,1,'previous menu must close');
 assert.equal(screens.find(item=>item.id==='joinScreen').style.display,'flex','join code menu opens');
 screenCtx.screen('gameScreen');
-assert.equal(xpHud.hidden,true,'level indicator hidden during match');
+assert.equal(xpHud.hidden,true,'level indicator stays hidden in non-PvP matches');
+navState.mode='pvp';
+screenCtx.screen('gameScreen');
+assert.equal(xpHud.hidden,false,'level indicator visible during PvP');
 console.log('Level thresholds, match rewards, goals and menu navigation: PASS');
 
 async function testCloudOnlyAccountProgress(){
@@ -136,8 +167,9 @@ async function testCloudOnlyAccountProgress(){
  for(const id of ['accountXpHud','accountXpFill','accountXpLevel','accountXpText','accountXpSync','accountXpReward','accountStatus'])
    mockNodes['#'+id]={style:{},dataset:{},hidden:false,textContent:'',classList:{add(){},remove(){}}};
  mockNodes['#gameScreen']={style:{display:'none'}};
+ const cloudState={mode:'war'};
  const ctx=vm.createContext({
-   Math,Object,Date,Number,String,JSON,localStorage,console,
+   Math,Object,Date,Number,String,JSON,localStorage,console,state:cloudState,
    window:{addEventListener(){},FirebaseBridge:{firebaseAuth:F.firebaseAuth}},
    document:{addEventListener(){},hidden:false},
    $:selector=>mockNodes[selector],
@@ -200,7 +232,10 @@ async function testCloudOnlyAccountProgress(){
 
  mockNodes['#gameScreen'].style.display='flex';
  ctx.refreshAccountXP();
- assert.equal(mockNodes['#accountXpHud'].hidden,true,'hide HUD only in visible game');
+ assert.equal(mockNodes['#accountXpHud'].hidden,true,'hide HUD in visible non-PvP game');
+ cloudState.mode='pvp';
+ ctx.refreshAccountXP();
+ assert.equal(mockNodes['#accountXpHud'].hidden,false,'keep live account XP HUD visible in PvP');
  mockNodes['#gameScreen'].style.display='none';
  ctx.refreshAccountXP();
  assert.equal(mockNodes['#accountXpHud'].hidden,false);
