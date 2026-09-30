@@ -832,6 +832,16 @@ html,body{
   opacity:0 !important;
   visibility:hidden !important;
 }
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-death-gif .entity-facing{
+  animation:none !important;
+  transform:scaleX(var(--face)) !important;
+  transform-origin:50% 88%;
+  filter:none !important;
+}
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-special,
+#gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-death{object-fit:contain}
 
 
 /* Regeneração entre rodadas no PVE */
@@ -3380,6 +3390,11 @@ const ASSETS = {
   idle:'assets/warrior/guerreiro-parado.gif',
   walk:'assets/warrior/guerreiro-andando.gif',
   sword:'assets/warrior/espada-guerreiro.png',
+  // PvP — novas animações exclusivas do Guerreiro homem.
+  pvpWarriorDeath:'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif',
+  pvpWarriorAttack:'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif',
+  pvpWarriorCombo:'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif',
+  pvpWarriorSpecial:'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif',
 
   // Variação feminina da tropa Guerreiro
   femaleIdle:'assets/warrior/guerreira-parada.gif',
@@ -4783,8 +4798,17 @@ function serializeGame(){
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
+         out.pvpWarriorSingleRemainingMs=Math.max(0,(Number(e.pvpWarriorSingleUntil)||0)-now);
+         out.pvpWarriorComboRemainingMs=Math.max(0,(Number(e.pvpWarriorComboUntil)||0)-now);
+         out.pvpWarriorComboElapsedMs=Math.max(0,now-(Number(e.pvpWarriorComboStartedAt)||now));
+         out.pvpWarriorChargeRemainingMs=Math.max(0,(Number(e.pvpWarriorChargeUntil)||0)-now);
+         out.pvpWarriorChargeElapsedMs=Math.max(0,now-(Number(e.pvpWarriorChargeStartedAt)||now));
+         out.pvpWarriorDeathGifRemainingMs=Math.max(0,(Number(e.pvpWarriorDeathGifAt)||0)-now);
+         out.pvpWarriorDeathRemainingMs=Math.max(0,(Number(e.pvpWarriorDeathUntil)||0)-now);
          delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;delete out.pvpSpecialFxStartedAt;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
+         delete out.pvpWarriorSingleUntil;delete out.pvpWarriorComboUntil;delete out.pvpWarriorComboStartedAt;
+         delete out.pvpWarriorChargeUntil;delete out.pvpWarriorChargeStartedAt;delete out.pvpWarriorDeathGifAt;delete out.pvpWarriorDeathUntil;
        }
        if(out.pendingMageAttack){
          out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
@@ -4943,6 +4967,13 @@ function applyRemoteGame(game){
          out.pvpPowerVisualUntil=Math.min(old.pvpPowerVisualUntil,out.pvpPowerVisualUntil);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
+       out.pvpWarriorSingleUntil=localNow+Math.max(0,Number(out.pvpWarriorSingleRemainingMs)||0);
+       out.pvpWarriorComboUntil=localNow+Math.max(0,Number(out.pvpWarriorComboRemainingMs)||0);
+       out.pvpWarriorComboStartedAt=localNow-Math.max(0,Number(out.pvpWarriorComboElapsedMs)||0);
+       out.pvpWarriorChargeUntil=localNow+Math.max(0,Number(out.pvpWarriorChargeRemainingMs)||0);
+       out.pvpWarriorChargeStartedAt=localNow-Math.max(0,Number(out.pvpWarriorChargeElapsedMs)||0);
+       out.pvpWarriorDeathGifAt=localNow+Math.max(0,Number(out.pvpWarriorDeathGifRemainingMs)||0);
+       out.pvpWarriorDeathUntil=localNow+Math.max(0,Number(out.pvpWarriorDeathRemainingMs)||0);
      }
      const isisImmuneRemaining=Math.max(0,Number(out.isisDamageImmuneRemainingMs)||0);
      out.isisDamageImmuneUntil=localNow+isisImmuneRemaining;
@@ -5675,7 +5706,7 @@ function renderWarLobbySettings(){
 /* ==================== PVP: LOBBY AND HERO SELECTION ====================
    This registry and its functions are never called by mode='war'. */
 const PVP_HEROES=Object.freeze([
- {id:'warrior',name:'Guerreiro',type:'warrior',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-guerreiros.png',power:false,special:false},
+ {id:'warrior',name:'Guerreiro',type:'warrior',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-guerreiros.png',power:false,special:true},
  {id:'egyptWarrior',name:'Guerreiro do Egito',type:'warrior',clan:'egypt',variant:'male',card:'assets/egypt/warrior/card.png',power:false,special:false},
  {id:'mage',name:'Mago Guerreiro',type:'mage',clan:'warriors',variant:'male',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
  {id:'mageFemale',name:'Maga Guerreira',type:'mage',clan:'warriors',variant:'female',card:'assets/ui/war-shop/card-magos-guerreiros.png',power:true,special:true},
@@ -5686,7 +5717,7 @@ const PVP_HEROES=Object.freeze([
 ]);
 const PVP_HERO_BY_ID=Object.freeze(Object.fromEntries(PVP_HEROES.map(hero=>[hero.id,hero])));
 // The PvP picker is restricted independently of every other game mode.
-const PVP_SELECTABLE_HEROES=Object.freeze(PVP_HEROES.filter(hero=>['warrior','mageFemale','egyptMageFemale'].includes(hero.id)));
+const PVP_SELECTABLE_HEROES=Object.freeze(PVP_HEROES.filter(hero=>['warrior','mageFemale'].includes(hero.id)));
 const PVP_SELECTABLE_BY_ID=Object.freeze(Object.fromEntries(PVP_SELECTABLE_HEROES.map(hero=>[hero.id,hero])));
 const PVP_ENEMY_HERO_IDS=Object.freeze(['naja','poseidon','anubis','golem','dragon']);
 const PVP_ENEMY_HEROES=Object.freeze({
@@ -6589,7 +6620,13 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(isisBlessingProtected(target))return;
  if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker,target))return;
  // PVP-ONLY NPC DAMAGE: same War animations, PvP minion damage and knockback.
- if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
+ // During the Warrior charge, every positive incoming hit becomes exactly 2
+ // damage and cannot push him. This branch is never active in Clan War.
+ if(state.mode==='pvp'&&target.pvpMode&&target.pvpHero==='warrior'&&
+    Number(target.pvpWarriorChargeUntil)>performance.now()&&Number(amount)>0){
+   amount=2;
+   options={...options,knockForce:0,knockTime:0,shake:0};
+ }else if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
    const distance=Math.hypot(target.x-attacker.x,target.y-attacker.y);
    const periodic=options.knockForce===0;
    const special=attacker.pendingGolemAttack?.kind==='special'||
@@ -6750,8 +6787,17 @@ function startEntityDeath(e,dx=0,dy=0){
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
- // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
- e.removeAt=now+1900;
+ const pvpWarriorDeath=state.mode==='pvp'&&e.pvpMode&&e.pvpHero==='warrior'&&e.type==='warrior'&&e.clan==='warriors';
+ if(pvpWarriorDeath){
+   const deathDuration=pvpFullGifDuration('pvpWarriorDeath',PVP_WARRIOR.deathFallbackMs);
+   e.pvpWarriorDeathSerial=(Number(e.pvpWarriorDeathSerial)||0)+1;
+   e.pvpWarriorDeathGifAt=now+PVP_WARRIOR.deathFallMs;
+   e.pvpWarriorDeathUntil=e.pvpWarriorDeathGifAt+deathDuration;
+   e.removeAt=e.pvpWarriorDeathUntil+60;
+ }else{
+   // Queda ~0,72s + duas piscadas. Depois a entidade é realmente apagada.
+   e.removeAt=now+1900;
+ }
  burst(e.x,e.y,e.color);
 
  // O player local NÃO troca imediatamente de câmera ao morrer.
@@ -6763,8 +6809,13 @@ function startEntityDeath(e,dx=0,dy=0){
    s.transitioning=true;
    s.deathEntityId=e.id;
    s.targetId=null;
-   s.fadeStart=now+1250;
-   s.activateAt=now+1800;
+   if(pvpWarriorDeath){
+     s.fadeStart=Math.max(now+1250,e.pvpWarriorDeathUntil-PVP_WARRIOR.deathFadeMs);
+     s.activateAt=e.pvpWarriorDeathUntil+40;
+   }else{
+     s.fadeStart=now+1250;
+     s.activateAt=now+1800;
+   }
  }
 
  // A limpeza é agrupada no fim do frame. Em mortes em área isso evita
@@ -6814,6 +6865,8 @@ function separateLivingEntities(){
      for(const j of bucket){
        if(j<=i)continue;
        const b=living[j],bAirborne=airborne[j];
+       // O especial do Guerreiro atravessa inimigos: colisão causa dano, mas não o bloqueia.
+       if(state.mode==='pvp'&&(Number(a.pvpWarriorChargeUntil)>now||Number(b.pvpWarriorChargeUntil)>now))continue;
        // Unidades no ar atravessam tropas terrestres, mas continuam se separando entre si.
        if((aAirborne||bAirborne)&&!(aAirborne&&bAirborne))continue;
        let dx=b.x-a.x,dy=b.y-a.y;
@@ -8248,6 +8301,13 @@ function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entiti
 const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
  specialMin:80,specialMax:100,specialCooldown:20000,fireTick:500,fireDamage:15});
+const PVP_WARRIOR=Object.freeze({
+ comboChainMs:650,comboContinueMs:460,comboRange:136,
+ singleFallbackMs:650,comboFallbackMs:1350,specialFallbackMs:1800,deathFallbackMs:1400,
+ specialUnlockHits:5,specialCooldownMs:20000,specialSpeedMultiplier:1.45,
+ specialDamageMin:50,specialDamageMax:70,specialHeal:30,
+ deathFallMs:720,deathFadeMs:340
+});
 const pvpControls={selected:'attack',action:'attack',targetId:null,aimAngle:null,aimManual:false,aimPointerId:null};
 // In PvP, the next enemy group enters only after the current group is defeated.
 // Difficulty belongs exclusively to PvP. Easy preserves the existing waves.
@@ -8313,7 +8373,8 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  const enemy=minion&&team==='pvp-enemy',bossBoost=enemy&&['golem','naja','poseidon'].includes(hero.type);
  const bossVitality=enemy?(['naja','poseidon'].includes(hero.type)?200:hero.type==='dragon'?150:bossBoost?50:0):0;
  const difficulty=enemy?pvpDifficulty():PVP_DIFFICULTY.easy;
- const humanPlayer=!minion&&ownerId!=null&&state.players.some(p=>p.id===ownerId&&p.human!==false);
+ const ownerPlayer=!minion&&ownerId!=null?state.players.find(p=>p.id===ownerId):null;
+ const humanPlayer=!!ownerPlayer&&ownerPlayer.human!==false;
  const playerHpBonus=humanPlayer?100:0,playerShieldBonus=humanPlayer?100:0;
  e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*(minion?.5:1))+bossVitality+difficulty.bonusHp+playerHpBonus;
  e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*(minion?.5:1))+bossVitality+difficulty.bonusShield+playerShieldBonus;
@@ -8322,13 +8383,25 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
  e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
  e.pvpMode=true;e.pvpMinion=!!minion;e.pvpWarAI=!!minion;e.pvpHero=hero.id||hero.type;
- e.pvpSpecialReadyAt=hero.type==='mage'?
-   performance.now()+(hero.clan==='egypt'?10000:40000):0;
- e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
- e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
+ if(hero.id==='warrior'){
+   e.pvpWarriorSpecialUnlocked=!!ownerPlayer?.pvpWarriorSpecialUnlocked;
+   e.pvpWarriorSpecialHits=e.pvpWarriorSpecialUnlocked?PVP_WARRIOR.specialUnlockHits:
+     clamp(Number(ownerPlayer?.pvpWarriorSpecialHits)||0,0,PVP_WARRIOR.specialUnlockHits);
+   const storedReady=Number(ownerPlayer?.pvpWarriorSpecialReadyAt)||0;
+   e.pvpSpecialReadyAt=e.pvpWarriorSpecialUnlocked?Math.max(performance.now(),storedReady):1e14;
+   e.pvpSpecialDuration=PVP_WARRIOR.specialCooldownMs;e.pvpSpecialWindowMs=PVP_WARRIOR.specialCooldownMs;
+ }else{
+   e.pvpSpecialReadyAt=hero.type==='mage'?performance.now()+(hero.clan==='egypt'?10000:40000):0;
+   e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
+   e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
+ }
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
  e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerStartedAt=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpWarriorSingleUntil=0;e.pvpWarriorSingleSerial=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboSerial=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=0;
+ e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;e.pvpWarriorChargeAngle=0;e.pvpWarriorChargeHitIds=[];
+ e.pvpWarriorDeathGifAt=0;e.pvpWarriorDeathUntil=0;e.pvpWarriorDeathSerial=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
@@ -8379,7 +8452,9 @@ const PVP_GIF_STATES=Object.freeze({
  golemAttack:'attack',golemSpecial:'special',brownAttack:'attack',brownSpecial:'special',
  anubisMeleeAttack:'attack',anubisRangedAttack:'anubisRanged',isisAttack:'attack',isisSpecial:'special',
  mageSpecial:'special',femaleMageSpecial:'special',egyptMageSpecial:'special',egyptFemaleMageSpecial:'special',
- kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack'});
+ kingSpecial:'special',dragonTakeoff:'takeoff',dragonAttack:'dragonAttack',
+ pvpWarriorAttack:'warriorSingle',pvpWarriorCombo:'warriorCombo',
+ pvpWarriorSpecial:'warriorSpecial',pvpWarriorDeath:'warriorDeath'});
 // PvP-only: walk actual GIF blocks, instead of scanning compressed pixel
 // bytes for incidental 21 F9 04 sequences (which inflated some animation times).
 const pvpExactGifDurationMs=new Map();
@@ -8424,6 +8499,7 @@ function preloadPVPExactGifDurations(){
  // War's cached duration and attack logic are never replaced.
  const keys=['magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
   'egyptMageSpecial','egyptFemaleMageSpecial','magePowerSpecial','egyptMagePowerSpecial',
+  'pvpWarriorDeath','pvpWarriorAttack','pvpWarriorCombo','pvpWarriorSpecial',
   'kingSpecial','kingPower','brownAttack','brownSpecial','brownPower',
   'dragonTakeoff','dragonAttack','golemAttack','golemSpecial',
   'najaAttack','najaSpecial','najaSpecialFinal','anubisMeleeAttack',
@@ -8469,7 +8545,10 @@ function pvpPreserveGifState(el,desired){
  if(!cycle.done&&Number.isFinite(cycle.startedAt))
    cycle.until=Math.min(cycle.until,cycle.startedAt+pvpFullGifDuration(cycle.key,3000));
  if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
- if(el.classList.contains('dying')){if(!cycle.done){cycle.done=true;stopGif(cycle.img)}return desired}
+ if(el.classList.contains('dying')&&cycle.state!=='warriorDeath'){
+   if(!cycle.done){cycle.done=true;stopGif(cycle.img)}
+   return desired;
+ }
  // Burrowing must actually hide Naja; this transition is dictated by its attack phase.
  const underground=cycle.key==='najaSpecial'&&el.classList.contains('naja-underground');
  if(!cycle.done&&(now>=cycle.until-PVP_GIF_END_MARGIN_MS||underground)){
@@ -8477,7 +8556,10 @@ function pvpPreserveGifState(el,desired){
  }
  if(cycle.done){
   // The same pending attack/late network snapshot must never show or restart a spent GIF.
-  if(desired===cycle.state)return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  if(desired===cycle.state){
+    if(cycle.state==='warriorDeath')return 'warriorDeath';
+    return cycle.state==='dragonAttack'||cycle.state==='takeoff'?'fly':'idle';
+  }
   return desired;
  }
  if(desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly'||
@@ -8508,27 +8590,98 @@ function pvpArmDragonRetaliation(target,source){
  }
 }
 function pvpCombatHit(target,source,damage){
- if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return;
- const oldShield=target.shield,oldHp=target.hp;
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!target?.alive||!source?.alive||target.team===source.team)return 0;
+ const oldShield=target.shield,oldHp=target.hp,before=Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0);
  applyCombatHit(target,source,damage,{knockForce:PVP_BASE.knockForce,knockTime:PVP_BASE.knockTime,tilt:7,allowFlying:true});
  if(target.type==='dragon'&&target.alive&&(target.shield<oldShield||target.hp<oldHp))
    pvpArmDragonRetaliation(target,source);
-
+ return Math.max(0,before-(Math.max(0,Number(target.shield)||0)+Math.max(0,Number(target.hp)||0)));
+}
+function pvpIsWarriorHero(e){
+ return !!(e?.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female'&&e.pvpHero==='warrior'&&!e.pvpMinion);
+}
+function pvpPersistWarriorProgress(e){
+ const player=state.players.find(p=>p.id===e?.ownerId);if(!player)return;
+ player.pvpWarriorSpecialHits=Number(e.pvpWarriorSpecialHits)||0;
+ player.pvpWarriorSpecialUnlocked=!!e.pvpWarriorSpecialUnlocked;
+ player.pvpWarriorSpecialReadyAt=Number(e.pvpSpecialReadyAt)||0;
+}
+function pvpRegisterWarriorBasicHit(e){
+ if(!pvpIsWarriorHero(e)||e.pvpWarriorSpecialUnlocked)return;
+ e.pvpWarriorSpecialHits=Math.min(PVP_WARRIOR.specialUnlockHits,(Number(e.pvpWarriorSpecialHits)||0)+1);
+ if(e.pvpWarriorSpecialHits>=PVP_WARRIOR.specialUnlockHits){
+   e.pvpWarriorSpecialUnlocked=true;e.pvpSpecialReadyAt=0;
+   if(e.controlled)flash('ESPECIAL DO GUERREIRO LIBERADO',1.1);
+ }
+ pvpPersistWarriorProgress(e);
+}
+function pvpStartWarriorCombo(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||Number(e.pvpWarriorChargeUntil)>now)return false;
+ const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
+ e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
+ e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
+ e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+ e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
+ e.attackCooldown=0;e.attackAnim=Math.min(.45,duration/1000);e.lastAttackAt=now;e.lastCombatAt=now;e.attackSerial++;
+ return true;
+}
+function pvpTickWarriorCombo(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||!(Number(e.pvpWarriorComboUntil)>0))return false;
+ const end=Number(e.pvpWarriorComboUntil)||0,start=Number(e.pvpWarriorComboStartedAt)||now;
+ const duration=Math.max(1,end-start),fractions=[.18,.50,.82];
+ while((Number(e.pvpWarriorComboHitIndex)||0)<fractions.length&&
+       now>=start+duration*fractions[Number(e.pvpWarriorComboHitIndex)||0]){
+   const target=pvpNearestEnemy(e);
+   if(target){
+     const distance=Math.hypot(target.x-e.x,target.y-e.y);
+     e.heading=Math.atan2(target.y-e.y,target.x-e.x);
+     if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
+     if(distance<=PVP_WARRIOR.comboRange+target.r*.36){
+       const dealt=pvpCombatHit(target,e,pvpDamageForRange(distance,false,1));
+       if(dealt>0)pvpRegisterWarriorBasicHit(e);
+     }
+   }
+   e.pvpWarriorComboHitIndex=(Number(e.pvpWarriorComboHitIndex)||0)+1;
+ }
+ if(now<end)return true;
+ const repeat=Number(e.pvpWarriorComboRequestUntil)>=now;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
+ e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
+ if(repeat)return pvpStartWarriorCombo(e,now);
+ e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
+ return false;
 }
 function pvpBasicAttack(e){
- if(!e?.alive||e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now())return false;
+ if(!e?.alive)return false;
  const now=performance.now();
+ if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now)return false;
+ if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorComboUntil)>now){
+   e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+   return true;
+ }
+ if(pvpIsWarriorHero(e)){
+   const last=Number(e.pvpWarriorLastBasicAt)||0;
+   if(last>0&&now-last>=120&&now-last<=PVP_WARRIOR.comboChainMs)
+     return pvpStartWarriorCombo(e,now);
+ }
+ if(e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>now||e.pvpActionUntil>now)return false;
  e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
  e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
- e.pvpMeleeVisualUntil=now+360;
- let target=pvpNearestEnemy(e);
- // Player and minion swings use the same immediate basic attack speed and reach.
+ if(pvpIsWarriorHero(e)){
+   e.pvpWarriorLastBasicAt=now;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   e.pvpWarriorSingleUntil=now+pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
+   e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
+ }else e.pvpMeleeVisualUntil=now+360;
+ const target=pvpNearestEnemy(e);
  if(target){
    const distance=Math.hypot(target.x-e.x,target.y-e.y);
    e.heading=Math.atan2(target.y-e.y,target.x-e.x);
    if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
    if(distance<=PVP_BASE.meleeRange+target.r*.36){
-     pvpCombatHit(target,e,pvpDamageForRange(distance,false,e.pvpMinion?.5:1));
+     const dealt=pvpCombatHit(target,e,pvpDamageForRange(distance,false,e.pvpMinion?.5:1));
+     if(dealt>0)pvpRegisterWarriorBasicHit(e);
    }
  }
  return true;
@@ -8556,6 +8709,7 @@ function pvpSpecialEffectKey(e){
  return null;
 }
 function pvpBodySpecialKey(e){
+ if(pvpIsWarriorHero(e))return 'pvpWarriorSpecial';
  if(e.type==='king')return 'kingSpecial';
  if(e.type==='brownWarrior')return 'brownSpecial';
  if(e.type==='mage'){
@@ -8564,10 +8718,56 @@ function pvpBodySpecialKey(e){
  }
  return null;
 }
+function pvpStartWarriorSpecial(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.pvpWarriorSpecialUnlocked||now<Number(e.pvpSpecialReadyAt)||e.knockTime>0)return false;
+ const duration=pvpFullGifDuration('pvpWarriorSpecial',PVP_WARRIOR.specialFallbackMs);
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboRequestUntil=0;e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpWarriorChargeStartedAt=now;e.pvpWarriorChargeUntil=now+duration;
+ e.pvpWarriorChargeAngle=Number.isFinite(Number(e.heading))?Number(e.heading):(e.facing<0?Math.PI:0);
+ e.pvpWarriorChargeHitIds=[];
+ e.pvpActionUntil=e.pvpWarriorChargeUntil;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;
+ e.pvpSpecialBodyDuration=duration;e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1;
+ e.pvpSpecialFxUntil=0;e.pvpSpecialReadyAt=now+PVP_WARRIOR.specialCooldownMs;
+ e.pvpSpecialDuration=PVP_WARRIOR.specialCooldownMs;e.pvpSpecialWindowMs=PVP_WARRIOR.specialCooldownMs;
+ e.attackCooldown=0;e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ const before=e.hp;e.hp=Math.min(e.maxHp,e.hp+PVP_WARRIOR.specialHeal);
+ if(e.hp>before)e.regenSerial=(Number(e.regenSerial)||0)+1;
+ pvpPersistWarriorProgress(e);
+ return true;
+}
+function pvpTickWarriorSpecial(e,input,dt,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e.alive||!(Number(e.pvpWarriorChargeUntil)>now)){
+   if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>0&&now>=Number(e.pvpWarriorChargeUntil)){
+     e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeHitIds=[];e.moving=false;
+     if(Number(e.pvpActionUntil)<=now)e.pvpActionUntil=0;
+   }
+   return false;
+ }
+ let dx=clamp(Number(input?.dx)||0,-1,1),dy=clamp(Number(input?.dy)||0,-1,1),len=Math.hypot(dx,dy);
+ if(len>.12){
+   if(len>1){dx/=len;dy/=len}
+   e.pvpWarriorChargeAngle=Math.atan2(dy,dx);
+ }
+ const angle=Number(e.pvpWarriorChargeAngle)||0,speed=e.speed*PVP_WARRIOR.specialSpeedMultiplier;
+ const b=pvpArenaBounds(e.r||30);
+ e.x=clamp(e.x+Math.cos(angle)*speed*dt,b.left,b.right);
+ e.y=clamp(e.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+ e.heading=angle;e.facing=Math.cos(angle)<0?-1:1;e.moving=true;
+ e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ const touched=e.pvpWarriorChargeHitIds||(e.pvpWarriorChargeHitIds=[]);
+ for(const target of state.entities){
+   if(!target.alive||target===e||target.team===e.team||touched.includes(target.id))continue;
+   if(Math.hypot(target.x-e.x,target.y-e.y)>e.r+target.r+10)continue;
+   const damage=PVP_WARRIOR.specialDamageMin+Math.floor(Math.random()*(PVP_WARRIOR.specialDamageMax-PVP_WARRIOR.specialDamageMin+1));
+   pvpCombatHit(target,e,damage);touched.push(target.id);
+ }
+ return true;
+}
 function pvpSpecialAttack(e){
  if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||e.attackCooldown>0||
     e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
  const now=performance.now();
+ if(pvpIsWarriorHero(e))return pvpStartWarriorSpecial(e,now);
  const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
  e.pvpSpecialBodyDuration=bodyDuration;
  e.pvpSpecialOriginX=e.x;e.pvpSpecialOriginY=e.y;
@@ -8610,8 +8810,23 @@ function pvpHandleAction(e,action,targetId){
 function pvpPreviewBasicAttack(e){
  if(!e?.alive)return;
  const now=performance.now(),target=pvpNearestEnemy(e);
+ if(pvpIsWarriorHero(e)){
+   if(Number(e.pvpWarriorComboUntil)>now){
+     e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+     return;
+   }
+   const last=Number(e.pvpWarriorLastBasicAt)||0;
+   if(last>0&&now-last>=120&&now-last<=PVP_WARRIOR.comboChainMs){
+     pvpStartWarriorCombo(e,now);
+     return;
+   }
+   e.pvpWarriorLastBasicAt=now;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   e.pvpWarriorSingleUntil=now+pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
+   e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
+ }
  e.attackAnim=.24;e.lastAttackAt=now;e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
- e.pvpMeleeVisualUntil=now+280;
+ if(!pvpIsWarriorHero(e))e.pvpMeleeVisualUntil=now+280;
  if(target){
    e.heading=Math.atan2(target.y-e.y,target.x-e.x);
    if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
@@ -8954,6 +9169,9 @@ function beginPVPRound(){
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
+ for(const p of state.players){
+   p.pvpWarriorSpecialHits=0;p.pvpWarriorSpecialUnlocked=false;p.pvpWarriorSpecialReadyAt=0;
+ }
  preloadExtraPVPGifDurations();
  preloadPVPExactGifDurations();
  pvpLoadFlameFrames();
@@ -9023,6 +9241,18 @@ function updatePVP(dt){
  for(const e of state.entities){
    if(!e.alive)continue;
    try{
+   if(pvpIsWarriorHero(e))pvpTickWarriorCombo(e,now);
+   if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now){
+     let chargeInput={};
+     if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot)
+       chargeInput=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+     pvpTickWarriorSpecial(e,chargeInput,dt,now);
+     if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot){
+       const seq=Number(chargeInput.attackSeq)||0;
+       if(seq>e.pvpLastAttackSeq)e.pvpLastAttackSeq=seq;
+     }
+     continue;
+   }
    if(e.pvpAllyBot){pvpAllyBotAction(e,dt)}
    else if(e.ownerId&&!e.pvpMinion){
      if(e.knockTime>0){e.moving=false;continue}
@@ -9043,9 +9273,8 @@ function updatePVP(dt){
    }else pvpBotAction(e,dt);
    }catch(err){
      pvpReportError('entidade '+e.type,err);
-     // Do not let an invalid effect or one NPC abort the entire PvP match.
      e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpActionUntil=0;
-     e.pvpSpecialFxUntil=0;e.moving=false;
+     e.pvpSpecialFxUntil=0;e.pvpWarriorComboUntil=0;e.pvpWarriorChargeUntil=0;e.moving=false;
    }
  }
  pvpExpireSummons(now);
@@ -9081,13 +9310,16 @@ function updatePVPHUD(){
    const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):
      action==='power'?Math.max(0,(me?.pvpPowerVisualUntil||0)-now):0;
    const duration=action==='power'?pvpFullGifDuration(me?.clan==='egypt'?'egyptMagePower':'magePower',3000):(me?.pvpSpecialWindowMs||20000);
+   const warriorUnlock=action==='special'&&pvpIsWarriorHero(me)&&!me.pvpWarriorSpecialUnlocked;
    button.disabled=!me||!available||loading;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
    button.classList.toggle('cooling',available&&remaining>0&&remaining<1e10);
    const symbol=button.querySelector('.pvp-hud-symbol'),cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
    if(symbol)symbol.textContent=loading?'…':available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
-   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
+   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':warriorUnlock?
+     Math.min(PVP_WARRIOR.specialUnlockHits,Number(me?.pvpWarriorSpecialHits)||0)+'/'+PVP_WARRIOR.specialUnlockHits:
+     remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
  }
 }
@@ -11645,7 +11877,9 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      <div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>`;
  }else{
    const egypt=e.type==='warrior'&&e.clan==='egypt';
+   const pvpWarrior=state.mode==='pvp'&&e.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female';
    if(egypt)el.classList.add('egypt-unit');
+   if(pvpWarrior)el.classList.add('pvp-warrior-hero');
    if(e.egyptSummoned)el.classList.add('egypt-summoned-spawn');
    const bodyIdle=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorIdle:ASSETS.femaleIdle):(egypt?ASSETS.egyptWarriorIdle:ASSETS.idle);
    const bodyWalk=e.variant==='female'?(egypt?ASSETS.egyptFemaleWarriorWalk:ASSETS.femaleWalk):(egypt?ASSETS.egyptWarriorWalk:ASSETS.walk);
@@ -11656,6 +11890,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        <!-- Guerreiro/Guerreira compartilham toda a lógica; clã troca somente os sprites. -->
        <img class="entity-body entity-idle active-sprite" src="${bodyIdle}" draggable="false" style="opacity:1">
        <img class="entity-body entity-walk" draggable="false" style="opacity:0">
+       ${pvpWarrior?`<img class="entity-body entity-pvp-warrior-attack" data-asset-key="pvpWarriorAttack" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-combo" data-asset-key="pvpWarriorCombo" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-special" data-asset-key="pvpWarriorSpecial" draggable="false" style="opacity:0">
+       <img class="entity-body entity-pvp-warrior-death" data-asset-key="pvpWarriorDeath" draggable="false" style="opacity:0">`:''}
      </div>
      <div class="entity-weapon-facing">
        <div class="entity-slash"></div>
@@ -11678,6 +11916,10 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  el._weaponFacing=el.querySelector('.entity-weapon-facing');
  el._idle=el.querySelector('.entity-idle');
  el._walk=el.querySelector('.entity-walk');
+ el._pvpWarriorAttack=el.querySelector('.entity-pvp-warrior-attack');
+ el._pvpWarriorCombo=el.querySelector('.entity-pvp-warrior-combo');
+ el._pvpWarriorSpecial=el.querySelector('.entity-pvp-warrior-special');
+ el._pvpWarriorDeath=el.querySelector('.entity-pvp-warrior-death');
  el._sword=el.querySelector('.entity-sword');
  el._slash=el.querySelector('.entity-slash');
  el._poseidonNormal=el.querySelector('.entity-poseidon-normal');
@@ -11734,7 +11976,12 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
  else if(e.type==='mage'){const egypt=e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleMageIdle':'femaleMageIdle'):(egypt?'egyptMageIdle':'mageIdle'),walk:e.variant==='female'?(egypt?'egyptFemaleMageWalk':'femaleMageWalk'):(egypt?'egyptMageWalk':'mageWalk'),special:e.variant==='female'?(egypt?'egyptFemaleMageSpecial':'femaleMageSpecial'):(egypt?'egyptMageSpecial':'mageSpecial')}}
  else if(e.type==='king')el._gifKeys={idle:'kingIdle',walk:'kingWalk',special:'kingSpecial'};
  else if(e.type==='dragon')el._gifKeys={ground:'dragonGround',takeoff:'dragonTakeoff',fly:'dragonFly',dragonAttack:'dragonAttack'};
- else {const egypt=e.type==='warrior'&&e.clan==='egypt';el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleWarriorIdle':'femaleIdle'):(egypt?'egyptWarriorIdle':'idle'),walk:e.variant==='female'?(egypt?'egyptFemaleWarriorWalk':'femaleWalk'):(egypt?'egyptWarriorWalk':'walk')}};
+ else {
+   const egypt=e.type==='warrior'&&e.clan==='egypt';
+   const pvpWarrior=state.mode==='pvp'&&e.pvpMode&&e.type==='warrior'&&e.clan==='warriors'&&e.variant!=='female';
+   el._gifKeys={idle:e.variant==='female'?(egypt?'egyptFemaleWarriorIdle':'femaleIdle'):(egypt?'egyptWarriorIdle':'idle'),walk:e.variant==='female'?(egypt?'egyptFemaleWarriorWalk':'femaleWalk'):(egypt?'egyptWarriorWalk':'walk')};
+   if(pvpWarrior)Object.assign(el._gifKeys,{warriorSingle:'pvpWarriorAttack',warriorCombo:'pvpWarriorCombo',warriorSpecial:'pvpWarriorSpecial',warriorDeath:'pvpWarriorDeath'});
+ };
  for(const img of el.querySelectorAll('img'))img.decoding='async';
  // O nó nasce em idle/ground. O segundo loop pesado só recebe src quando virar ativo.
  if(el._walk)stopGif(el._walk);
@@ -11745,7 +11992,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
 
  // Diagnóstico de sprites externos. Se o Postimg estiver bloqueado/offline,
  // mostramos um aviso em vez de deixar apenas a espada aparecer sem explicação.
- [el._idle,el._walk,el._poseidonNormal,el._poseidonWaveCast,el._poseidonSummonCast,el._seahorseAttack,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
+ [el._idle,el._walk,el._pvpWarriorAttack,el._pvpWarriorCombo,el._pvpWarriorSpecial,el._pvpWarriorDeath,el._poseidonNormal,el._poseidonWaveCast,el._poseidonSummonCast,el._seahorseAttack,el._brownAttack,el._brownSpecial,el._golemAttack,el._golemSpecial,el._najaAttack,el._najaSpecial,el._najaSpecialFinal,el._anubisMelee,el._anubisRanged,el._isisAttack,el._isisSpecial,el._mageSpecial,el._kingSpecial,el._kingPower,el._dragonGround,el._dragonTakeoff,el._dragonFly,el._dragonAttack].filter(Boolean).forEach(img=>{
    let retried=false;
    img.addEventListener('load',()=>{
      if(assetWarning)assetWarning.classList.remove('show');
@@ -11791,6 +12038,10 @@ function entitySpriteForState(el,stateName){
  if(stateName==='ground')return el._dragonGround;
  if(stateName==='fly')return el._dragonFly;
  if(stateName==='attack')return (state.mode==='pvp'?el._anubisMelee:null)||el._poseidonNormal||el._seahorseAttack||el._brownAttack||el._golemAttack||el._najaAttack||el._isisAttack;
+ if(state.mode==='pvp'&&stateName==='warriorSingle')return el._pvpWarriorAttack;
+ if(state.mode==='pvp'&&stateName==='warriorCombo')return el._pvpWarriorCombo;
+ if(state.mode==='pvp'&&stateName==='warriorSpecial')return el._pvpWarriorSpecial;
+ if(state.mode==='pvp'&&stateName==='warriorDeath')return el._pvpWarriorDeath;
  if(state.mode==='pvp'&&stateName==='anubisRanged')return el._anubisRanged;
  if(stateName==='waveCast')return el._poseidonWaveCast;
  if(stateName==='summonCast')return el._poseidonSummonCast;
@@ -11883,6 +12134,7 @@ function setEntitySpriteState(el,desired){
    [el._idle,'idle'],[el._walk,'walk'],[el._poseidonNormal,'attack'],[el._seahorseAttack,'attack'],
     [el._poseidonWaveCast,'waveCast'],[el._poseidonSummonCast,'summonCast'],[el._brownAttack,'attack'],[el._golemAttack,'attack'],[el._najaAttack,'attack'],[el._anubisMelee,'attack'],[el._isisAttack,'attack'],[el._anubisRanged,'anubisRanged'],
    [el._brownSpecial,'special'],[el._golemSpecial,'special'],[el._najaSpecial,'special'],[el._isisSpecial,'special'],[el._najaSpecialFinal,'emerge'],[el._mageSpecial,'special'],
+   [el._pvpWarriorAttack,'warriorSingle'],[el._pvpWarriorCombo,'warriorCombo'],[el._pvpWarriorSpecial,'warriorSpecial'],[el._pvpWarriorDeath,'warriorDeath'],
    [el._kingSpecial,'special'],[el._dragonGround,'ground'],[el._dragonTakeoff,'takeoff'],[el._dragonFly,'fly'],[el._dragonAttack,'dragonAttack']
  ].filter(entry=>!!entry[0]));
  const token=(el._spriteSwitchToken||0)+1;
@@ -12123,7 +12375,8 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      el._facing.style.setProperty('--death-mid',(deathSign*42)+'deg');
      el._facing.style.setProperty('--death-end',(deathSign*84)+'deg');
      el.classList.add('dying');
-     setTimeout(()=>{
+     const customWarriorDeath=state.mode==='pvp'&&e.pvpMode&&e.pvpHero==='warrior'&&e.type==='warrior'&&e.clan==='warriors';
+     if(!customWarriorDeath)setTimeout(()=>{
        if(document.body.contains(el))el.classList.add('death-blink');
      },760);
    }
@@ -12148,34 +12401,75 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    }
 
    if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI){
-      const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
-      const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
-      const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
-      // Start a new serial before setting the visual state. A spent old
-      // cycle cannot swallow the first frame of the next PvP special.
-      if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
-        const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
-        if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+      if(pvpIsWarriorHero(e)){
+        const deathActive=!!e.deathStarted&&localNow>=Number(e.pvpWarriorDeathGifAt||Infinity);
+        const special=e.alive&&Number(e.pvpWarriorChargeUntil)>localNow;
+        const combo=e.alive&&Number(e.pvpWarriorComboUntil)>localNow;
+        const single=e.alive&&!combo&&Number(e.pvpWarriorSingleUntil)>localNow;
+        let desired=visualMoving?'walk':'idle';
+        if(deathActive)desired='warriorDeath';
+        else if(special)desired='warriorSpecial';
+        else if(combo)desired='warriorCombo';
+        else if(single)desired='warriorSingle';
+
+        if(deathActive&&el.dataset.pvpWarriorDeathSerial!==String(e.pvpWarriorDeathSerial||0)){
+          el.dataset.pvpWarriorDeathSerial=String(e.pvpWarriorDeathSerial||0);
+          restartGif(el._pvpWarriorDeath,'pvpWarriorDeath',e.pvpWarriorDeathSerial||1);
+        }else if(special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
           el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-      }
-      const desired=special&&el._gifKeys?.special?'special':
-        melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
-      setEntitySpriteState(el,desired);
-      if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
-        el.dataset.pvpAttackSerial=String(e.attackSerial||0);
-        const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
-        if(attackImage)restartGif(attackImage,attackKey,e.attackSerial);
-      }
-      if(e.type==='mage'&&el._mageStaff&&el.dataset.pvpStaffSerial!==String(e.attackSerial||0)){
-        el.dataset.pvpStaffSerial=String(e.attackSerial||0);
-        if(e.attackSerial>0){
-          el._mageStaff.classList.remove('pvp-staff-strike');
-          void el._mageStaff.offsetWidth;
-          el._mageStaff.classList.add('pvp-staff-strike');
+          restartGif(el._pvpWarriorSpecial,'pvpWarriorSpecial',e.pvpSpecialSerial||1);
+        }else if(combo&&el.dataset.pvpWarriorComboSerial!==String(e.pvpWarriorComboSerial||0)){
+          el.dataset.pvpWarriorComboSerial=String(e.pvpWarriorComboSerial||0);
+          restartGif(el._pvpWarriorCombo,'pvpWarriorCombo',e.pvpWarriorComboSerial||1);
+        }else if(single&&el.dataset.pvpWarriorSingleSerial!==String(e.pvpWarriorSingleSerial||0)){
+          el.dataset.pvpWarriorSingleSerial=String(e.pvpWarriorSingleSerial||0);
+          restartGif(el._pvpWarriorAttack,'pvpWarriorAttack',e.pvpWarriorSingleSerial||1);
         }
+        setEntitySpriteState(el,desired);
+        if(deathActive){
+          el.classList.add('pvp-warrior-death-gif');
+          const remaining=Math.max(0,Number(e.pvpWarriorDeathUntil)-localNow);
+          el.style.opacity=String(clamp(remaining/PVP_WARRIOR.deathFadeMs,0,1));
+        }else{
+          el.classList.remove('pvp-warrior-death-gif');
+          if(el.style.opacity!=='1')el.style.opacity='1';
+        }
+        if(el._weaponFacing){
+          const hideWeapon=deathActive||special||combo;
+          el._weaponFacing.style.visibility=hideWeapon?'hidden':'visible';
+          if(!hideWeapon){
+            el._sword?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
+            el._slash?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
+          }
+        }
+      }else{
+        const special=e.alive&&(Number(e.pvpSpecialVisualUntil)||0)>localNow;
+        const melee=e.alive&&(Number(e.pvpMeleeVisualUntil)||0)>localNow;
+        const attackKey=el._gifKeys?.attack||(e.type==='anubis'?'anubisMeleeAttack':e.type==='poseidon'?'poseidonNormal':null);
+        if(special&&el._gifKeys?.special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
+          const specialImage=el._mageSpecial||el._brownSpecial||el._kingSpecial;
+          if(specialImage&&restartGif(specialImage,el._gifKeys.special,e.pvpSpecialSerial)!==false)
+            el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
+        }
+        const desired=special&&el._gifKeys?.special?'special':
+          melee&&attackKey?'attack':e.type==='dragon'?'ground':visualMoving?'walk':'idle';
+        setEntitySpriteState(el,desired);
+        if(melee&&attackKey&&el.dataset.pvpAttackSerial!==String(e.attackSerial||0)){
+          el.dataset.pvpAttackSerial=String(e.attackSerial||0);
+          const attackImage=el._brownAttack||el._golemAttack||el._najaAttack||el._anubisMelee||el._poseidonNormal;
+          if(attackImage)restartGif(attackImage,attackKey,e.attackSerial);
+        }
+        if(e.type==='mage'&&el._mageStaff&&el.dataset.pvpStaffSerial!==String(e.attackSerial||0)){
+          el.dataset.pvpStaffSerial=String(e.attackSerial||0);
+          if(e.attackSerial>0){
+            el._mageStaff.classList.remove('pvp-staff-strike');
+            void el._mageStaff.offsetWidth;
+            el._mageStaff.classList.add('pvp-staff-strike');
+          }
+        }
+        if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
+          (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
       }
-      if(e.type==='king'&&el._weaponFacing)el._weaponFacing.style.visibility=
-        (special||el._pvpGifCycle?.state==='special'&&!el._pvpGifCycle.done)?'hidden':'visible';
     }else if(e.type==='poseidon'||e.type==='seahorse'){
       const p=e.pendingWaterAttack,active=!!p&&Number(p.endAt)>localNow;
       const kind=active?p.kind:null;
