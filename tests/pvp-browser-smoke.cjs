@@ -50,9 +50,9 @@ const firebaseStub=String.raw`
 // the production build and no production code is changed for browser tests.
 const pvpTestHook=`window.__pvpBrowserTest={
  roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
- castEgyptianSpecial(){
+ castLocalMageSpecial(){
    const hero=pvpLocalHero();
-   if(!hero||hero.pvpHero!=='egyptMageFemale')return false;
+   if(!hero||hero.pvpHero!=='mageFemale')return false;
    hero.pvpPowerUntil=0;hero.pvpActionUntil=0;hero.attackCooldown=0;
    hero.pvpSpecialReadyAt=performance.now()-1;
    return pvpSpecialAttack(hero);
@@ -225,6 +225,33 @@ const pvpTestHook=`window.__pvpBrowserTest={
    return {player:[hero?.maxHp,hero?.maxShield],allies:allies.map(e=>[e.maxHp,e.maxShield])};
  },
  basicSerial(){return pvpLocalHero()?.attackSerial||0},
+ warriorMechanics(){
+   const own=pvpLocalHero();if(!own)return null;
+   const warrior=pvpBaseEntity(PVP_HERO_BY_ID.warrior,700,700,own.team,'#fff',null,false);
+   const enemy=pvpBaseEntity({...PVP_HERO_BY_ID.warrior,id:'warrior'},755,700,'pvp-enemy','#f55',null,true);
+   warrior.hp=warrior.maxHp-40;warrior.heading=0;
+   warrior.pvpWarriorSpecialHits=5;warrior.pvpWarriorSpecialUnlocked=true;warrior.pvpSpecialReadyAt=0;
+   warrior.attackCooldown=0;warrior.pvpActionUntil=0;
+   const beforeHp=warrior.hp;
+   const started=pvpSpecialAttack(warrior);
+   const healed=warrior.hp-beforeHp,cooldown=Math.round(warrior.pvpSpecialReadyAt-performance.now());
+   const beforeEnemy=enemy.hp+enemy.shield;
+   pvpTickWarriorSpecial(warrior,{dx:1,dy:0},.016,performance.now());
+   const contactDamage=beforeEnemy-(enemy.hp+enemy.shield);
+   const afterContact=enemy.hp+enemy.shield;
+   pvpTickWarriorSpecial(warrior,{dx:1,dy:0},.016,performance.now());
+   const repeatedDamage=afterContact-(enemy.hp+enemy.shield);
+   const beforeIncoming=warrior.hp+warrior.shield;
+   applyCombatHit(warrior,enemy,80,{knockForce:140,knockTime:.3,allowFlying:true});
+   const incoming=beforeIncoming-(warrior.hp+warrior.shield);
+   const noKnock=warrior.knockTime===0&&warrior.knockVX===0&&warrior.knockVY===0;
+   const angleBefore=warrior.pvpWarriorChargeAngle;
+   pvpTickWarriorSpecial(warrior,{dx:0,dy:1},.016,performance.now());
+   const steered=warrior.pvpWarriorChargeAngle!==angleBefore&&Math.abs(warrior.pvpWarriorChargeAngle-Math.PI/2)<.01;
+   state.entities=state.entities.filter(e=>e!==warrior&&e!==enemy);
+   return {started,healed,cooldown,contactDamage,repeatedDamage,incoming,noKnock,steered,
+     unlocked:warrior.pvpWarriorSpecialUnlocked,hits:warrior.pvpWarriorSpecialHits};
+ },
  touchAimIsolation(){
    const hero=pvpLocalHero();if(!hero)return null;
    const world=document.querySelector('#world'),r=world.getBoundingClientRect();
@@ -271,6 +298,7 @@ async function main(){
  const browser=await chromium.launch({headless:true});
  const errors=[],renderErrors=[];
  const page=await browser.newPage({viewport:{width:1280,height:720}});
+ await page.route('https://i.postimg.cc/**',route=>route.fulfill({status:200,contentType:'image/gif',body:gif}));
  page.on('pageerror',err=>errors.push(err.message));
  page.on('console',msg=>{if(msg.type()==='error'&&/PvP (desenho|simulação|entidade)|IndexSizeError/.test(msg.text()))renderErrors.push(msg.text())});
  try{
@@ -316,8 +344,8 @@ async function main(){
      throw err;
    }
    await page.locator('#pvpPicker:not([hidden])').waitFor();
-   assert.equal(await page.locator('#pvpHeroChoices button').count(),3,'PvP offers exactly three heroes');
-   await page.locator('#pvpHeroChoices button').filter({hasText:'Maga do Egito'}).first().click();
+   assert.equal(await page.locator('#pvpHeroChoices button').count(),2,'PvP offers only Warrior and Warrior Mage');
+   await page.locator('#pvpHeroChoices button').filter({hasText:'Maga Guerreira'}).first().click();
    await page.locator('#pvpHeroConfirm').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
@@ -339,13 +367,21 @@ async function main(){
    const touchAim=await page.evaluate(()=>window.__pvpBrowserTest.touchAimIsolation());
    assert.deepEqual(touchAim,{blocked:false,accepted:true,aimPointer:42,dx:.62,dy:-.31,manual:true,angle:true},
      'joystick pointer cannot steer flame; a second touch aims while movement stays active');
+   const warriorMechanics=await page.evaluate(()=>window.__pvpBrowserTest.warriorMechanics());
+   assert(warriorMechanics.started&&warriorMechanics.unlocked&&warriorMechanics.hits===5,'Warrior special starts after unlock');
+   assert.equal(warriorMechanics.healed,30,'Warrior special heals 30 HP');
+   assert(warriorMechanics.cooldown>19000&&warriorMechanics.cooldown<=20000,'Warrior special starts a 20 second cooldown');
+   assert(warriorMechanics.contactDamage>=50&&warriorMechanics.contactDamage<=70,'Warrior charge deals 50-70 on contact');
+   assert.equal(warriorMechanics.repeatedDamage,0,'same target is hit once during one Warrior special');
+   assert.equal(warriorMechanics.incoming,2,'incoming damage becomes exactly 2 during Warrior special');
+   assert(warriorMechanics.noKnock&&warriorMechanics.steered,'Warrior special ignores knockback and remains steerable');
    await page.locator('#pvpCombatHud [data-pvp-action="power"]').click();
    await page.locator('#attackBtn').click();
    await page.waitForTimeout(1250); // Includes live PvP update, aiming, GIF effect and combat frames.
    // Exercise the Egyptian mage special in the live frame loop, not only the
    // normal flame: it summons two Anubis and previously could black-screen PvP.
-   const specialStarted=await page.evaluate(()=>window.__pvpBrowserTest.castEgyptianSpecial());
-   assert(specialStarted,'Egyptian mage special must activate');
+   const specialStarted=await page.evaluate(()=>window.__pvpBrowserTest.castLocalMageSpecial());
+   assert(specialStarted,'Warrior Mage special must activate');
    await page.waitForTimeout(700);
    assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),1,'special must not black-screen the match');
    // A 1.8x PvP camera at fullscreen-size viewport formerly repeatedly threw
@@ -390,7 +426,7 @@ async function main(){
    assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
-   console.log('BROWSER PASS: PvP round clock, +100 human durability, unchanged allied NPCs, immediate held basics, independent touch movement/aim, mage flames, linear dragon balls and one-shot specials');
+   console.log('BROWSER PASS: PvP two-hero picker, Warrior special rules, round clock, durability, touch aim, mage flames, linear dragon balls and one-shot specials');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 }
 main().catch(err=>{console.error(err);process.exitCode=1;server.close()});
