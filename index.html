@@ -6594,7 +6594,13 @@ function applyCombatHit(target,attacker,amount,options={}){
  if(isisBlessingProtected(target))return;
  if(!options.allowFlying&&isAirborneCombatTarget(target)&&unitCannotHitFlying(attacker,target))return;
  // PVP-ONLY NPC DAMAGE: same War animations, PvP minion damage and knockback.
- if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
+ // During the Warrior charge, every positive incoming hit becomes exactly 2
+ // damage and cannot push him. This branch is never active in Clan War.
+ if(state.mode==='pvp'&&target.pvpMode&&target.pvpHero==='warrior'&&
+    Number(target.pvpWarriorChargeUntil)>performance.now()&&Number(amount)>0){
+   amount=2;
+   options={...options,knockForce:0,knockTime:0,shake:0};
+ }else if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
    const distance=Math.hypot(target.x-attacker.x,target.y-attacker.y);
    const periodic=options.knockForce===0;
    const special=attacker.pendingGolemAttack?.kind==='special'||
