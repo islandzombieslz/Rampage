@@ -64,7 +64,7 @@ ctx.syntheticGif=syntheticGif.buffer;
 assert.equal(run('pvpParsedGifCycleMs(syntheticGif)'),1200,'PvP must parse real GIF blocks, not false markers in compressed bytes');
 const heroes=run('PVP_HEROES'),base=run('PVP_BASE');
 assert.equal(heroes.length,8);
-assert.deepEqual(Array.from(run('PVP_SELECTABLE_HEROES'),h=>h.id),['warrior','mageFemale','egyptMageFemale']);
+assert.deepEqual(Array.from(run('PVP_SELECTABLE_HEROES'),h=>h.id),['warrior','mageFemale']);
 assert.equal(run('PVP_SELECTABLE_BY_ID.king'),undefined);
 for(const h of heroes)assert(h.card.startsWith('assets/')&&h.name&&h.id);
 assert.equal(new Set(heroes.map(h=>h.id)).size,8);
@@ -105,7 +105,45 @@ assert.equal(damageCalls.length,1);assert(damageCalls[0].damage>=25&&damageCalls
 assert.equal(damageCalls[0].options.knockForce,95);
 assert.equal(run('pvpBasicAttack(state.entities[0])'),false,'basic attack cooldown');
 now+=301;hero.attackCooldown=0;
-assert(run('pvpBasicAttack(state.entities[0])'),'basic resumes at fast PvP cadence');
+assert(run('pvpBasicAttack(state.entities[0])'),'second continued input starts Warrior combo');
+assert(hero.pvpWarriorComboUntil>now,'continued attack enters combo GIF window');
+assert.equal(hero.pvpWarriorSpecialHits,1,'first successful single attack counts toward unlock');
+const comboStarted=hero.pvpWarriorComboStartedAt;
+now=comboStarted+250;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+now=comboStarted+700;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+now=comboStarted+1120;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+assert.equal(hero.pvpWarriorComboHitIndex,3,'combo schedules exactly three damage contacts');
+assert.equal(hero.pvpWarriorSpecialHits,4,'three combo contacts also count as successful attacks');
+now=hero.pvpWarriorComboUntil+1;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+assert.equal(hero.pvpWarriorComboUntil,0,'released combo returns to normal attack chain');
+hero.attackCooldown=0;
+assert(run('pvpBasicAttack(state.entities[0])'),'next press after released combo restarts as single attack');
+assert.equal(hero.pvpWarriorSpecialHits,5);
+assert.equal(hero.pvpWarriorSpecialUnlocked,true,'five successful contacts unlock the Warrior special');
+assert.equal(hero.pvpSpecialReadyAt,0,'first Warrior special is immediately ready after five hits');
+hero.hp=300;hero.attackCooldown=0;hero.pvpActionUntil=0;
+const specialAt=now;
+assert(run('pvpSpecialAttack(state.entities[0])'),'unlocked Warrior special starts');
+assert.equal(hero.hp,330,'Warrior special heals exactly 30 HP without exceeding max');
+assert.equal(hero.pvpSpecialReadyAt,specialAt+20000,'after first unlock the special uses only a 20 second timer');
+assert(hero.pvpWarriorChargeUntil>specialAt&&hero.pvpWarriorChargeHitIds.length===0);
+foe.x=hero.x+55;foe.y=hero.y;foe.alive=true;
+const foeBefore=foe.hp+foe.shield;
+run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
+const chargeDamage=foeBefore-(foe.hp+foe.shield);
+assert(chargeDamage>=50&&chargeDamage<=70,'charge contact deals 50-70 damage');
+const afterFirstCharge=foe.hp+foe.shield;
+run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
+assert.equal(foe.hp+foe.shield,afterFirstCharge,'same enemy is damaged once per special pass');
+assert(html.includes("target.pvpHero==='warrior'")&&html.includes('amount=2')&&html.includes('knockForce:0,knockTime:0'),
+ 'Warrior special converts incoming PvP hits to 2 damage with no knockback');
+assert(html.includes("Number(a.pvpWarriorChargeUntil)>now||Number(b.pvpWarriorChargeUntil)>now"),
+ 'Warrior charge passes through entity separation');
+assert(html.includes("pvpWarriorDeathGifAt=now+PVP_WARRIOR.deathFallMs")&&html.includes('pvp-warrior-death-gif'),
+ 'Warrior uses the existing fall followed by a fading one-shot death GIF');
+now=hero.pvpWarriorChargeUntil+1;run('pvpTickWarriorSpecial(state.entities[0],{},.016,performance.now())');
+now=hero.pvpSpecialReadyAt+1;hero.attackCooldown=0;hero.pvpActionUntil=0;
+assert(run('pvpSpecialAttack(state.entities[0])'),'20 second cooldown re-enables special without another five-hit requirement');
 
 const mage=run('pvpBaseEntity(PVP_HERO_BY_ID.mage,1050,500,"u2","#ffe","u2",false)');
 assert.equal(mage.pvpSpecialReadyAt,now+40000,'warrior mage waits only for initial 40 second timer');
@@ -223,11 +261,11 @@ assert(html.includes("state.mode==='pvp'&&stateName==='anubisRanged'"),'Anubis r
 assert(html.includes("syncPVPSpecialEffects(domCamera.left"),'PvP ally special effect layer');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'},
  {id:'npc_1',name:'NPC 1',human:false,pvpHero:'mageFemale',color:'#e3b341'},
- {id:'npc_2',name:'NPC 2',human:false,pvpHero:'egyptMageFemale',color:'#3fb950'}];
+ {id:'npc_2',name:'NPC 2',human:false,pvpHero:'warrior',color:'#3fb950'}];
 net.hostUid='u1';run('beginPVPRound()');
 assert.equal(state.world.w,1850);assert.equal(state.world.h,1542);
 const allied=state.entities.filter(e=>e.pvpAllyBot);
-assert.deepEqual([...allied.map(e=>e.type)],['mage','mage']);
+assert.deepEqual([...allied.map(e=>e.type)],['mage','warrior']);
 assert(allied.every(e=>e.team==='u1'&&e.maxHp===250&&e.maxShield===150&&e.speed===195&&!e.pvpWarAI));
 assert(state.entities.filter(e=>e.team==='pvp-enemy').every(e=>!e.pvpAllyBot));
 run('updatePVP(.016)');
@@ -357,14 +395,14 @@ async function testPVPReadyLobby(){
  assert.equal(grid.children[0].className.includes('mine'),true);
  run('openPVPCharacterPicker()');
  assert.equal(node('#pvpPicker').hidden,false);
- run("pvpPickerDraft='egyptMageFemale'");
+ run("pvpPickerDraft='mageFemale'");
  await run('commitPVPCharacterPicker()');
  assert.equal(updates.length,1);
  assert.equal(updates[0].path,'rooms/TEST/players/u1');
- assert.equal(updates[0].data.pvpHero,'egyptMageFemale');
+ assert.equal(updates[0].data.pvpHero,'mageFemale');
  assert.equal(updates[0].data.pvpConfirmed,true);
  assert.equal(state.players[0].pvpConfirmed,true);
- assert.equal(state.players[0].pvpHero,'egyptMageFemale');
+ assert.equal(state.players[0].pvpHero,'mageFemale');
  assert.equal(run('pvpAllPlayersConfirmed()'),false,'wait for other human');
  state.players[1].pvpConfirmed=true;
  assert.equal(run('pvpAllPlayersConfirmed()'),true);
