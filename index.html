@@ -845,7 +845,7 @@ html,body{
 /* Os novos GIFs têm canvases/proporções diferentes. Cada estado recebe sua
    própria caixa visual para manter o Guerreiro com tamanho aparente estável. */
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack{
-  width:104px;height:122px;left:-13px;top:-15px;
+  width:100px;height:118px;left:-11px;top:-13px;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo{
   width:132px;height:146px;left:-27px;top:-27px;
@@ -5329,7 +5329,7 @@ function applyRemoteGame(game){
  }
 }
 function configureGameScreenForMode(){
- if(state.mode==='pvp'){preloadPVPExactGifDurations();pvpLoadFlameFrames()}
+ if(state.mode==='pvp'){preloadPVPWarriorVisuals();preloadPVPExactGifDurations();pvpLoadFlameFrames()}
  const pve=state.mode==='pve'||state.mode==='pvp';$('#gameScreen').classList.toggle('pve-mode',pve);$('#gameScreen').classList.toggle('pvp-mode',state.mode==='pvp');const pvpHud=$('#pvpCombatHud');if(pvpHud)pvpHud.hidden=state.mode!=='pvp';$('#shopButton').style.display=pve?'none':'block';$('#touchControls').style.display=pve&&isMobileLike()?'block':'none';$('#attackBtn').style.display=pve?'block':'none';$('#cameraHint').style.display=pve?'none':'block';if(!pve)configureWarShopForClan();
 }
 function handleHostCommands(commands){
@@ -6322,9 +6322,13 @@ attackBtn.addEventListener('pointerdown',e=>{
     stopPVPAttackHold();
     pvpAttackHoldPointerId=e.pointerId;
     attackBtn.setPointerCapture?.(e.pointerId);
-    // Um toque curto sempre executa SOMENTE o ataque único original.
-    // O combo só começa se o botão continuar realmente pressionado após o GIF inicial.
-    pvpAttackHoldNextAt=performance.now()+700;
+    // Um toque curto executa SOMENTE o ataque único. Se continuar segurando,
+    // a próxima entrada chega no fim do próprio GIF, sem voltar ao idle no meio.
+    const holdHero=pvpLocalHero();
+    const firstRepeatDelay=pvpIsWarriorHero(holdHero)
+      ?Math.max(180,pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs)-35)
+      :PVP_BASIC_HOLD_REPEAT_MS;
+    pvpAttackHoldNextAt=performance.now()+firstRepeatDelay;
     pvpTriggerAttack('attack');
     pvpAttackHoldTimer=setInterval(pvpHeldBasicAttack,45);
   }else attackControlled();
@@ -6959,14 +6963,28 @@ function restartGif(img,keyOrSrc,serial=0){
  const src=key?ASSETS[key]:keyOrSrc;
  if(state.mode==='pvp'&&key&&!pvpMayRestartGif(img,key,serial))return false;
  if(key)img.dataset.assetKey=key;
+ const instantWarriorPvp=state.mode==='pvp'&&key?.startsWith('pvpWarrior')&&String(src).startsWith('assets/');
  releaseGifObjectUrl(img);
- if(state.mode==='pvp')img.classList.add('pvp-gif-loading');
+ if(instantWarriorPvp){
+   // Os GIFs do Guerreiro PvP são locais e já são pré-decodificados.
+   // Não escondemos o elemento durante o restart: isso elimina o frame invisível
+   // entre ataque/combo/especial e evita atraso perceptível no especial.
+   img._pvpGifLoadToken=(img._pvpGifLoadToken||0)+1;
+   img._pvpGifLoadCleanup?.();
+   img.classList.remove('pvp-gif-loading','pvp-gif-failed');
+ }else if(state.mode==='pvp')img.classList.add('pvp-gif-loading');
  img.removeAttribute('src');
  const runtime=key?gifRuntime.get(key):null;
  if(runtime?.blob){
    const url=URL.createObjectURL(runtime.blob);
    img._gifObjectUrl=url;img.src=url;
    if(state.mode==='pvp')img.classList.remove('pvp-gif-loading');
+ }else if(instantWarriorPvp){
+   // Mesma URL local = cache/decodificação já aquecidos; o remove+reflow reinicia
+   // o GIF no quadro zero sem criar URL externa nem query string nova.
+   void img.offsetWidth;
+   img.style.display='block';img.style.opacity='1';
+   img.src=src;
  }else{
    const sep=String(src).includes('?')?'&':'?';
    const requestedSrc=src+sep+'gifStart='+Date.now()+'_'+serial;
@@ -8509,6 +8527,19 @@ function pvpParsedGifCycleMs(buffer){
  }
  return frames?total:0;
 }
+const pvpWarriorVisualPreloads=new Map();
+function preloadPVPWarriorVisuals(){
+ if(state.mode!=='pvp')return;
+ for(const key of ['pvpWarriorAttack','pvpWarriorCombo','pvpWarriorSpecial','pvpWarriorDeath']){
+   if(pvpWarriorVisualPreloads.has(key))continue;
+   const img=new Image();
+   img.decoding='async';
+   if(key==='pvpWarriorAttack'||key==='pvpWarriorSpecial')img.fetchPriority='high';
+   img.src=ASSETS[key];
+   pvpWarriorVisualPreloads.set(key,img);
+   img.decode?.().catch(()=>{});
+ }
+}
 let pvpExactGifPreloadStarted=false;
 function preloadPVPExactGifDurations(){
  if(pvpExactGifPreloadStarted)return;
@@ -8561,6 +8592,14 @@ function pvpPreserveGifState(el,desired){
  const now=performance.now();
  if(!cycle.done&&Number.isFinite(cycle.startedAt))
    cycle.until=Math.min(cycle.until,cycle.startedAt+pvpFullGifDuration(cycle.key,3000));
+ const warriorContinuous=cycle.state==='warriorSingle'||cycle.state==='warriorCombo'||cycle.state==='warriorSpecial';
+ // Para o Guerreiro PvP, o estado lógico manda na troca de sprite. Não removemos
+ // o src no último frame: ataque -> combo e combo -> combo ficam contínuos, sem
+ // passar por idle e sem o GIF desaparecer entre dois comandos.
+ if(warriorContinuous){
+   if(el.classList.contains('dying')){cycle.done=true;stopGif(cycle.img)}
+   return desired;
+ }
  if(!cycle.done&&(!cycle.img.hasAttribute('src')||cycle.img.classList.contains('pvp-gif-failed')))cycle.done=true;
  if(el.classList.contains('dying')&&cycle.state!=='warriorDeath'){
    if(!cycle.done){cycle.done=true;stopGif(cycle.img)}
@@ -8582,6 +8621,16 @@ function pvpPreserveGifState(el,desired){
  if(desired==='idle'||desired==='walk'||desired==='ground'||desired==='fly'||
     (cycle.state==='special'&&desired==='attack'))return cycle.state;
  return desired;
+}
+function pvpPlayWarriorActionGif(el,img,key,serial,stateName,seamless=false){
+ if(!img)return false;
+ // Enquanto o mesmo estado continua (principalmente combo segurado), deixa o
+ // próprio GIF seguir/loopar. Reiniciar o src criava a piscada entre ciclos.
+ if(seamless&&el?.dataset?.anim===stateName&&img.hasAttribute('src')&&!img.classList.contains('pvp-gif-failed')){
+   pvpRememberGifCycle(img,key,serial);
+   return true;
+ }
+ return restartGif(img,key,serial)!==false;
 }
 function pvpDamageForRange(distance,special=false,multiplier=1){
  const near=special?PVP_BASE.specialMax:PVP_BASE.damageMax;
@@ -9190,6 +9239,7 @@ function startPVP(){
    p.pvpWarriorSpecialHits=0;p.pvpWarriorSpecialUnlocked=false;p.pvpWarriorSpecialReadyAt=0;
  }
  preloadExtraPVPGifDurations();
+ preloadPVPWarriorVisuals();
  preloadPVPExactGifDurations();
  pvpLoadFlameFrames();
  pvpFlameImage({clan:'warriors'});pvpFlameImage({clan:'egypt'});
@@ -12434,13 +12484,13 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
           restartGif(el._pvpWarriorDeath,'pvpWarriorDeath',e.pvpWarriorDeathSerial||1);
         }else if(special&&el.dataset.pvpSpecialSerial!==String(e.pvpSpecialSerial||0)){
           el.dataset.pvpSpecialSerial=String(e.pvpSpecialSerial||0);
-          restartGif(el._pvpWarriorSpecial,'pvpWarriorSpecial',e.pvpSpecialSerial||1);
+          pvpPlayWarriorActionGif(el,el._pvpWarriorSpecial,'pvpWarriorSpecial',e.pvpSpecialSerial||1,'warriorSpecial',false);
         }else if(combo&&el.dataset.pvpWarriorComboSerial!==String(e.pvpWarriorComboSerial||0)){
           el.dataset.pvpWarriorComboSerial=String(e.pvpWarriorComboSerial||0);
-          restartGif(el._pvpWarriorCombo,'pvpWarriorCombo',e.pvpWarriorComboSerial||1);
+          pvpPlayWarriorActionGif(el,el._pvpWarriorCombo,'pvpWarriorCombo',e.pvpWarriorComboSerial||1,'warriorCombo',true);
         }else if(single&&el.dataset.pvpWarriorSingleSerial!==String(e.pvpWarriorSingleSerial||0)){
           el.dataset.pvpWarriorSingleSerial=String(e.pvpWarriorSingleSerial||0);
-          restartGif(el._pvpWarriorAttack,'pvpWarriorAttack',e.pvpWarriorSingleSerial||1);
+          pvpPlayWarriorActionGif(el,el._pvpWarriorAttack,'pvpWarriorAttack',e.pvpWarriorSingleSerial||1,'warriorSingle',true);
         }
         setEntitySpriteState(el,desired);
         if(deathActive){
@@ -12454,7 +12504,9 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
         if(el._weaponFacing){
           const hideWeapon=deathActive||special||combo;
           el._weaponFacing.style.visibility=hideWeapon?'hidden':'visible';
-          if(!hideWeapon){
+          // No ataque único a espada original continua visível e mantém a animação
+          // de corte. Só limpamos as classes quando o Guerreiro já voltou ao idle/walk.
+          if(!hideWeapon&&!single){
             el._sword?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
             el._slash?.classList.remove('attacking','attacking-alt','attacking2','attacking2-alt');
           }
