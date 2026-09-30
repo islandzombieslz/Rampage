@@ -8325,7 +8325,8 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  const enemy=minion&&team==='pvp-enemy',bossBoost=enemy&&['golem','naja','poseidon'].includes(hero.type);
  const bossVitality=enemy?(['naja','poseidon'].includes(hero.type)?200:hero.type==='dragon'?150:bossBoost?50:0):0;
  const difficulty=enemy?pvpDifficulty():PVP_DIFFICULTY.easy;
- const humanPlayer=!minion&&ownerId!=null&&state.players.some(p=>p.id===ownerId&&p.human!==false);
+ const ownerPlayer=!minion&&ownerId!=null?state.players.find(p=>p.id===ownerId):null;
+ const humanPlayer=!!ownerPlayer&&ownerPlayer.human!==false;
  const playerHpBonus=humanPlayer?100:0,playerShieldBonus=humanPlayer?100:0;
  e.hp=e.maxHp=(enemy?100:PVP_BASE.hp*(minion?.5:1))+bossVitality+difficulty.bonusHp+playerHpBonus;
  e.shield=e.maxShield=(enemy?50:PVP_BASE.shield*(minion?.5:1))+bossVitality+difficulty.bonusShield+playerShieldBonus;
@@ -8334,13 +8335,25 @@ function pvpBaseEntity(hero,x,y,team,color,ownerId=null,minion=false){
  e.r=hero.type==='golem'?39:hero.type==='naja'?36:hero.type==='poseidon'?36:30;
  e.ownerId=ownerId;e.controlled=!minion&&ownerId===NetworkAdapter.localPlayerId;
  e.pvpMode=true;e.pvpMinion=!!minion;e.pvpWarAI=!!minion;e.pvpHero=hero.id||hero.type;
- e.pvpSpecialReadyAt=hero.type==='mage'?
-   performance.now()+(hero.clan==='egypt'?10000:40000):0;
- e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
- e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
+ if(hero.id==='warrior'){
+   e.pvpWarriorSpecialUnlocked=!!ownerPlayer?.pvpWarriorSpecialUnlocked;
+   e.pvpWarriorSpecialHits=e.pvpWarriorSpecialUnlocked?PVP_WARRIOR.specialUnlockHits:
+     clamp(Number(ownerPlayer?.pvpWarriorSpecialHits)||0,0,PVP_WARRIOR.specialUnlockHits);
+   const storedReady=Number(ownerPlayer?.pvpWarriorSpecialReadyAt)||0;
+   e.pvpSpecialReadyAt=e.pvpWarriorSpecialUnlocked?Math.max(performance.now(),storedReady):1e14;
+   e.pvpSpecialDuration=PVP_WARRIOR.specialCooldownMs;e.pvpSpecialWindowMs=PVP_WARRIOR.specialCooldownMs;
+ }else{
+   e.pvpSpecialReadyAt=hero.type==='mage'?performance.now()+(hero.clan==='egypt'?10000:40000):0;
+   e.pvpSpecialDuration=hero.type==='mage'?(hero.clan==='egypt'?30000:40000):20000;
+   e.pvpSpecialWindowMs=hero.type==='mage'?(hero.clan==='egypt'?10000:40000):20000;
+ }
  e.pvpSummonedIds=[];e.pvpSpecialSerial=0;e.pvpSpecialVisualUntil=0;e.pvpSpecialFxStartedAt=0;
  e.pvpSpecialBodyDuration=0;e.pvpSpecialOriginX=null;e.pvpSpecialOriginY=null;
  e.pvpPowerUntil=0;e.pvpActionUntil=0;e.pvpPowerVisualUntil=0;e.pvpSpecialFxUntil=0;e.pvpPowerNextTick=0;e.pvpPowerStartedAt=0;e.pvpPowerSerial=0;e.pvpAimTarget=null;e.pvpAimAngle=0;
+ e.pvpWarriorSingleUntil=0;e.pvpWarriorSingleSerial=0;e.pvpWarriorLastBasicAt=0;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboSerial=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=0;
+ e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;e.pvpWarriorChargeAngle=0;e.pvpWarriorChargeHitIds=[];
+ e.pvpWarriorDeathGifAt=0;e.pvpWarriorDeathUntil=0;e.pvpWarriorDeathSerial=0;
  e.pvpLastAttackSeq=Number(ownerId===NetworkAdapter.localPlayerId?NetworkAdapter.attackSeq:NetworkAdapter.remoteInputs[ownerId]?.attackSeq)||0;
  e.attackCooldown=0;e.pvpShotUntil=0;
  e.egyptSummoned=!!(minion&&ownerId);e.egyptSummonerId=e.egyptSummoned?ownerId:null;
