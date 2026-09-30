@@ -135,9 +135,10 @@ run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())
 const chargeDamage=foeBefore-(foe.hp+foe.shield);
 assert(chargeDamage>=50&&chargeDamage<=70,'charge contact deals 50-70 damage');
 const specialHit=damageCalls.at(-1);
-assert.equal(specialHit.options.forceKnockback,true,'Warrior special forces lateral knockback');
+assert.equal(specialHit.options.knockForce,560,'Warrior special uses its stronger PvP-only shove');
 assert.equal(specialHit.options.tilt,20,'Warrior special uses a stronger impact tilt');
-assert(Math.abs(specialHit.options.knockDirX)+Math.abs(specialHit.options.knockDirY)>0,'Warrior special supplies a lateral knock direction');
+assert.equal(foe.hitTilt,20,'Warrior special leaves the target visibly tilted');
+assert(Math.hypot(foe.knockVX,foe.knockVY)>550,'Warrior special overrides the target with a strong lateral velocity');
 assert(html.includes('pvpWarriorSpecialCinematic')&&html.includes('specialCameraZoom:1.12')&&html.includes('specialSceneDim:.26'),
  'Warrior special includes PvP-only linear zoom and scene dimming');
 const afterFirstCharge=foe.hp+foe.shield;
