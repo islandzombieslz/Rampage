@@ -323,7 +323,11 @@ async function main(){
    await page.locator('.mode-card[data-mode="pvp"]').click();
    await page.locator('#configureBtn').click();
    await page.locator('#configScreen.active').waitFor({timeout:8000});
-   await page.locator('#configScreen [data-setting="pveTime"] button[data-value="30"]').click();
+   assert.equal(await page.locator('#pveConfig .config:visible').count(),2,'PvP config shows only rounds and difficulty');
+   assert.equal(await page.locator('#pvpTimeConfig:visible').count(),0,'PvP time selector is removed from the visible menu');
+   assert.equal(await page.locator('#pvpSpeedConfig:visible').count(),0,'PvP speed selector is removed from the visible menu');
+   await page.locator('#configScreen button.minus[data-target="rounds"]').click();
+   assert.equal(await page.locator('#roundsVal').textContent(),'1','PvP can be configured with one round');
    await page.locator('#createRoomBtn').click();
    await page.locator('#lobbyScreen.active').waitFor({timeout:12000});
    const plus=page.locator('#lobbyScreen button.plus[data-target="npcs"]');
@@ -350,8 +354,8 @@ async function main(){
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
-   assert.equal(clock.duration,30,'PvP menu time must start a thirty-second round');
-   assert(clock.left>0&&clock.left<=30,'PvP match counts down from selected value');
+   assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');
+   assert.equal(await page.locator('#timer:visible').count(),0,'PvP gameplay hides the obsolete round timer');
    const durability=await page.evaluate(()=>window.__pvpBrowserTest.durability());
    assert.deepEqual(durability.player,[350,250],'human PvP player gets +100 HP and +100 shield');
    assert(durability.allies.length===3&&durability.allies.every(v=>v[0]===250&&v[1]===150),
