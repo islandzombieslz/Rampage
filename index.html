@@ -4788,8 +4788,17 @@ function serializeGame(){
          out.pvpSpecialVisualRemainingMs=Math.max(0,(Number(e.pvpSpecialVisualUntil)||0)-now);
          out.pvpMeleeVisualRemainingMs=Math.max(0,(Number(e.pvpMeleeVisualUntil)||0)-now);
          out.pvpShotRemainingMs=Math.max(0,(Number(e.pvpShotUntil)||0)-now);
+         out.pvpWarriorSingleRemainingMs=Math.max(0,(Number(e.pvpWarriorSingleUntil)||0)-now);
+         out.pvpWarriorComboRemainingMs=Math.max(0,(Number(e.pvpWarriorComboUntil)||0)-now);
+         out.pvpWarriorComboElapsedMs=Math.max(0,now-(Number(e.pvpWarriorComboStartedAt)||now));
+         out.pvpWarriorChargeRemainingMs=Math.max(0,(Number(e.pvpWarriorChargeUntil)||0)-now);
+         out.pvpWarriorChargeElapsedMs=Math.max(0,now-(Number(e.pvpWarriorChargeStartedAt)||now));
+         out.pvpWarriorDeathGifRemainingMs=Math.max(0,(Number(e.pvpWarriorDeathGifAt)||0)-now);
+         out.pvpWarriorDeathRemainingMs=Math.max(0,(Number(e.pvpWarriorDeathUntil)||0)-now);
          delete out.pvpSpecialReadyAt;delete out.pvpPowerUntil;delete out.pvpActionUntil;delete out.pvpPowerVisualUntil;delete out.pvpSpecialFxUntil;delete out.pvpSpecialFxStartedAt;
          delete out.pvpSpecialVisualUntil;delete out.pvpMeleeVisualUntil;delete out.pvpShotUntil;
+         delete out.pvpWarriorSingleUntil;delete out.pvpWarriorComboUntil;delete out.pvpWarriorComboStartedAt;
+         delete out.pvpWarriorChargeUntil;delete out.pvpWarriorChargeStartedAt;delete out.pvpWarriorDeathGifAt;delete out.pvpWarriorDeathUntil;
        }
        if(out.pendingMageAttack){
          out.pendingMageAttack={...out.pendingMageAttack,remainingMs:Math.max(0,out.pendingMageAttack.endAt-now)};
@@ -4948,6 +4957,13 @@ function applyRemoteGame(game){
          out.pvpPowerVisualUntil=Math.min(old.pvpPowerVisualUntil,out.pvpPowerVisualUntil);
        out.pvpMeleeVisualUntil=localNow+Math.max(0,Number(out.pvpMeleeVisualRemainingMs)||0);
        out.pvpShotUntil=localNow+Math.max(0,Number(out.pvpShotRemainingMs)||0);
+       out.pvpWarriorSingleUntil=localNow+Math.max(0,Number(out.pvpWarriorSingleRemainingMs)||0);
+       out.pvpWarriorComboUntil=localNow+Math.max(0,Number(out.pvpWarriorComboRemainingMs)||0);
+       out.pvpWarriorComboStartedAt=localNow-Math.max(0,Number(out.pvpWarriorComboElapsedMs)||0);
+       out.pvpWarriorChargeUntil=localNow+Math.max(0,Number(out.pvpWarriorChargeRemainingMs)||0);
+       out.pvpWarriorChargeStartedAt=localNow-Math.max(0,Number(out.pvpWarriorChargeElapsedMs)||0);
+       out.pvpWarriorDeathGifAt=localNow+Math.max(0,Number(out.pvpWarriorDeathGifRemainingMs)||0);
+       out.pvpWarriorDeathUntil=localNow+Math.max(0,Number(out.pvpWarriorDeathRemainingMs)||0);
      }
      const isisImmuneRemaining=Math.max(0,Number(out.isisDamageImmuneRemainingMs)||0);
      out.isisDamageImmuneUntil=localNow+isisImmuneRemaining;
@@ -9106,6 +9122,9 @@ function beginPVPRound(){
 }
 function startPVP(){
  if(state.mode!=='pvp')return;
+ for(const p of state.players){
+   p.pvpWarriorSpecialHits=0;p.pvpWarriorSpecialUnlocked=false;p.pvpWarriorSpecialReadyAt=0;
+ }
  preloadExtraPVPGifDurations();
  preloadPVPExactGifDurations();
  pvpLoadFlameFrames();
@@ -9175,6 +9194,18 @@ function updatePVP(dt){
  for(const e of state.entities){
    if(!e.alive)continue;
    try{
+   if(pvpIsWarriorHero(e))pvpTickWarriorCombo(e,now);
+   if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now){
+     let chargeInput={};
+     if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot)
+       chargeInput=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+     pvpTickWarriorSpecial(e,chargeInput,dt,now);
+     if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot){
+       const seq=Number(chargeInput.attackSeq)||0;
+       if(seq>e.pvpLastAttackSeq)e.pvpLastAttackSeq=seq;
+     }
+     continue;
+   }
    if(e.pvpAllyBot){pvpAllyBotAction(e,dt)}
    else if(e.ownerId&&!e.pvpMinion){
      if(e.knockTime>0){e.moving=false;continue}
@@ -9195,9 +9226,8 @@ function updatePVP(dt){
    }else pvpBotAction(e,dt);
    }catch(err){
      pvpReportError('entidade '+e.type,err);
-     // Do not let an invalid effect or one NPC abort the entire PvP match.
      e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpActionUntil=0;
-     e.pvpSpecialFxUntil=0;e.moving=false;
+     e.pvpSpecialFxUntil=0;e.pvpWarriorComboUntil=0;e.pvpWarriorChargeUntil=0;e.moving=false;
    }
  }
  pvpExpireSummons(now);
