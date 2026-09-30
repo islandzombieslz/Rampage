@@ -109,13 +109,15 @@ assert(run('pvpBasicAttack(state.entities[0])'),'second continued input starts W
 assert(hero.pvpWarriorComboUntil>now,'continued attack enters combo GIF window');
 assert.equal(hero.pvpWarriorSpecialHits,1,'first successful single attack counts toward unlock');
 const comboStarted=hero.pvpWarriorComboStartedAt;
-now=comboStarted+250;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
-now=comboStarted+700;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
-now=comboStarted+1120;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
-assert.equal(hero.pvpWarriorComboHitIndex,3,'combo schedules exactly three damage contacts');
+// Continued inputs keep the combo alive; without them the new system cancels it mid-animation.
+now=comboStarted+250;run('pvpBasicAttack(state.entities[0])');run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+now=comboStarted+700;run('pvpBasicAttack(state.entities[0])');run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+now=comboStarted+1120;run('pvpBasicAttack(state.entities[0])');run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+assert.equal(hero.pvpWarriorComboHitIndex,3,'combo schedules exactly three damage contacts while input continues');
 assert.equal(hero.pvpWarriorSpecialHits,4,'three combo contacts also count as successful attacks');
-now=hero.pvpWarriorComboUntil+1;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
-assert.equal(hero.pvpWarriorComboUntil,0,'released combo returns to normal attack chain');
+const releaseDeadline=hero.pvpWarriorComboRequestUntil;
+now=releaseDeadline+1;run('pvpTickWarriorCombo(state.entities[0],performance.now())');
+assert.equal(hero.pvpWarriorComboUntil,0,'stopping input interrupts the active combo');
 hero.attackCooldown=0;
 assert(run('pvpBasicAttack(state.entities[0])'),'next press after released combo restarts as single attack');
 assert.equal(hero.pvpWarriorSpecialHits,5);
@@ -132,6 +134,12 @@ const foeBefore=foe.hp+foe.shield;
 run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
 const chargeDamage=foeBefore-(foe.hp+foe.shield);
 assert(chargeDamage>=50&&chargeDamage<=70,'charge contact deals 50-70 damage');
+const specialHit=damageCalls.at(-1);
+assert.equal(specialHit.options.forceKnockback,true,'Warrior special forces lateral knockback');
+assert.equal(specialHit.options.tilt,20,'Warrior special uses a stronger impact tilt');
+assert(Math.abs(specialHit.options.knockDirX)+Math.abs(specialHit.options.knockDirY)>0,'Warrior special supplies a lateral knock direction');
+assert(html.includes('pvpWarriorSpecialCinematic')&&html.includes('specialCameraZoom:1.12')&&html.includes('specialSceneDim:.26'),
+ 'Warrior special includes PvP-only linear zoom and scene dimming');
 const afterFirstCharge=foe.hp+foe.shield;
 run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
 assert.equal(foe.hp+foe.shield,afterFirstCharge,'same enemy is damaged once per special pass');
