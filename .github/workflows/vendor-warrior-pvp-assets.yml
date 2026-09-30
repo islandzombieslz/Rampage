@@ -1,0 +1,39 @@
+name: Vendor Warrior PvP assets
+
+on:
+  push:
+    paths:
+      - '.github/workflows/vendor-warrior-pvp-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Warrior PvP GIFs into repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/warrior/pvp
+          curl -fL --retry 3 'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif' -o assets/warrior/pvp/guerreiro-morrendo.gif
+          curl -fL --retry 3 'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif' -o assets/warrior/pvp/guerreiro-ataque-unico.gif
+          curl -fL --retry 3 'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif' -o assets/warrior/pvp/combo-ataque-guerreiro.gif
+          curl -fL --retry 3 'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif' -o assets/warrior/pvp/especial-guerreiro.gif
+          test -s assets/warrior/pvp/guerreiro-morrendo.gif
+          test -s assets/warrior/pvp/guerreiro-ataque-unico.gif
+          test -s assets/warrior/pvp/combo-ataque-guerreiro.gif
+          test -s assets/warrior/pvp/especial-guerreiro.gif
+      - name: Commit vendored assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/warrior/pvp/*.gif
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'assets(pvp): vendor Warrior GIFs locally'
+          git push
