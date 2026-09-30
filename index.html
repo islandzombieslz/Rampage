@@ -6865,6 +6865,8 @@ function separateLivingEntities(){
      for(const j of bucket){
        if(j<=i)continue;
        const b=living[j],bAirborne=airborne[j];
+       // O especial do Guerreiro atravessa inimigos: colisão causa dano, mas não o bloqueia.
+       if(state.mode==='pvp'&&(Number(a.pvpWarriorChargeUntil)>now||Number(b.pvpWarriorChargeUntil)>now))continue;
        // Unidades no ar atravessam tropas terrestres, mas continuam se separando entre si.
        if((aAirborne||bAirborne)&&!(aAirborne&&bAirborne))continue;
        let dx=b.x-a.x,dy=b.y-a.y;
@@ -8808,8 +8810,23 @@ function pvpHandleAction(e,action,targetId){
 function pvpPreviewBasicAttack(e){
  if(!e?.alive)return;
  const now=performance.now(),target=pvpNearestEnemy(e);
+ if(pvpIsWarriorHero(e)){
+   if(Number(e.pvpWarriorComboUntil)>now){
+     e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+     return;
+   }
+   const last=Number(e.pvpWarriorLastBasicAt)||0;
+   if(last>0&&now-last>=120&&now-last<=PVP_WARRIOR.comboChainMs){
+     pvpStartWarriorCombo(e,now);
+     return;
+   }
+   e.pvpWarriorLastBasicAt=now;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   e.pvpWarriorSingleUntil=now+pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
+   e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
+ }
  e.attackAnim=.24;e.lastAttackAt=now;e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
- e.pvpMeleeVisualUntil=now+280;
+ if(!pvpIsWarriorHero(e))e.pvpMeleeVisualUntil=now+280;
  if(target){
    e.heading=Math.atan2(target.y-e.y,target.x-e.x);
    if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
@@ -9293,13 +9310,16 @@ function updatePVPHUD(){
    const remaining=action==='special'?Math.max(0,(me?.pvpSpecialReadyAt||0)-now):
      action==='power'?Math.max(0,(me?.pvpPowerVisualUntil||0)-now):0;
    const duration=action==='power'?pvpFullGifDuration(me?.clan==='egypt'?'egyptMagePower':'magePower',3000):(me?.pvpSpecialWindowMs||20000);
+   const warriorUnlock=action==='special'&&pvpIsWarriorHero(me)&&!me.pvpWarriorSpecialUnlocked;
    button.disabled=!me||!available||loading;
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
    button.classList.toggle('cooling',available&&remaining>0&&remaining<1e10);
    const symbol=button.querySelector('.pvp-hud-symbol'),cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
    if(symbol)symbol.textContent=loading?'…':available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
-   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
+   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':warriorUnlock?
+     Math.min(PVP_WARRIOR.specialUnlockHits,Number(me?.pvpWarriorSpecialHits)||0)+'/'+PVP_WARRIOR.specialUnlockHits:
+     remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
  }
 }
