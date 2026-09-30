@@ -845,7 +845,9 @@ html,body{
 /* Os novos GIFs têm canvases/proporções diferentes. Cada estado recebe sua
    própria caixa visual para manter o Guerreiro com tamanho aparente estável. */
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-attack{
-  width:100px;height:118px;left:-11px;top:-13px;
+  /* Quase o mesmo tamanho aparente do idle. O GIF tem conteúdo mais "cheio",
+     então a caixa precisa ser só levemente maior que os 78x92 do Guerreiro parado. */
+  width:88px;height:104px;left:-5px;top:-6px;
 }
 #gameScreen.pvp-mode .entity-visual.pvp-warrior-hero .entity-pvp-warrior-combo{
   width:132px;height:146px;left:-27px;top:-27px;
@@ -12177,6 +12179,22 @@ function suspendEntityLoopGif(el){
    el._dragonBurnLayer.dataset.count='0';
  }
 }
+function enforcePvpWarriorSpriteExclusive(el,desired){
+ if(state.mode!=='pvp'||!el?.classList.contains('pvp-warrior-hero'))return;
+ const entries=[
+  [el._idle,'idle'],[el._walk,'walk'],
+  [el._pvpWarriorAttack,'warriorSingle'],
+  [el._pvpWarriorCombo,'warriorCombo'],
+  [el._pvpWarriorSpecial,'warriorSpecial'],
+  [el._pvpWarriorDeath,'warriorDeath']
+ ].filter(entry=>!!entry[0]);
+ for(const [img,stateName] of entries){
+   const active=stateName===desired;
+   img.style.display=active?'block':'none';
+   img.style.opacity=active?'1':'0';
+   img.classList.toggle('active-sprite',active);
+ }
+}
 function setEntitySpriteState(el,desired){
  if(state.mode==='pvp'){
    desired=pvpPreserveGifState(el,desired);
@@ -12187,6 +12205,7 @@ function setEntitySpriteState(el,desired){
  }
  const previous=el.dataset.anim||'';
  const desiredImg=entitySpriteForState(el,desired);
+ const strictPvpWarrior=state.mode==='pvp'&&el.classList.contains('pvp-warrior-hero');
  if(previous===desired){
    if(desiredImg){
      if(ENTITY_LOOP_STATES.has(desired)&&!desiredImg.hasAttribute('src'))ensureEntityLoopGif(el,desired,desiredImg);
@@ -12194,6 +12213,9 @@ function setEntitySpriteState(el,desired){
      if(desiredImg.style.opacity!=='1')desiredImg.style.opacity='1';
      if(!desiredImg.classList.contains('active-sprite'))desiredImg.classList.add('active-sprite');
    }
+   // Mesmo quando o estado lógico não mudou, uma finalização assíncrona antiga
+   // não pode deixar dois corpos visíveis no Guerreiro PvP.
+   if(strictPvpWarrior)enforcePvpWarriorSpriteExclusive(el,desired);
    return false;
  }
  ensureEntityLoopGif(el,desired,desiredImg);
@@ -12213,12 +12235,16 @@ function setEntitySpriteState(el,desired){
      img.style.display='block';
      img.style.opacity='1';
      img.classList.add('active-sprite');
-   }else if(stateName!==previous){
+   }else if(strictPvpWarrior||stateName!==previous){
+     // No Guerreiro PvP a troca é um corte atômico: o sprite anterior some
+     // no MESMO frame em que o próximo entra. Isso impede idle/ataque/combo/
+     // especial de aparecerem um sobre o outro.
      img.style.display='none';
      img.style.opacity='0';
      img.classList.remove('active-sprite');
    }
  }
+ if(strictPvpWarrior)enforcePvpWarriorSpriteExclusive(el,desired);
 
  const finalize=()=>{
    if(el._spriteSwitchToken!==token||el.dataset.anim!==desired)return;
