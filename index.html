@@ -12177,7 +12177,12 @@ function loop(now){
  if(state.running&&NetworkAdapter.online&&!NetworkAdapter.isHost){
    if(state.mode==='pvp'){
      pvpPredictGuestLocal(dt);
+     if(pvpLocalRegionalAuthority){
+       updatePVPRegional(dt);
+       try{updateEntities(dt,pvpLocalRegionOwnsEntity);updateParticles(dt)}catch(err){pvpReportError('física regional',err)}
+     }
      sendLocalPVEInput(false);
+     pvpMaybePublishRegion(now,false);
    }else sendLocalPVEInput(false);
  }
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
@@ -12185,7 +12190,8 @@ function loop(now){
    for(const e of state.entities){
      // The guest's own PvP hero is client-predicted and softly reconciled.
      // Never send it back through the delayed interpolation buffer.
-     if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue;
+     if(state.mode==='pvp'&&((!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||
+        (pvpLocalRegionalAuthority&&pvpLocalRegionOwnsEntity(e))))continue;
      // Walking units are rendered from a short authoritative history buffer.
      // This is true snapshot interpolation: Firebase arrival jitter no longer
      // restarts a tween or creates a tiny stop on every packet.
@@ -12200,6 +12206,7 @@ function loop(now){
    const projectiles=state.dragonProjectiles||[];
    for(let i=projectiles.length-1;i>=0;i--){
      const p=projectiles[i];
+     if(state.mode==='pvp'&&pvpLocalRegionalAuthority&&pvpLocalRegionOwnsProjectile(p))continue;
      if(p.netRemovedAt&&clientNow>=Number(p.netRemovedAt)+REMOTE_WAR_RENDER_DELAY_MS){projectiles.splice(i,1);continue}
      const buffered=sampleRemotePosition(p,clientNow,!p.netRemovedAt);
      if(buffered){p.x=buffered.x;p.y=buffered.y}
@@ -12209,7 +12216,7 @@ function loop(now){
  // durante transições de rodada/fim de jogo.
  if(authoritative){
    if(state.mode==='pvp'){
-     try{updateEntities(dt);updateParticles(dt)}catch(err){pvpReportError('entidades',err)}
+     try{updateEntities(dt,pvpHostShouldSimulateEntity);updateParticles(dt)}catch(err){pvpReportError('entidades',err)}
    }else{updateEntities(dt);updateParticles(dt)}
  }
  updateWarCameraIntro(now);
