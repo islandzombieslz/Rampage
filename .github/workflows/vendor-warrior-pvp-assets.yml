@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - '.github/workflows/vendor-warrior-pvp-assets.yml'
-      - 'index.html'
   workflow_dispatch:
 
 concurrency:
@@ -24,10 +23,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets/warrior/pvp
-          curl -fL --retry 3 'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif' -o assets/warrior/pvp/guerreiro-morrendo.gif
-          curl -fL --retry 3 'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif' -o assets/warrior/pvp/guerreiro-ataque-unico.gif
-          curl -fL --retry 3 'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif' -o assets/warrior/pvp/combo-ataque-guerreiro.gif
-          curl -fL --retry 3 'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif' -o assets/warrior/pvp/especial-guerreiro.gif
+          download_if_missing() {
+            local url="$1" out="$2"
+            if [ -s "$out" ]; then
+              echo "Using existing $out"
+              return 0
+            fi
+            curl --http1.1 -fL               --retry 8 --retry-all-errors --retry-delay 2               --connect-timeout 20 --max-time 300               "$url" -o "$out"
+          }
+          download_if_missing 'https://i.postimg.cc/YCybH76x/guerreiro-morrendo.gif' assets/warrior/pvp/guerreiro-morrendo.gif
+          download_if_missing 'https://i.postimg.cc/MprdSw7m/guerreiro-ataque-unico.gif' assets/warrior/pvp/guerreiro-ataque-unico.gif
+          download_if_missing 'https://i.postimg.cc/0yNcFjwk/combo-ataque-guerreiro.gif' assets/warrior/pvp/combo-ataque-guerreiro.gif
+          download_if_missing 'https://i.postimg.cc/SxtDh46B/especial-guerreiro.gif' assets/warrior/pvp/especial-guerreiro.gif
           test -s assets/warrior/pvp/guerreiro-morrendo.gif
           test -s assets/warrior/pvp/guerreiro-ataque-unico.gif
           test -s assets/warrior/pvp/combo-ataque-guerreiro.gif
