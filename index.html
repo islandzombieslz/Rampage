@@ -4141,7 +4141,18 @@ function stopLayeredOneShot(channelId){
  try{channel.src.onended=null;channel.src.stop()}catch(_){}
  return true;
 }
-async function playLayeredSfxForDuration(key,durationMs,volume=1,pan=0,channelId=key){
+function updateLayeredOneShotMix(channelId,finalGain,pan=0){
+ const channel=layeredSfxOneShots.get(channelId),ctx=layeredSfxContext;
+ if(!channel||!ctx)return false;
+ channel.gain.gain.cancelScheduledValues(ctx.currentTime);
+ channel.gain.gain.setTargetAtTime(clamp(finalGain,0,1.4),ctx.currentTime,.055);
+ if(channel.panner){
+   channel.panner.pan.cancelScheduledValues(ctx.currentTime);
+   channel.panner.pan.setTargetAtTime(clamp(pan,-1,1),ctx.currentTime,.06);
+ }
+ return true;
+}
+async function playLayeredSfxForDuration(key,_durationMs,volume=1,pan=0,channelId=key){
  if(!SFX_ASSETS[key])return false;
  const buffer=await ensureLayeredSfxBuffer(key);
  const ctx=await ensureLayeredSfxContextRunning();
@@ -4150,9 +4161,8 @@ async function playLayeredSfxForDuration(key,durationMs,volume=1,pan=0,channelId
  try{
    const src=ctx.createBufferSource(),gain=ctx.createGain();
    src.buffer=buffer;
-   const targetSec=Math.max(.05,Number(durationMs||0)/1000);
-   if(Number.isFinite(buffer.duration)&&buffer.duration>0)
-     src.playbackRate.value=clamp(buffer.duration/targetSec,.15,6);
+   // Reproduz o arquivo original sem acelerar, desacelerar ou alterar o pitch.
+   src.playbackRate.value=1;
    const keyGain=SFX_KEY_GAIN[key]||1;
    gain.gain.value=clamp(volume*SFX_MASTER_VOLUME*keyGain,0,1.4);
    src.connect(gain);
@@ -4278,16 +4288,23 @@ const pvpCombatSfxPending=new Map();
 let pvpCombatSfxLastScan=0;
 function pvpEntitySfxMix(e){
  const me=typeof pvpLocalHero==='function'?pvpLocalHero():null;
- if(!e)return {gain:.2,pan:0};
- if(me&&e.id===me.id)return {gain:1,pan:0};
- const dist=me?Math.hypot((Number(e.x)||0)-(Number(me.x)||0),(Number(e.y)||0)-(Number(me.y)||0)):0;
- let gain=me?clamp(1-Math.max(0,dist-120)/880*.8,.2,1):1;
+ if(!e)return {gain:.05,pan:0};
  const z=clamp(Number(state.camera?.zoom)||1,.45,2.5),vp=gameViewportSize();
  const sx=((Number(e.x)||0)-Number(state.camera?.x||0))*z;
  const sy=((Number(e.y)||0)-Number(state.camera?.y||0))*z;
- const visible=sx>=0&&sx<=vp.w&&sy>=0&&sy<=vp.h;
- if(!visible)gain=.2;
- const pan=visible?clamp((sx-vp.w*.5)/Math.max(1,vp.w*.5),-1,1):clamp((sx-vp.w*.5)/Math.max(1,vp.w),-1,1);
+ const cx=Math.max(1,vp.w*.5),cy=Math.max(1,vp.h*.5);
+ const nx=(sx-cx)/cx,ny=(sy-cy)/cy;
+ const screenDistance=Math.hypot(nx,ny);
+ // Centro da câmera = volume cheio; bordas caem bastante; fora da tela fica baixo.
+ const screenGain=.04+.96*Math.pow(clamp(1-screenDistance/2.15,0,1),2.15);
+ let worldGain=1;
+ if(me&&e.id!==me.id){
+   const d=Math.hypot((Number(e.x)||0)-(Number(me.x)||0),(Number(e.y)||0)-(Number(me.y)||0));
+   const t=clamp((d-70)/900,0,1);
+   worldGain=.04+.96*Math.pow(1-t,1.85);
+ }
+ const gain=me&&e.id===me.id?1:clamp(Math.min(screenGain,worldGain),.04,1);
+ const pan=clamp((sx-cx)/cx,-1,1);
  return {gain,pan};
 }
 function pvpPlayEntitySfxNow(e,event,serial,key,baseVolume=1){
@@ -4344,7 +4361,11 @@ function updatePvpCombatSfx(now){
      const combo=Number(e.pvpWarriorComboUntil)>now;
      const special=Number(e.pvpWarriorChargeUntil)>now;
      pvpSfxEvent(e,'warrior-single',e.pvpWarriorSingleSerial,single,'pvpWarriorSingle',1);
-     if(combo)pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,Math.max(1,Number(e.pvpWarriorComboUntil)-now));
+     if(combo){
+       pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,Math.max(1,Number(e.pvpWarriorComboUntil)-now));
+       const comboMix=pvpEntitySfxMix(e);
+       updateLayeredOneShotMix('pvp:combo:'+e.id,comboMix.gain,comboMix.pan);
+     }
      pvpSfxEvent(e,'warrior-special',e.pvpSpecialSerial,special,'pvpWarriorSpecial',1);
      const walkId='pvp:walk:'+e.id;
      if(e.moving&&!single&&!combo&&!special){
@@ -8988,7 +9009,8 @@ function pvpTickWarriorCombo(e,now=performance.now()){
  e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
  e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
  if(repeat)return pvpStartWarriorCombo(e,now);
- stopLayeredOneShot('pvp:combo:'+e.id);
+ // Se o combo terminou normalmente, deixa o arquivo original concluir inteiro.
+ // Interrupções continuam cortando o áudio em pvpCancelWarriorCombo().
  e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
  return false;
 }
