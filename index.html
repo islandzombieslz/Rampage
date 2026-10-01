@@ -7597,11 +7597,6 @@ function najaIsInvulnerable(e,now=performance.now()){
 }
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
- if(state.mode==='pvp'){
-   if(pvpRegionalSimulationUid&&(!pvpLocalRegionOwnsEntity(target)||!pvpLocalRegionOwnsEntity(attacker)))return;
-   if(NetworkAdapter.isHost&&target.pvpRegionalAuthorityUid&&
-      String(target.pvpRegionalAuthorityUid)!==String(attacker.pvpRegionalAuthorityUid||''))return;
- }
  // A Naja é invulnerável enquanto inicia a escavação e enquanto está subterrânea.
  if(target.type==='naja'&&najaIsInvulnerable(target))return;
  if(target.type==='poseidon'&&entityHasActiveSpecial(target))return;
@@ -7613,6 +7608,11 @@ function applyCombatHit(target,attacker,amount,options={}){
  // PVP-ONLY NPC DAMAGE: same War animations, PvP minion damage and knockback.
  // During the Warrior charge, every positive incoming hit becomes exactly 2
  // damage and cannot push him. This branch is never active in Clan War.
+ if(state.mode==='pvp'){
+   if(pvpRegionalSimulationUid&&(!pvpLocalRegionOwnsEntity(target)||!pvpLocalRegionOwnsEntity(attacker)))return;
+   if(NetworkAdapter.isHost&&target.pvpRegionalAuthorityUid&&
+      String(target.pvpRegionalAuthorityUid)!==String(attacker.pvpRegionalAuthorityUid||''))return;
+ }
  if(state.mode==='pvp'&&target.pvpMode&&target.pvpHero==='warrior'&&
     Number(target.pvpWarriorChargeUntil)>performance.now()&&Number(amount)>0){
    amount=2;
