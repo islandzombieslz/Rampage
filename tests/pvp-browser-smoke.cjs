@@ -384,7 +384,7 @@ async function main(){
    await page.locator('#lobbyContinue').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    const humanRoster=await page.evaluate(()=>window.__pvpBrowserTest.humanRoster());
-   assert.deepEqual(humanRoster.sort(),['remote-user','test-user'],
+   assert.deepEqual(humanRoster.sort(),['browser-smoke-user','remote-user'],
      'the started match must preserve both Firebase humans instead of replacing the remote player with an NPC');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
