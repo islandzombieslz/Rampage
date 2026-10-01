@@ -3924,7 +3924,8 @@ const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScr
 
 /* ==================== TRILHA SONORA ==================== */
 const menuMusicEl=$('#menuMusic'),battleMusicEl=$('#battleMusic');
-const MUSIC_VOLUME={menu:.11,battle:.14};
+const MUSIC_VOLUME={menu:.11,battle:.14,pvpBattle:.17};
+function musicTargetVolume(mode){return mode==='battle'&&state.mode==='pvp'?MUSIC_VOLUME.pvpBattle:musicTargetVolume(mode)}
 const MUSIC_SWITCH_FADE_MS=850,MUSIC_LOOP_FADE_MS=1800,MUSIC_LOOP_FADE_SECONDS=2;
 const musicFadeTokens=new WeakMap(),musicTailFading=new WeakSet();
 let desiredMusicMode='menu',activeMusicEl=null;
@@ -3949,7 +3950,7 @@ function playDesiredMusic({restart=false}={}){
  const mode=desiredMusicMode,next=musicFor(mode);
  if(!next)return;
  if(activeMusicEl===next&&!next.paused){
-   fadeMusic(next,MUSIC_VOLUME[mode],260);
+   fadeMusic(next,musicTargetVolume(mode),260);
    return;
  }
  const previous=activeMusicEl;
@@ -3961,7 +3962,7 @@ function playDesiredMusic({restart=false}={}){
  let playResult;
  try{playResult=next.play()}catch(_){if(activeMusicEl===next)activeMusicEl=null;return}
  Promise.resolve(playResult).then(()=>{
-   if(activeMusicEl===next&&desiredMusicMode===mode)fadeMusic(next,MUSIC_VOLUME[mode],MUSIC_SWITCH_FADE_MS);
+   if(activeMusicEl===next&&desiredMusicMode===mode)fadeMusic(next,musicTargetVolume(mode),MUSIC_SWITCH_FADE_MS);
  }).catch(()=>{
    // Autoplay pode ser bloqueado; o primeiro toque/clique/tecla tenta novamente.
    if(activeMusicEl===next)activeMusicEl=null;
@@ -3999,7 +4000,7 @@ function restartFinishedMusic(audio,mode){
  let playResult;
  try{playResult=audio.play()}catch(_){if(audio===activeMusicEl)activeMusicEl=null;return}
  Promise.resolve(playResult).then(()=>{
-   if(audio===activeMusicEl&&desiredMusicMode===mode)fadeMusic(audio,MUSIC_VOLUME[mode],MUSIC_LOOP_FADE_MS);
+   if(audio===activeMusicEl&&desiredMusicMode===mode)fadeMusic(audio,musicTargetVolume(mode),MUSIC_LOOP_FADE_MS);
  }).catch(()=>{if(audio===activeMusicEl)activeMusicEl=null});
 }
 for(const [mode,audio] of [['menu',menuMusicEl],['battle',battleMusicEl]]){
@@ -4029,7 +4030,7 @@ const SFX_ASSETS=Object.freeze({
  pvpDragonAttack:'assets/audio/sfx/pvp/dragon-attack.mp3?v=0a5f9f828c6d'
 });
 const SFX_MASTER_VOLUME=1.15;
-const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15});
+const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15,transition:.52,pvpWarriorWalk:.30,pvpWarriorCombo:.82,pvpWarriorSpecial:1.12});
 let layeredSfxContext=null;
 const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
  key,
@@ -4183,7 +4184,8 @@ async function playLayeredSfxForDuration(key,_durationMs,volume=1,pan=0,channelI
  }
 }
 async function setLayeredLoop(key,volume,pan=0,channelId=key){
- const target=clamp(volume*SFX_MASTER_VOLUME,0,1);
+ const keyGain=SFX_KEY_GAIN[key]||1;
+ const target=clamp(volume*SFX_MASTER_VOLUME*keyGain,0,1);
  let channel=layeredSfxLoops.get(channelId);
  if(!channel&&target>.004){
    const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
@@ -4364,7 +4366,7 @@ function updatePvpCombatSfx(now){
      if(combo){
        pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,Math.max(1,Number(e.pvpWarriorComboUntil)-now));
        const comboMix=pvpEntitySfxMix(e);
-       updateLayeredOneShotMix('pvp:combo:'+e.id,comboMix.gain,comboMix.pan);
+       updateLayeredOneShotMix('pvp:combo:'+e.id,comboMix.gain*(SFX_KEY_GAIN.pvpWarriorCombo||1),comboMix.pan);
      }
      pvpSfxEvent(e,'warrior-special',e.pvpSpecialSerial,special,'pvpWarriorSpecial',1);
      const walkId='pvp:walk:'+e.id;
