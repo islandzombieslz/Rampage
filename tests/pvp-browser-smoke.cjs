@@ -351,6 +351,11 @@ async function main(){
    assert.equal(await page.locator('#pvpHeroChoices button').count(),2,'PvP offers only Warrior and Warrior Mage');
    await page.locator('#pvpHeroChoices button').filter({hasText:'Maga Guerreira'}).first().click();
    await page.locator('#pvpHeroConfirm').click();
+   assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),0,
+     'confirming a hero must not auto-start PvP; only the host starts after everyone confirms');
+   await page.locator('#lobbyContinue:not([disabled])').waitFor({timeout:8000});
+   assert.equal(await page.locator('#lobbyContinue').textContent(),'Iniciar PvP');
+   await page.locator('#lobbyContinue').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
