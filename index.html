@@ -3176,6 +3176,7 @@ const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
   inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
+  regionSending:false,regionPending:null,regionSendPromise:null,
   hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
   presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
@@ -3257,6 +3258,7 @@ const NetworkAdapter = {
     try{
       await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`)).remove();
       await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`)).remove();
+      await F.onDisconnect(F.ref(F.firebaseDb,`rooms/${code}/regions/${uid}`)).remove();
     }catch(_){}
     this.startRoomHeartbeat();
   },
@@ -3401,13 +3403,18 @@ const NetworkAdapter = {
     this.roomUnsubscribes.forEach(fn=>fn());this.roomUnsubscribes=[];this.roomCache={};
     this.lastRemoteSeq=0;this.lastSnapshotReceivedAt=0;this.remoteFinishScheduled=false;this.processedCommands.clear();
     this.waitFirebase().then(F=>{
-      for(const key of ['hostUid','status','settings','players','npcCount','inputs','commands','game']){
+      for(const key of ['hostUid','status','settings','players','npcCount','inputs','commands','regions','game']){
         const unsubscribe=F.onValue(F.ref(F.firebaseDb,`rooms/${code}/${key}`),s=>{
           if(this.roomId!==code)return;
           this.roomCache[key]=s.exists()?s.val():null;
           if(key==='players'&&!s.exists()){this.removeRoomIfEmpty(code).catch(()=>{});return}
           // O host acabou de gerar esse snapshot; processá-lo outra vez localmente
           // só repete trabalho de sala/DOM sem mudar a autoridade do jogo.
+          if(key==='regions'){
+            // Regional snapshots are consumed directly by the global host loop.
+            // Guests only publish their own region; no lobby/UI reconciliation here.
+            return;
+          }
           if(key==='game'){
             if(this.isHost)return;
             // /game é o caminho quente (cerca de 8 snapshots/s). Antes ele passava
@@ -3431,13 +3438,15 @@ const NetworkAdapter = {
       if(wasHost&&runningPVP)await this.handoffPVPHost('leave');
       await F.remove(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`));
       await F.remove(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`));
+      await F.remove(F.ref(F.firebaseDb,`rooms/${code}/regions/${uid}`));
       if(wasHost&&!runningPVP)await F.remove(F.ref(F.firebaseDb,`rooms/${code}`));
       else await this.removeRoomIfEmpty(code,false);
     }catch(_){}
     await this.cancelPVPHostDisconnect();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.leaving=false;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
+    this.regionPending=null;this.regionSending=false;this.regionSendPromise=null;this.leaving=false;
     resetPVPRegionalAuthority();
   },
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
@@ -3508,6 +3517,28 @@ const NetworkAdapter = {
     return this.inputSendPromise;
   },
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
+  async pushPVPRegion(snapshot){
+    if(!snapshot||!this.roomId||!this.localPlayerId||this.isHost||state.mode!=='pvp')return;
+    const roomId=this.roomId,uid=this.localPlayerId;
+    this.regionPending=snapshot;
+    if(this.regionSending)return this.regionSendPromise;
+    this.regionSending=true;
+    this.regionSendPromise=(async()=>{
+      try{
+        const F=await this.waitFirebase();
+        while(this.regionPending&&this.roomId===roomId&&this.localPlayerId===uid&&!this.isHost){
+          const next=this.regionPending;this.regionPending=null;
+          await F.set(F.ref(F.firebaseDb,`rooms/${roomId}/regions/${uid}`),{...next,uid,at:F.serverTimestamp()});
+        }
+      }finally{
+        this.regionSending=false;this.regionSendPromise=null;
+        if(this.regionPending&&this.roomId===roomId&&this.localPlayerId===uid&&!this.isHost){
+          const next=this.regionPending;this.regionPending=null;this.pushPVPRegion(next).catch(console.error);
+        }
+      }
+    })();
+    return this.regionSendPromise;
+  },
   async pushState(snapshot){if(!this.roomId||!this.isHost||state.phase==='finished')return;const F=await this.waitFirebase();if(state.phase==='finished')return;await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
   async removeCommand(uid,id){const F=await this.waitFirebase();await F.remove(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${uid}/${id}`))}
 };
