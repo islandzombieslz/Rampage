@@ -56,10 +56,24 @@ const firebaseStub=String.raw`
 const pvpTestHook=`window.__pvpBrowserTest={
  roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
  humanRoster(){return state.players.filter(p=>p.human).map(p=>p.id)},
+ remoteHumanLabel(){
+   const remote=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='remote-user');
+   return remote?entityUiDisplayName(remote):null;
+ },
+ guestPredictionStep(){
+   const hero=pvpLocalHero();if(!hero)return null;
+   const oldHost=NetworkAdapter.hostUid,oldD=keys.d;
+   const before={x:hero.x,y:hero.y};
+   hero.netAuthX=hero.x;hero.netAuthY=hero.y;hero.knockTime=0;hero.pvpWarriorChargeUntil=0;
+   NetworkAdapter.hostUid='remote-host';keys.d=true;
+   pvpPredictGuestLocal(.05);
+   keys.d=oldD;NetworkAdapter.hostUid=oldHost;
+   return {dx:hero.x-before.x,dy:hero.y-before.y,x:hero.x,y:hero.y};
+ },
  async addRemoteConfirmedPlayer(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
    await F.set(F.ref(F.firebaseDb,'rooms/'+roomId+'/players/remote-user'),{
-     uid:'remote-user',name:'Amigo',human:true,slot:1,color:'#58a6ff',
+     uid:'remote-user',name:'Amigo',level:7,human:true,slot:1,color:'#58a6ff',
      clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,
      pvpHero:'warrior',pvpConfirmed:true,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()
    });
@@ -389,6 +403,11 @@ async function main(){
    const humanRoster=await page.evaluate(()=>window.__pvpBrowserTest.humanRoster());
    assert.deepEqual(humanRoster.sort(),['browser-smoke-user','remote-user'],
      'the started match must preserve both Firebase humans instead of replacing the remote player with an NPC');
+   assert.equal(await page.evaluate(()=>window.__pvpBrowserTest.remoteHumanLabel()),'Amigo • Nv. 7',
+     'remote human combat label must show nick and account level instead of generic hero name');
+   const prediction=await page.evaluate(()=>window.__pvpBrowserTest.guestPredictionStep());
+   assert(prediction&&prediction.dx>5&&Math.abs(prediction.dy)<1,
+     'a non-host local hero must respond immediately to movement before a new authoritative snapshot');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');
