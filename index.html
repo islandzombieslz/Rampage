@@ -5189,11 +5189,11 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 // PvP guests need a much smaller visual buffer than War. Local movement is
 // predicted immediately; these constants only smooth the rest of the world.
-const PVP_REMOTE_RENDER_DELAY_MS=35;
-const PVP_REMOTE_MAX_EXTRAP_MS=160;
-const PVP_INPUT_INTERVAL_MS=16;
-const PVP_SNAPSHOT_INTERVAL_MS=50;
-const PVP_INPUT_KEEPALIVE_MS=90;
+const PVP_REMOTE_RENDER_DELAY_MS=60;
+const PVP_REMOTE_MAX_EXTRAP_MS=130;
+const PVP_INPUT_INTERVAL_MS=33;
+const PVP_SNAPSHOT_INTERVAL_MS=80;
+const PVP_INPUT_KEEPALIVE_MS=160;
 const PVP_LOCAL_SOFT_ERROR_PX=58;
 const PVP_LOCAL_SNAP_ERROR_PX=260;
 
@@ -5245,12 +5245,12 @@ function applyRemoteGame(game){
  const remoteNow=performance.now();
  const pvpRemote=game.mode==='pvp'||state.mode==='pvp';
  const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt
-   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?25:70,pvpRemote?140:220)
+   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?45:70,pvpRemote?180:220)
    :(pvpRemote?PVP_SNAPSHOT_INTERVAL_MS:120);
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
  // PvP uses a shorter visual window. War keeps the larger buffer that protects
  // its dense army movement from packet jitter.
- const remoteInterpMs=pvpRemote?clamp(remoteGapMs*.95,34,78):clamp(remoteGapMs*1.18,105,190);
+ const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.02,52,108):clamp(remoteGapMs*1.18,105,190);
  const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;

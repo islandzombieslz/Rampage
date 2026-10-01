@@ -236,15 +236,15 @@ assert(!section('async function reservePVPStart(){','async function launchPVP(){
  'PvP start must never transact the entire room because guest player nodes can be write-protected');
 assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
  'match start must rebuild players from the authoritative Firebase roster');
-assert(html.includes("const PVP_INPUT_INTERVAL_MS=16")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=50")&&
- html.includes("const PVP_REMOTE_RENDER_DELAY_MS=35"),
- 'PvP uses the maximum-useful low-latency cadence and visual buffer without changing War constants');
+assert(html.includes("const PVP_INPUT_INTERVAL_MS=33")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=80")&&
+ html.includes("const PVP_REMOTE_RENDER_DELAY_MS=60"),
+ 'PvP uses the previously validated stable low-latency cadence and visual buffer without changing War constants');
 assert(html.includes("inputSending:false,inputQueue:[]")&&html.includes("const sameDiscrete=tail&&Number(tail.attackSeq||0)===Number(packet.attackSeq||0)"),
  'PvP input transport coalesces repeated movement while preserving discrete attack sequences');
 assert(html.includes("const roomId=this.roomId,uid=this.localPlayerId")&&html.includes("this.roomId===roomId&&this.localPlayerId===uid"),
  'queued inputs stay scoped to the room and player that created them');
-assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=90")&&html.includes("signature===NetworkAdapter.lastInputSignature"),
- 'unchanged PvP inputs are deduplicated with a short bounded keepalive instead of flooding Firebase');
+assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=160")&&html.includes("signature===NetworkAdapter.lastInputSignature"),
+ 'unchanged PvP inputs are deduplicated with the previously validated bounded keepalive instead of flooding Firebase');
 assert(html.includes("async handoffPVPHost(reason='hidden')")&&html.includes("pvpNextHostCandidate(room,this.localPlayerId,requireForeground)"),
  'a backgrounded PvP host must hand authority to another participant instead of pausing the match');
 assert(html.includes("onDisconnect(F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`))")&&html.includes("await op.set(successorUid)"),
