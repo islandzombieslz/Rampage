@@ -241,7 +241,9 @@ const pvpTestHook=`window.__pvpBrowserTest={
  durability(){
    const hero=pvpLocalHero();
    const allies=state.entities.filter(e=>e.alive&&e.pvpAllyBot);
-   return {player:[hero?.maxHp,hero?.maxShield],allies:allies.map(e=>[e.maxHp,e.maxShield])};
+   const humans=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId)
+     .map(e=>[e.ownerId,e.maxHp,e.maxShield]);
+   return {player:[hero?.maxHp,hero?.maxShield],allies:allies.map(e=>[e.maxHp,e.maxShield]),humans};
  },
  basicSerial(){return pvpLocalHero()?.attackSerial||0},
  warriorMechanics(){
@@ -392,8 +394,10 @@ async function main(){
    assert.equal(await page.locator('#timer:visible').count(),0,'PvP gameplay hides the obsolete round timer');
    const durability=await page.evaluate(()=>window.__pvpBrowserTest.durability());
    assert.deepEqual(durability.player,[350,250],'human PvP player gets +100 HP and +100 shield');
-   assert(durability.allies.length===3&&durability.allies.every(v=>v[0]===250&&v[1]===150),
-     'allied NPC durability must remain unchanged');
+   assert.equal(durability.allies.length,0,'two-human PvP must not synthesize allied NPCs');
+   const remoteDurability=durability.humans.find(v=>v[0]==='remote-user');
+   assert.deepEqual(remoteDurability,['remote-user',350,250],
+     'remote Firebase participant must spawn with full human durability, not NPC durability');
    const beforeBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
    const attackButton=page.locator('#attackBtn');
    await attackButton.hover();await page.mouse.down();
