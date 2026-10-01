@@ -199,8 +199,12 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const dragon=state.entities.find(e=>e.type==='dragon'&&e.alive&&e.pvpDragonFirstHitSeen);
    if(!dragon)return {queued:false,shot:false};
    dragon.pvpDragonRetaliatePending=false;dragon.pvpDragonRetaliateImmediate=false;
+   // Guarantee this is a REAL second durability loss. Earlier browser steps can
+   // legitimately consume the dragon's entire shield before this regression check.
+   if(dragon.shield<=0&&dragon.hp<=10)dragon.hp=20;
    dragon.pvpDragonObservedDurability=dragon.shield+dragon.hp;
-   dragon.shield=Math.max(0,dragon.shield-10);
+   if(dragon.shield>0)dragon.shield=Math.max(0,dragon.shield-10);
+   else dragon.hp=Math.max(1,dragon.hp-10);
    const before=state.dragonProjectiles.length;
    pvpObserveDragonDamage(dragon);
    const queued=dragon.pvpDragonRetaliatePending&&!dragon.pvpDragonRetaliateImmediate;
@@ -351,6 +355,11 @@ async function main(){
    assert.equal(await page.locator('#pvpHeroChoices button').count(),2,'PvP offers only Warrior and Warrior Mage');
    await page.locator('#pvpHeroChoices button').filter({hasText:'Maga Guerreira'}).first().click();
    await page.locator('#pvpHeroConfirm').click();
+   assert.equal(await page.locator('#gameScreen.active.pvp-mode').count(),0,
+     'confirming a hero must not auto-start PvP; only the host starts after everyone confirms');
+   await page.locator('#lobbyContinue:not([disabled])').waitFor({timeout:8000});
+   assert.equal(await page.locator('#lobbyContinue').textContent(),'Iniciar PvP');
+   await page.locator('#lobbyContinue').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());

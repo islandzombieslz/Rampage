@@ -5625,10 +5625,14 @@ function syncFirebaseRoom(room){
  // territory, bonusGems e troops; substituir esse array apagava os dados do player.
  const lobbyRosterPhase=room.status==='lobby'||room.status==='clan';
  if(lobbyRosterPhase && !warStartInFlight && !state.running){
-   const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,pvpHero:(state.mode==='pvp'?PVP_SELECTABLE_BY_ID:PVP_HERO_BY_ID)[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed}));
-   const max=state.mode==='pvp'?4:state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
-   const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0,pvpHero:(state.mode==='pvp'?PVP_SELECTABLE_HEROES[i%PVP_SELECTABLE_HEROES.length]:PVP_HEROES[i%PVP_HEROES.length]).id,pvpConfirmed:true}));
-   state.players=[...humans,...bots];
+   if(state.mode==='pvp'){
+     state.players=pvpRosterFromFirebaseRoom(room);
+   }else{
+     const humans=Object.values(room.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,pvpHero:PVP_HERO_BY_ID[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed}));
+     const max=state.mode==='pve'?10:3,npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,max-humans.length));
+     const bots=Array.from({length:npcCount},(_,i)=>({id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,clanSelectedAt:0,pvpHero:PVP_HEROES[i%PVP_HEROES.length].id,pvpConfirmed:true}));
+     state.players=[...humans,...bots];
+   }
    // Nao forca dois humanos para clans diferentes enquanto estao apenas selecionando.
    // Também atualiza os clãs dos NPCs ao mudar a seleção no Firebase.
    if(state.mode==='war')prepareWarClanAssignments();
@@ -5968,6 +5972,21 @@ const PVP_ENEMY_HEROES=Object.freeze({
  seahorse:{name:'Cavalo-marinho',type:'seahorse',card:'assets/water/seahorse/card.png',clan:'water'}
 });
 let pvpPickerDraft='warrior',pvpStartInFlight=false;
+function pvpRosterFromFirebaseRoom(room){
+ const humans=Object.values(room?.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({
+   id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,
+   color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,
+   clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,
+   pvpHero:PVP_SELECTABLE_BY_ID[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed
+ }));
+ const npcCount=clamp(Number(room?.npcCount)||0,0,Math.max(0,4-humans.length));
+ const bots=Array.from({length:npcCount},(_,i)=>({
+   id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,
+   color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,
+   clanSelectedAt:0,pvpHero:PVP_SELECTABLE_HEROES[i%PVP_SELECTABLE_HEROES.length].id,pvpConfirmed:true
+ }));
+ return [...humans,...bots];
+}
 function pvpAllPlayersConfirmed(){
  const humans=state.players.filter(p=>p.human);
  return humans.length>0&&humans.every(p=>p.pvpConfirmed&&PVP_SELECTABLE_BY_ID[p.pvpHero]);
@@ -6026,7 +6045,6 @@ async function commitPVPCharacterPicker(){
    const mine=state.players.find(p=>p.id===uid);
    if(mine){mine.pvpHero=pvpPickerDraft;mine.pvpConfirmed=true}
    $('#pvpPicker').hidden=true;renderPlayers();
-   if(NetworkAdapter.isHost&&state.players.filter(p=>p.human).length===1)await launchPVP();
  }catch(err){console.error('PvP character confirmation:',err);flash('Não foi possível confirmar o herói.',1.5)}
  finally{btn.disabled=false}
 }
@@ -6038,16 +6056,58 @@ function updatePVPLobbyAuthority(){
  button.textContent=!ready?'Aguardando confirmações…':!host?'Aguardando anfitrião…':'Iniciar PvP';
  $$('[data-target="npcs"]').forEach(b=>b.disabled=!host);
 }
+async function reservePVPStart(){
+ if(!NetworkAdapter.roomId||!NetworkAdapter.localPlayerId||!NetworkAdapter.isHost)return null;
+ const F=await NetworkAdapter.waitFirebase(),roomId=NetworkAdapter.roomId,uid=NetworkAdapter.localPlayerId;
+ const rr=F.ref(F.firebaseDb,`rooms/${roomId}`);
+ const tx=await F.runTransaction(rr,current=>{
+   if(!current||current.hostUid!==uid||current.status!=='lobby'||current.settings?.mode!=='pvp')return;
+   const players=Object.values(current.players||{});
+   const npcCount=clamp(Number(current.npcCount)||0,0,Math.max(0,4-players.length));
+   if(!players.length||players.length+npcCount>4)return;
+   if(players.some(p=>p?.human===false||!p?.pvpConfirmed||!PVP_SELECTABLE_BY_ID[p?.pvpHero]))return;
+   return {...current,status:'starting'};
+ },{applyLocally:false});
+ return tx.committed?(tx.snapshot?.val()||null):null;
+}
 async function launchPVP(){
  if(state.mode!=='pvp'||pvpStartInFlight||!NetworkAdapter.isHost||!pvpAllPlayersConfirmed())return false;
  pvpStartInFlight=true;
+ let reserved=false;
  try{
+   const room=await reservePVPStart();
+   if(!room){
+     flash('Aguardando todos confirmarem o herói.',1.6);
+     return false;
+   }
+   reserved=true;
+   if(room.settings){
+     state.rounds=room.settings.rounds??state.rounds;
+     state.difficulty=room.settings.difficulty??state.difficulty;
+     state.pveTime=0;state.speed='normal';
+   }
+   state.players=pvpRosterFromFirebaseRoom(room);
+   NetworkAdapter.roomStatus='starting';
+   renderPlayers();
    startPVP();
    NetworkAdapter.roomStatus='playing';
    await NetworkAdapter.pushState(serializeGame());
    return true;
- }catch(err){console.error('Start PvP:',err);flash('Falha ao iniciar PvP.',2);return false}
- finally{pvpStartInFlight=false}
+ }catch(err){
+   console.error('Start PvP:',err);
+   if(reserved&&NetworkAdapter.roomId&&NetworkAdapter.isHost){
+     try{
+       const F=await NetworkAdapter.waitFirebase();
+       await F.update(F.ref(F.firebaseDb,`rooms/${NetworkAdapter.roomId}`),{status:'lobby',game:null});
+     }catch(rollbackErr){console.error('PvP start rollback:',rollbackErr)}
+     NetworkAdapter.roomStatus='lobby';state.running=false;state.phase='lobby';state.entities=[];state.dragonProjectiles=[];
+     clearEntityVisuals();navigateScreen('lobbyScreen');renderPlayers();
+   }
+   flash('Falha ao iniciar PvP.',2);return false;
+ }finally{
+   pvpStartInFlight=false;
+   if(state.mode==='pvp'&&!state.running)updatePVPLobbyAuthority();
+ }
 }
 function setLobbySkin(mode=state.mode){
   const lobby=$('#lobbyScreen');
@@ -6056,6 +6116,7 @@ function setLobbySkin(mode=state.mode){
   lobby.classList.toggle('war-lobby',war);
   lobby.classList.toggle('pve-lobby',!war&&mode!=='pvp');
   lobby.classList.toggle('pvp-lobby',mode==='pvp');
+  if(mode==='pvp'){preloadPVPWarriorVisuals();preloadPVPExactGifDurations()}
   renderWarLobbySettings();
 }
 function renderPlayers(){
@@ -8657,10 +8718,14 @@ function pvpWarriorSpecialCinematic(e,now=performance.now()){
  if(t>.76)return (1-t)/.24;
  return 1;
 }
+let pvpCinematicFilterStep=-1;
 function syncPvpWarriorCinematicPresentation(amount){
  amount=clamp(Number(amount)||0,0,1);
- const brightness=1-PVP_WARRIOR.specialSceneDim*amount;
- const filter=amount>.001?`brightness(${brightness.toFixed(3)})`:'';
+ const step=Math.round(amount*24);
+ if(step===pvpCinematicFilterStep)return;
+ pvpCinematicFilterStep=step;
+ const quantized=step/24,brightness=1-PVP_WARRIOR.specialSceneDim*quantized;
+ const filter=quantized>.001?`brightness(${brightness.toFixed(3)})`:'';
  if(typeof pvpBarrierTopSprite!=='undefined'&&pvpBarrierTopSprite)pvpBarrierTopSprite.style.filter=filter;
  if(typeof pvpBarrierSprite!=='undefined'&&pvpBarrierSprite)pvpBarrierSprite.style.filter=filter;
  if(typeof combatFxLayer!=='undefined'&&combatFxLayer)combatFxLayer.style.filter=filter;
@@ -8804,32 +8869,39 @@ function preloadPVPWarriorVisuals(){
  }
 }
 let pvpExactGifPreloadStarted=false;
+function pvpScheduleGifDurationWork(task){
+ if(typeof requestIdleCallback==='function'){requestIdleCallback(()=>task(),{timeout:1200});return}
+ setTimeout(task,80);
+}
 function preloadPVPExactGifDurations(){
  if(pvpExactGifPreloadStarted)return;
  pvpExactGifPreloadStarted=true;
- // War's cached duration and attack logic are never replaced.
- const keys=['magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
+ // Prioriza os GIFs do Guerreiro no lobby. O restante é analisado um por vez,
+ // em janela ociosa, para não competir com render/física durante o combate.
+ const keys=['pvpWarriorSpecial','pvpWarriorAttack','pvpWarriorCombo','pvpWarriorDeath',
+  'magePower','egyptMagePower','mageSpecial','femaleMageSpecial',
   'egyptMageSpecial','egyptFemaleMageSpecial','magePowerSpecial','egyptMagePowerSpecial',
-  'pvpWarriorDeath','pvpWarriorAttack','pvpWarriorCombo','pvpWarriorSpecial',
   'kingSpecial','kingPower','brownAttack','brownSpecial','brownPower',
   'dragonTakeoff','dragonAttack','golemAttack','golemSpecial',
   'najaAttack','najaSpecial','najaSpecialFinal','anubisMeleeAttack',
   'anubisRangedAttack','isisAttack','isisSpecial','isisPower',
   'poseidonNormal','poseidonWaveCast','poseidonSummonCast','seahorseAttack'];
- // Two at a time: avoid holding many large GIF buffers in memory at match start.
  let cursor=0;
- const worker=async()=>{
-   while(state.mode==='pvp'&&cursor<keys.length){
-     const key=keys[cursor++];
+ const next=()=>{
+   if(state.mode!=='pvp'||cursor>=keys.length)return;
+   const key=keys[cursor++];
+   pvpScheduleGifDurationWork(async()=>{
      try{
        const response=await fetch(ASSETS[key],{cache:'force-cache'});
-       if(!response.ok)continue;
-       const ms=pvpParsedGifCycleMs(await response.arrayBuffer());
-       if(ms>=250&&ms<=30000)pvpExactGifDurationMs.set(key,ms);
+       if(response.ok){
+         const ms=pvpParsedGifCycleMs(await response.arrayBuffer());
+         if(ms>=250&&ms<=30000)pvpExactGifDurationMs.set(key,ms);
+       }
      }catch(_){}
-   }
+     finally{pvpScheduleGifDurationWork(next)}
+   });
  };
- worker();worker();
+ pvpScheduleGifDurationWork(next);
 }
 function pvpFullGifDuration(key,fallback=3000){
  return pvpExactGifDurationMs.get(key)||pvpGifFullDurationMs.get(key)||gifRuntime.get(key)?.duration||fallback;
@@ -9546,6 +9618,7 @@ function pvpSpawnWave(index){
  return true;
 }
 const PVP_REVIVE_DELAY_MS=10000;
+function pvpLifeLimit(){return state.difficulty==='hard'?3:2}
 function pvpResetLocalSpectatorAfterRevive(){
  state.spectator={active:false,transitioning:false,deathEntityId:null,fadeStart:0,activateAt:0,targetId:null};
  $('#gameScreen').classList.remove('spectator-mode');
@@ -9570,9 +9643,9 @@ function pvpSpawnRoundParticipant(player){
 function pvpRegisterRoundDeath(e,now=performance.now()){
  if(state.mode!=='pvp'||!e?.pvpMode||e.pvpMinion||!e.ownerId)return false;
  const player=state.players.find(p=>p.id===e.ownerId);if(!player)return false;
- const deaths=Math.min(2,(Number(player.pvpRoundDeaths)||0)+1);
+ const lifeLimit=pvpLifeLimit(),deaths=Math.min(lifeLimit,(Number(player.pvpRoundDeaths)||0)+1);
  player.pvpRoundDeaths=deaths;
- if(deaths===1){
+ if(deaths<lifeLimit){
    player.pvpReviveAt=now+PVP_REVIVE_DELAY_MS;
    player.pvpEliminated=false;
  }else{
@@ -9583,7 +9656,8 @@ function pvpRegisterRoundDeath(e,now=performance.now()){
 }
 function pvpProcessRoundRevives(now=performance.now()){
  for(const player of state.players){
-   if(player.pvpEliminated||Number(player.pvpRoundDeaths)!==1)continue;
+   const deaths=Number(player.pvpRoundDeaths)||0;
+   if(player.pvpEliminated||deaths<1||deaths>=pvpLifeLimit())continue;
    const reviveAt=Number(player.pvpReviveAt)||0;
    if(!(reviveAt>0&&now>=reviveAt))continue;
    if(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId===player.id)){player.pvpReviveAt=0;continue}
@@ -9596,7 +9670,8 @@ function pvpProcessRoundRevives(now=performance.now()){
 function pvpHumanStillInRound(player){
  if(!player?.human||player.pvpEliminated)return false;
  if(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId===player.id))return true;
- return Number(player.pvpRoundDeaths)===1&&Number(player.pvpReviveAt)>0;
+ const deaths=Number(player.pvpRoundDeaths)||0;
+ return deaths>0&&deaths<pvpLifeLimit()&&Number(player.pvpReviveAt)>0;
 }
 function beginPVPRound(){
  state.world.w=PVP_ARENA.w;state.world.h=PVP_ARENA.h;state.entities=[];state.particles=[];state.dragonProjectiles=[];
@@ -9748,7 +9823,7 @@ function updatePVP(dt){
  }
 
  const humans=state.players.filter(p=>p.human);
- // Solo + aliados NPC: a segunda morte do jogador encerra a PARTIDA.
+ // Solo + aliados NPC: ao gastar todas as vidas da dificuldade, encerra a PARTIDA.
  if(humans.length===1&&humans[0].pvpEliminated){
    pvpLastEnemyClan=state.entities.find(e=>e.alive&&e.team==='pvp-enemy')?.clan||pvpLastEnemyClan;
    state.running=false;state.phase='between';finishGame('',pvpResult('enemy'));return;
@@ -11348,7 +11423,7 @@ function loop(now){
  updateLayeredBattleSfx(now);
  updatePvpCombatSfx(now);
 
- const networkPushInterval=state.mode==='pvp'?180:120;
+ const networkPushInterval=120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
    if(state.mode==='pvp'){
@@ -11646,7 +11721,7 @@ function resetCameraComposite(){
  applyCameraLayerTransform('translate3d(0,0,0)',false);
 }
 function prepareCameraComposite(left,top,zoom){
- if(state.mode!=='war'||!entityCameraLayer||!combatCameraLayer){
+ if((state.mode!=='war'&&state.mode!=='pvp')||!entityCameraLayer||!combatCameraLayer){
    if(cameraComposite.initialized||cameraComposite.active)resetCameraComposite();
    return {left,top,zoom};
  }

@@ -34,7 +34,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
    const dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy)));
    return Math.hypot(px-(ax+t*dx),py-(ay+t*dy))
  },
- clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},
+ clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},pvpPlayEntitySfxNow(){},stopLayeredOneShot(){},
  beginMatchTracking(){},matchStatsFor:uid=>state.matchStats[uid]||(state.matchStats[uid]={damage:0,wonRounds:0,victorySeconds:0,victoryTimeLimit:0}),
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
@@ -226,6 +226,18 @@ assert(html.includes("joystick.pointerId===event.pointerId"),'joystick pointer m
 assert(html.includes("const baseZoom=pvpCameraZoom(vw,vh)")&&html.includes("specialCameraZoom"),'PvP camera keeps its base zoom and adds the Warrior special cinematic');
 assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
+assert(!html.includes("state.players.filter(p=>p.human).length===1)await launchPVP()"),
+ 'hero confirmation must never auto-start PvP from a stale one-player roster');
+assert(html.includes("async function reservePVPStart()")&&html.includes("status:'starting'"),
+ 'host start must atomically reserve the authoritative Firebase room before simulation');
+assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
+ 'match start must rebuild players from the authoritative Firebase roster');
+assert(html.includes("const networkPushInterval=120;"),
+ 'PvP snapshots use the same stable cadence as Clan War');
+assert(html.includes("state.mode!=='war'&&state.mode!=='pvp'"),
+ 'PvP uses the GPU camera compositor during camera motion and Warrior zoom');
+assert(html.includes("requestIdleCallback")&&html.includes("pvpWarriorSpecial','pvpWarriorAttack"),
+ 'large PvP GIF duration parsing is prioritized in idle time from the lobby');
 assert(html.includes("syncPVPPowerEffects(domCamera.left"),'animated mage power');
 // Wave staging and the actual War AI dispatch are PvP-only.
 assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs must use real War GIF states');
@@ -236,7 +248,7 @@ assert(!section('function updatePVP(dt){','function updatePVPHUD(){').includes('
 assert(html.includes("if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound()"),
  'a PvP round ends only after the final clan/wave cycle is cleared');
 assert(html.includes("humans.length===1&&humans[0].pvpEliminated"),
- 'solo second death ends the match');
+ 'solo match ends only after the difficulty life limit is exhausted');
 assert(html.includes("humans.length>1&&!humans.some(p=>pvpHumanStillInRound(p))"),
  'online PvP keeps going while at least one real player can still fight or revive');
 state.players=[{id:'u1',name:'Alice',human:true,pvpHero:'warrior',color:'#abc'}];
@@ -274,7 +286,8 @@ assert.equal(run('PVP_DIFFICULTY.normal.waves[2][0][1]'),5);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[0][0][1]'),6);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[1][1][1]'),11);
 assert.equal(run('PVP_DIFFICULTY.hard.waves[3][0][1]'),4);
-assert.equal(run('PVP_REVIVE_DELAY_MS'),10000,'each participant receives one ten-second revive per round');
+assert.equal(run('PVP_REVIVE_DELAY_MS'),10000,'each participant receives a ten-second revive while lives remain');
+assert.equal(run('pvpLifeLimit()'),2,'easy and normal PvP keep two total lives');
 let roundHero=state.entities.find(e=>e.ownerId==='u1'&&!e.pvpMinion);
 assert(roundHero&&roundHero.alive);
 run('pvpRegisterRoundDeath(state.entities.find(e=>e.ownerId==="u1"&&!e.pvpMinion),performance.now())');
@@ -306,8 +319,27 @@ assert.equal(mediumNaja.maxHp,350);assert.equal(mediumNaja.maxShield,300);assert
 state.difficulty='hard';
 const hardPoseidon=run('pvpBaseEntity({...PVP_ENEMY_HEROES.poseidon,id:"poseidon"},700,700,"pvp-enemy","#f77",null,true)');
 assert.equal(hardPoseidon.maxHp,375);assert.equal(hardPoseidon.maxShield,325);assert.equal(hardPoseidon.pvpDamageBonus,25);
+assert.equal(run('pvpLifeLimit()'),3,'hard PvP grants three total lives');
+run('beginPVPRound()');
+for(let death=1;death<=2;death++){
+ roundHero=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1');
+ assert(roundHero,'hard mode participant must be alive before death '+death);
+ run('pvpRegisterRoundDeath(state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==="u1"),performance.now())');
+ roundHero.alive=false;
+ assert.equal(state.players[0].pvpRoundDeaths,death);
+ assert.equal(state.players[0].pvpEliminated,false,'hard mode still has a life after death '+death);
+ assert.equal(state.players[0].pvpReviveAt,now+10000);
+ now+=10001;run('pvpProcessRoundRevives(performance.now())');
+ assert(state.entities.some(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1'),'hard mode revives after death '+death);
+}
+roundHero=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='u1');
+run('pvpRegisterRoundDeath(state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==="u1"),performance.now())');
+roundHero.alive=false;
+assert.equal(state.players[0].pvpRoundDeaths,3);
+assert.equal(state.players[0].pvpEliminated,true,'third death eliminates the participant on hard');
+assert.equal(state.players[0].pvpReviveAt,0);
 state.difficulty='easy';
-assert(html.includes("state.mode==='pvp'?180:120"),'PvP-only lower snapshot frequency');
+assert(html.includes("const networkPushInterval=120;"),'PvP uses Clan War snapshot cadence');
 assert(html.includes("desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
 assert(html.includes("img.pvp-gif-loading")&&html.includes("img:not([src])"),'PvP hides unloaded sprites');
 assert(html.includes("return String(cycle.serial)!==String(serial)"),'same serial never replays; new cast can start');
