@@ -3285,7 +3285,7 @@ const NetworkAdapter = {
     this.stopRoomHeartbeat();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.inputSending=false;this.inputSendPromise=null;this.lastInputSignature='';this.lastInputSentAt=0;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
     try{state.running=false}catch(_){}
     try{navigateScreen('menuScreen')}catch(_){}
   },
@@ -3364,7 +3364,7 @@ const NetworkAdapter = {
     }catch(_){}
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.inputSending=false;this.inputSendPromise=null;this.lastInputSignature='';this.lastInputSentAt=0;this.leaving=false;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.leaving=false;
   },
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
   async setClan(clan){
@@ -3410,6 +3410,7 @@ const NetworkAdapter = {
   },
   async sendInput(input){
     if(!this.roomId||!this.localPlayerId)return;
+    const roomId=this.roomId,uid=this.localPlayerId;
     const packet={...input};
     const tail=this.inputQueue[this.inputQueue.length-1];
     const sameDiscrete=tail&&Number(tail.attackSeq||0)===Number(packet.attackSeq||0)&&
@@ -3421,9 +3422,9 @@ const NetworkAdapter = {
     this.inputSendPromise=(async()=>{
       try{
         const F=await this.waitFirebase();
-        while(this.inputQueue.length&&this.roomId&&this.localPlayerId){
+        while(this.inputQueue.length&&this.roomId===roomId&&this.localPlayerId===uid){
           const next=this.inputQueue.shift();
-          await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...next,t:F.serverTimestamp()});
+          await F.set(F.ref(F.firebaseDb,`rooms/${roomId}/inputs/${uid}`),{...next,t:F.serverTimestamp()});
         }
       }finally{
         this.inputSending=false;this.inputSendPromise=null;
