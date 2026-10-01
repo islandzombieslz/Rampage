@@ -4042,6 +4042,7 @@ const layeredSfxBuffers=new Map();
 const layeredSfxDecodePromises=new Map();
 const layeredSfxLastAt=new Map();
 const layeredSfxLoops=new Map();
+const layeredSfxOneShots=new Map();
 let layeredBattleSfxLastScan=0;
 const MELEE_FIGHT_SFX_TYPES=new Set(['warrior','brownWarrior','king','golem','naja','anubis','isis']);
 
@@ -4133,6 +4134,44 @@ function playWorldLayeredSfx(key,x,y,baseVolume=1,cooldownMs=0){
  if(mix.gain<=.006)return false;
  return playLayeredSfx(key,baseVolume*mix.gain,mix.pan,cooldownMs);
 }
+function stopLayeredOneShot(channelId){
+ const channel=layeredSfxOneShots.get(channelId);
+ if(!channel)return false;
+ layeredSfxOneShots.delete(channelId);
+ try{channel.src.onended=null;channel.src.stop()}catch(_){}
+ return true;
+}
+async function playLayeredSfxForDuration(key,durationMs,volume=1,pan=0,channelId=key){
+ if(!SFX_ASSETS[key])return false;
+ const buffer=await ensureLayeredSfxBuffer(key);
+ const ctx=await ensureLayeredSfxContextRunning();
+ if(!buffer||!ctx)return false;
+ stopLayeredOneShot(channelId);
+ try{
+   const src=ctx.createBufferSource(),gain=ctx.createGain();
+   src.buffer=buffer;
+   const targetSec=Math.max(.05,Number(durationMs||0)/1000);
+   if(Number.isFinite(buffer.duration)&&buffer.duration>0)
+     src.playbackRate.value=clamp(buffer.duration/targetSec,.15,6);
+   const keyGain=SFX_KEY_GAIN[key]||1;
+   gain.gain.value=clamp(volume*SFX_MASTER_VOLUME*keyGain,0,1.4);
+   src.connect(gain);
+   let panner=null;
+   if(ctx.createStereoPanner){
+     panner=ctx.createStereoPanner();
+     panner.pan.value=clamp(pan,-1,1);
+     gain.connect(panner);panner.connect(ctx.destination);
+   }else gain.connect(ctx.destination);
+   const channel={src,gain,panner,key};
+   layeredSfxOneShots.set(channelId,channel);
+   src.onended=()=>{if(layeredSfxOneShots.get(channelId)===channel)layeredSfxOneShots.delete(channelId)};
+   src.start();
+   return true;
+ }catch(err){
+   console.warn('SFX timed play failed',key,err);
+   return false;
+ }
+}
 async function setLayeredLoop(key,volume,pan=0,channelId=key){
  const target=clamp(volume*SFX_MASTER_VOLUME,0,1);
  let channel=layeredSfxLoops.get(channelId);
@@ -4167,6 +4206,7 @@ function fadeLayeredLoop(channelId){
 }
 function stopPvpCombatSfxLoops(){
  for(const id of layeredSfxLoops.keys())if(String(id).startsWith('pvp:'))fadeLayeredLoop(id);
+ for(const id of [...layeredSfxOneShots.keys()])if(String(id).startsWith('pvp:'))stopLayeredOneShot(id);
 }
 function stopLayeredBattleLoops(){
  setLayeredLoop('melee',0,0);
@@ -4272,6 +4312,23 @@ function pvpSfxEvent(e,event,serial,active,key,baseVolume=1){
  if(!active||nowSerial<=0||prev===nowSerial)return;
  pvpPlayEntitySfxNow(e,event,nowSerial,key,baseVolume);
 }
+function pvpPlayWarriorComboSfx(e,serial,durationMs){
+ const nowSerial=Number(serial)||0;if(nowSerial<=0)return false;
+ const event='warrior-combo',id=(e?.id??'x')+':'+event;
+ if(pvpCombatSfxSeen.get(id)===nowSerial||pvpCombatSfxPending.get(id)===nowSerial)return true;
+ pvpCombatSfxPending.set(id,nowSerial);
+ const mix=pvpEntitySfxMix(e),channelId='pvp:combo:'+(e?.id??'x');
+ Promise.resolve(playLayeredSfxForDuration('pvpWarriorCombo',durationMs,mix.gain/SFX_MASTER_VOLUME,mix.pan,channelId))
+   .then(played=>{
+     if(pvpCombatSfxPending.get(id)===nowSerial)pvpCombatSfxPending.delete(id);
+     if(played)pvpCombatSfxSeen.set(id,nowSerial);
+   })
+   .catch(err=>{
+     if(pvpCombatSfxPending.get(id)===nowSerial)pvpCombatSfxPending.delete(id);
+     console.warn('PvP combo SFX failed',err);
+   });
+ return true;
+}
 function updatePvpCombatSfx(now){
  if(now-pvpCombatSfxLastScan<70)return;
  pvpCombatSfxLastScan=now;
@@ -4287,7 +4344,7 @@ function updatePvpCombatSfx(now){
      const combo=Number(e.pvpWarriorComboUntil)>now;
      const special=Number(e.pvpWarriorChargeUntil)>now;
      pvpSfxEvent(e,'warrior-single',e.pvpWarriorSingleSerial,single,'pvpWarriorSingle',1);
-     pvpSfxEvent(e,'warrior-combo',e.pvpWarriorComboSerial,combo,'pvpWarriorCombo',1);
+     if(combo)pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,Math.max(1,Number(e.pvpWarriorComboUntil)-now));
      pvpSfxEvent(e,'warrior-special',e.pvpSpecialSerial,special,'pvpWarriorSpecial',1);
      const walkId='pvp:walk:'+e.id;
      if(e.moving&&!single&&!combo&&!special){
@@ -4298,7 +4355,8 @@ function updatePvpCombatSfx(now){
    }
    if(e.type==='dragon'){
      const attackActive=!!e.pendingDragonAttack&&Number(e.pendingDragonAttack.endAt)>now;
-     pvpSfxEvent(e,'dragon-attack',e.dragonAttackSerial,attackActive,'pvpDragonAttack',1);
+     const dragonSoundReady=attackActive&&now>=Number(e.pendingDragonAttack.soundAt||e.pendingDragonAttack.startedAt||0);
+     pvpSfxEvent(e,'dragon-attack',e.dragonAttackSerial,dragonSoundReady,'pvpDragonAttack',1);
      if(e.dragonFlightState==='flying'){
        const wingId='pvp:wings:'+e.id,mix=pvpEntitySfxMix(e);
        setLayeredLoop('pvpDragonWings',mix.gain/SFX_MASTER_VOLUME,mix.pan,wingId);
@@ -8885,7 +8943,7 @@ function pvpStartWarriorCombo(e,now=performance.now()){
  const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
  e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
  e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
- pvpPlayEntitySfxNow(e,'warrior-combo',e.pvpWarriorComboSerial,'pvpWarriorCombo',1);
+ pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,duration);
  e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
  e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
@@ -8895,6 +8953,7 @@ function pvpStartWarriorCombo(e,now=performance.now()){
 function pvpCancelWarriorCombo(e,now=performance.now()){
  if(!pvpIsWarriorHero(e))return false;
  const active=Number(e.pvpWarriorComboUntil)>now||Number(e.pvpWarriorComboUntil)>0;
+ stopLayeredOneShot('pvp:combo:'+e.id);
  e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
  e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
@@ -8929,6 +8988,7 @@ function pvpTickWarriorCombo(e,now=performance.now()){
  e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
  e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
  if(repeat)return pvpStartWarriorCombo(e,now);
+ stopLayeredOneShot('pvp:combo:'+e.id);
  e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
  return false;
 }
@@ -10720,8 +10780,7 @@ function beginDragonTakeoff(e){
            if(now<gate)return false;
            const angle=Math.atan2(target.y-e.y,target.x-e.x);e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
            e.moving=false;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;
-           if(state.mode==='pvp')pvpPlayEntitySfxNow(e,'dragon-attack',e.dragonAttackSerial,'pvpDragonAttack',1);
-           e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,endAt:now+DRAGON_ATTACK_VISUAL_MS,emergency:!!emergency};
+           e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,soundAt:now+1000,endAt:now+DRAGON_ATTACK_VISUAL_MS,emergency:!!emergency};
            if(emergency){
              e.dragonCloseShotAt=now+DRAGON_CLOSE_SHOT_COOLDOWN_MS;
              e.dragonNextShotAt=Math.max(Number(e.dragonNextShotAt)||0,now+DRAGON_SHOT_COOLDOWN_MS);
