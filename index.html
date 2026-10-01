@@ -9280,11 +9280,11 @@ function pvpPredictGuestLocal(dt){
    e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
  }else if(!locked)e.moving=false;
 
+ const regional=pvpUpdateLocalRegionalAuthority(e);
  const ax=Number(e.netAuthX),ay=Number(e.netAuthY);
  if(!Number.isFinite(ax)||!Number.isFinite(ay))return;
  const ex=ax-e.x,ey=ay-e.y,error=Math.hypot(ex,ey);
  if(!Number.isFinite(error)||error<.01)return;
- const regional=pvpUpdateLocalRegionalAuthority(e);
  if(regional){
    // The host snapshot is necessarily older than the locally-owned pose.
    // Do not drag the remote player backwards. Only a catastrophic divergence
@@ -10492,11 +10492,12 @@ function updatePVP(dt){
  try{
  if(state.phase!=='combat')return;
  const now=performance.now();
+ pvpIntegrateRemoteRegions(now);
  pvpRebuildTargets();
  const entityById=rebuildWarEntityIdMap();
- updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
+ updateDragonProjectiles(dt,entityById,pvpHostShouldSimulateProjectile);updateDragonBurns(now,entityById,pvpHostShouldSimulateEntity);
  for(const e of state.entities){
-   if(!e.alive)continue;
+   if(!e.alive||!pvpHostShouldSimulateEntity(e))continue;
    try{
    if(pvpIsWarriorHero(e))pvpTickWarriorCombo(e,now);
    if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now){
@@ -10542,7 +10543,7 @@ function updatePVP(dt){
      e.pvpSpecialFxUntil=0;e.pvpWarriorComboUntil=0;e.pvpWarriorChargeUntil=0;e.moving=false;
    }
  }
- pvpExpireSummons(now);
+ pvpExpireSummons(now,pvpHostShouldSimulateEntity);
  pvpProcessRoundRevives(now);
  state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
  const enemiesAlive=state.entities.some(e=>e.alive&&e.team==='pvp-enemy');
@@ -10566,6 +10567,64 @@ function updatePVP(dt){
  // O ciclo completo de quatro grupos define uma rodada. Só termina após o último grupo.
  if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound();
  }catch(err){pvpReportError('simulação',err)}
+}
+function updatePVPRegional(dt){
+ if(!pvpLocalRegionalAuthority||state.mode!=='pvp'||!state.running||state.phase!=='combat'||NetworkAdapter.isHost)return;
+ const now=performance.now();
+ pvpRegionalSimulationUid=NetworkAdapter.localPlayerId;
+ try{
+   pvpLocalSimulationView();
+   pvpRebuildTargets();
+   const entityById=rebuildWarEntityIdMap();
+   updateDragonProjectiles(dt,entityById,pvpLocalRegionOwnsProjectile);
+   updateDragonBurns(now,entityById,pvpLocalRegionOwnsEntity);
+   for(const e of state.entities){
+     if(!e.alive||!pvpLocalRegionOwnsEntity(e))continue;
+     try{
+       if(pvpIsWarriorHero(e))pvpTickWarriorCombo(e,now);
+       if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now){
+         let chargeInput={};
+         if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot)
+           chargeInput=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+         pvpTickWarriorSpecial(e,chargeInput,dt,now);
+         if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot){
+           const seq=Number(chargeInput.attackSeq)||0;if(seq>e.pvpLastAttackSeq)e.pvpLastAttackSeq=seq;
+         }
+         continue;
+       }
+       if(e.pvpAllyBot)pvpAllyBotAction(e,dt);
+       else if(e.ownerId&&!e.pvpMinion){
+         if(e.knockTime>0){e.moving=false;continue}
+         const local=e.ownerId===NetworkAdapter.localPlayerId;
+         const input=local?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+         if(pvpIsWarriorHero(e)){
+           const cancelSeq=Number(input.pvpComboCancelSeq)||0;
+           if(cancelSeq>Number(e.pvpLastComboCancelSeq||0)){
+             e.pvpLastComboCancelSeq=cancelSeq;pvpCancelWarriorCombo(e,now);
+           }
+         }
+         if(!local){
+           let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
+           if(len>1){dx/=len;dy/=len}
+           if(dx||dy){
+             const b=pvpArenaBounds(e.r||30);
+             e.x=clamp(e.x+dx*e.speed*dt,b.left,b.right);e.y=clamp(e.y+dy*e.speed*dt,b.top,b.bottom);
+             e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
+           }else e.moving=false;
+         }
+         const seq=Number(input.attackSeq)||0;
+         if(seq>Number(e.pvpLastAttackSeq||0)){e.pvpLastAttackSeq=seq;pvpHandleAction(e,input.pvpAction||'attack',input.pvpTargetId)}
+         pvpTickPower(e,now,input.pvpAimAngle);
+       }else pvpBotAction(e,dt);
+     }catch(err){
+       pvpReportError('região entidade '+e.type,err);
+       e.pvpPowerUntil=0;e.pvpPowerVisualUntil=0;e.pvpActionUntil=0;e.pvpSpecialFxUntil=0;
+       e.pvpWarriorComboUntil=0;e.pvpWarriorChargeUntil=0;e.moving=false;
+     }
+   }
+   pvpExpireSummons(now,pvpLocalRegionOwnsEntity);
+   state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
+ }finally{pvpRegionalSimulationUid=null}
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
