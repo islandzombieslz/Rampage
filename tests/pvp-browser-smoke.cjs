@@ -96,6 +96,47 @@ const pvpTestHook=`window.__pvpBrowserTest={
    Object.assign(remote,saved);pvpRemoteRegionalAuthority.delete('remote-user');
    return {accepted,moved,yielded};
  },
+ fullRegionalStateCycle(){
+   const remote=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='remote-user');
+   const npc=state.entities.find(e=>e.alive&&e.pvpMinion&&e.team==='pvp-enemy');
+   if(!remote||!npc)return null;
+   const uid=NetworkAdapter.localPlayerId,now=performance.now(),packetAt=NetworkAdapter.serverNow();
+   const savedRemote={x:remote.x,y:remote.y,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid,pvpRegionalAuthorityEpoch:remote.pvpRegionalAuthorityEpoch};
+   const savedNpc={x:npc.x,y:npc.y,hp:npc.hp,pvpActionUntil:npc.pvpActionUntil,pvpRegionalAuthorityUid:npc.pvpRegionalAuthorityUid,pvpRegionalAuthorityEpoch:npc.pvpRegionalAuthorityEpoch};
+   pvpRemoteRegionalAuthority.delete('remote-user');
+   remote.x=1260;remote.y=930;npc.x=1330;npc.y=930;
+   const heroRaw=pvpRegionalCloneEntity(remote),npcRaw=pvpRegionalCloneEntity(npc);
+   npcRaw.hp=Math.max(1,Number(npc.hp)-23);npcRaw.pvpActionUntil=now+900;
+   const projectile={id:'r_remote_7_df_1',kind:'dragon',serial:1,x:1300,y:930,vx:120,vy:0,speed:120,damage:25,burn:true,
+     targetId:remote.id,targetX:remote.x,targetY:remote.y,team:'pvp-enemy',sourceId:npc.id,createdAt:now,expireAt:now+3000};
+   const farView={hostUid:uid,left:200,top:180,right:780,bottom:690};
+   const packet={epoch:7,stateSeq:1,perfNow:now,final:false,bubble:{left:1050,top:700,right:1600,bottom:1220},
+     heroId:remote.id,ownedIds:[remote.id,npc.id],projectileIds:[projectile.id],entities:[heroRaw,npcRaw],projectiles:[projectile],
+     damageEvents:[],playerDamage:0,playerRound:null};
+   const accepted=pvpApplyDelegatedRegionalState('remote-user',{t:packetAt,pvpRegionalAuthority:true,pvpRegionalState:packet},now,farView);
+   const appliedHp=npc.hp,delegated=pvpHostEntityDelegated(remote)&&pvpHostEntityDelegated(npc);
+   const delegatedProjectile=pvpHostProjectileDelegated((state.dragonProjectiles||[]).find(p=>p.id===projectile.id));
+   const stale={...packet,epoch:6,stateSeq:99,entities:[heroRaw,{...npcRaw,hp:1}]};
+   pvpApplyDelegatedRegionalState('remote-user',{t:packetAt+1,pvpRegionalAuthority:true,pvpRegionalState:stale},now+1,farView);
+   const staleIgnored=npc.hp===appliedHp;
+
+   const nearNow=now+20,nearHero={...heroRaw,x:1080,y:820},nearNpc={...npcRaw,hp:Math.max(1,appliedHp-5),pvpActionUntil:nearNow+520};
+   const nearPacket={...packet,stateSeq:2,perfNow:nearNow,entities:[nearHero,nearNpc],projectiles:[{...projectile,x:1060,y:820,createdAt:nearNow-120,expireAt:nearNow+2800}]};
+   const nearView={hostUid:uid,left:930,top:650,right:1420,bottom:1100};
+   const yielded=pvpApplyDelegatedRegionalState('remote-user',{t:packetAt+20,pvpRegionalAuthority:true,pvpRegionalState:nearPacket},nearNow,nearView);
+   const handoffHp=npc.hp,timelineRemaining=Math.round(Number(npc.pvpActionUntil||0)-nearNow);
+   const authorityReturned=!pvpHostEntityDelegated(remote)&&!pvpHostEntityDelegated(npc);
+   const late={...packet,stateSeq:3,entities:[{...heroRaw,x:1300,y:930},{...npcRaw,hp:1}]};
+   pvpApplyDelegatedRegionalState('remote-user',{t:packetAt+40,pvpRegionalAuthority:true,pvpRegionalState:late},nearNow+20,farView);
+   const lateIgnored=npc.hp===handoffHp;
+
+   Object.assign(remote,savedRemote);Object.assign(npc,savedNpc);
+   state.dragonProjectiles=(state.dragonProjectiles||[]).filter(p=>p.id!==projectile.id);
+   pvpRemoteRegionalAuthority.delete('remote-user');
+   return {accepted,delegated,delegatedProjectile,staleIgnored,yielded,authorityReturned,lateIgnored,
+     damageTransferred:appliedHp===savedNpc.hp-23&&handoffHp===appliedHp-5,
+     timelinePreserved:timelineRemaining>=500&&timelineRemaining<=540};
+ },
  async hostMigrationCycle(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId,local=NetworkAdapter.localPlayerId;
    await NetworkAdapter.setForeground(true);
@@ -477,6 +518,11 @@ async function main(){
    const regional=await page.evaluate(()=>window.__pvpBrowserTest.regionalAuthorityCycle());
    assert.deepEqual(regional,{accepted:true,moved:true,yielded:false},
      'a remote player may own its pose outside the host camera, but authority returns immediately inside the host view');
+   const fullRegional=await page.evaluate(()=>window.__pvpBrowserTest.fullRegionalStateCycle());
+   assert.deepEqual(fullRegional,{
+     accepted:true,delegated:true,delegatedProjectile:true,staleIgnored:true,yielded:false,authorityReturned:true,lateIgnored:true,
+     damageTransferred:true,timelinePreserved:true
+   },'full regional authority must transfer NPC/projectile/damage/timeline state once, hand it back on host overlap, and fence stale epochs');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');
