@@ -255,6 +255,17 @@ assert(html.includes("if(wasHost&&runningPVP)await this.handoffPVPHost('leave')"
  'leaving a running PvP match must migrate host authority instead of deleting the room');
 assert(html.includes("NetworkAdapter.handoffPVPHost('hidden')")&&html.includes("window.addEventListener('pagehide'"),
  'visibility/pagehide must trigger PvP host migration on PC and mobile');
+assert(html.includes("const ROOM_FINISHED_CLEANUP_MS=15*1000")&&html.includes("const ROOM_LEGACY_FINISHED_MAX_MS=2*60*1000"),
+ 'finished rooms must have a short cleanup grace plus a legacy fallback');
+assert(html.includes("if(room?.status==='finished')")&&html.includes("now-finishedAt>ROOM_FINISHED_CLEANUP_MS"),
+ 'room expiration must explicitly reap finished rooms even if stale players kept heartbeating');
+assert(html.includes("status:'finished',finishedAt:")&&section('function finishGame(msg,result=null){','})();').includes("NetworkAdapter.leaveRoom().catch(console.error)"),
+ 'finishing a match must stamp finishedAt and leave Firebase presence after the result screen');
+assert(html.includes("if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled)")&&
+ section("if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){",'function configureGameScreenForMode(){').includes("NetworkAdapter.leaveRoom().catch(console.error)"),
+ 'remote peers must leave the finished room instead of continuing heartbeats');
+assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)"),
+ 'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
 assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
