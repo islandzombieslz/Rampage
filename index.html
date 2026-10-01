@@ -5410,7 +5410,7 @@ function pvpNextRegionalProjectileId(prefix='rp'){
 function pvpBuildRegionalSnapshot(handoff=false){
  const now=performance.now();
  const view=(pvpLocalRegionalAuthority?pvpLocalSimulationView():pvpLastRegionalView);
- const hero=pvpLocalHero();
+ const hero=pvpLocalHero()||state.entities.find(e=>!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||null;
  if(!view||!hero)return null;
  const entities=state.entities.filter(e=>pvpPointInAuthorityView(e,view,0)||(!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId));
  const entityIds=new Set(entities.map(e=>String(e.id)));
@@ -7581,6 +7581,11 @@ function najaIsInvulnerable(e,now=performance.now()){
 }
 function applyCombatHit(target,attacker,amount,options={}){
  if(!target||!attacker||!target.alive)return;
+ if(state.mode==='pvp'){
+   if(pvpRegionalSimulationUid&&(!pvpLocalRegionOwnsEntity(target)||!pvpLocalRegionOwnsEntity(attacker)))return;
+   if(NetworkAdapter.isHost&&target.pvpRegionalAuthorityUid&&
+      String(target.pvpRegionalAuthorityUid)!==String(attacker.pvpRegionalAuthorityUid||''))return;
+ }
  // A Naja é invulnerável enquanto inicia a escavação e enquanto está subterrânea.
  if(target.type==='naja'&&najaIsInvulnerable(target))return;
  if(target.type==='poseidon'&&entityHasActiveSpecial(target))return;
@@ -9267,7 +9272,7 @@ function sendLocalPVEInput(force=false){
 function pvpPredictGuestLocal(dt){
  if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!NetworkAdapter.online||NetworkAdapter.isHost)return;
  const e=pvpLocalHero();
- if(!e?.alive)return;
+ if(!e?.alive){pvpSetLocalRegionalAuthority(false);return}
  const now=performance.now();
  const input=getLocalMovement();
  let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
@@ -9510,13 +9515,14 @@ function pvpSpawnNPC(heroId=null,owner=null){
 }
 function pvpNearestEnemy(e,preferred=null){
  const regionalOnly=!!pvpRegionalSimulationUid;
+ const allowed=t=>regionalOnly?pvpLocalRegionOwnsEntity(t):(NetworkAdapter.isHost?pvpHostShouldSimulateEntity(t):true);
  if(preferred!=null){
-   const target=state.entities.find(t=>String(t.id)===String(preferred)&&t.alive&&t.team!==e.team&&(!regionalOnly||pvpLocalRegionOwnsEntity(t)));
+   const target=state.entities.find(t=>String(t.id)===String(preferred)&&t.alive&&t.team!==e.team&&allowed(t));
    if(target)return target;
  }
  let nearest=null,best=Infinity;
  for(const t of state.entities){
-   if(!t.alive||t===e||t.team===e.team||(regionalOnly&&!pvpLocalRegionOwnsEntity(t)))continue;
+   if(!t.alive||t===e||t.team===e.team||!allowed(t))continue;
    const d=(t.x-e.x)**2+(t.y-e.y)**2;
    if(d<best){nearest=t;best=d}
  }
@@ -10036,6 +10042,8 @@ function pvpTriggerAttack(override=null){
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
    if(pvpLocalRegionalAuthority&&me){
      me.pvpLastAttackSeq=NetworkAdapter.attackSeq;
+     const previousRegionalSimulationUid=pvpRegionalSimulationUid;
+     pvpRegionalSimulationUid=NetworkAdapter.localPlayerId;
      try{
        const handled=!!pvpHandleAction(me,action,pvpControls.targetId);
        sendLocalPVEInput(true);pvpMaybePublishRegion(performance.now(),true);
@@ -10044,7 +10052,7 @@ function pvpTriggerAttack(override=null){
        pvpReportError('ação regional',err);
        me.pvpPowerUntil=0;me.pvpPowerVisualUntil=0;me.pvpActionUntil=0;me.pvpSpecialFxUntil=0;
        sendLocalPVEInput(true);return true;
-     }
+     }finally{pvpRegionalSimulationUid=previousRegionalSimulationUid}
    }
    if(action==='attack')pvpPreviewBasicAttack(me);
    sendLocalPVEInput(true);return true;
@@ -10214,7 +10222,9 @@ function pvpRebuildTargets(){
 }
 function pvpTargetsFor(e){
  const targets=pvpFrameTargetLists.get(e.team)||state.entities;
- return pvpRegionalSimulationUid?targets.filter(t=>pvpLocalRegionOwnsEntity(t)):targets;
+ if(pvpRegionalSimulationUid)return targets.filter(t=>pvpLocalRegionOwnsEntity(t));
+ if(NetworkAdapter.isHost)return targets.filter(t=>pvpHostShouldSimulateEntity(t));
+ return targets;
 }
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
@@ -11705,7 +11715,7 @@ function beginDragonTakeoff(e){
                continue;
              }
              const candidate=entityById.get(p.targetId);
-             const target=candidate&&candidate.alive&&candidate.team!==p.team?candidate:null;
+             const target=candidate&&candidate.alive&&candidate.team!==p.team&&(!shouldSimulate||shouldSimulate(candidate))?candidate:null;
              if(state.mode==='pvp'&&p.kind==='dragon'){
                // PvP only: keep the launch velocity. Moving targets can dodge.
                if(now>Number(p.expireAt||0)){list.splice(i,1);continue}
