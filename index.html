@@ -4030,7 +4030,7 @@ const SFX_ASSETS=Object.freeze({
  pvpDragonAttack:'assets/audio/sfx/pvp/dragon-attack.mp3?v=0a5f9f828c6d'
 });
 const SFX_MASTER_VOLUME=1.15;
-const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15,pvpWarriorWalk:.30,pvpWarriorCombo:.82,pvpWarriorSpecial:1.12});
+const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15,pvpWarriorWalk:.14,pvpWarriorCombo:.82,pvpWarriorSpecial:1.12});
 let layeredSfxContext=null;
 const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
  key,
@@ -4364,9 +4364,8 @@ function updatePvpCombatSfx(now){
      const special=Number(e.pvpWarriorChargeUntil)>now;
      pvpSfxEvent(e,'warrior-single',e.pvpWarriorSingleSerial,single,'pvpWarriorSingle',1);
      if(combo){
-       pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,Math.max(1,Number(e.pvpWarriorComboUntil)-now));
-       const comboMix=pvpEntitySfxMix(e);
-       updateLayeredOneShotMix('pvp:combo:'+e.id,comboMix.gain*(SFX_KEY_GAIN.pvpWarriorCombo||1),comboMix.pan);
+       // Combo usa somente o SFX normal a cada entrada do jogador.
+       stopLayeredOneShot('pvp:combo:'+e.id);
      }
      pvpSfxEvent(e,'warrior-special',e.pvpSpecialSerial,special,'pvpWarriorSpecial',1);
      const walkId='pvp:walk:'+e.id;
@@ -4410,7 +4409,7 @@ function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- if(playTransitionSound)playLayeredSfx('transition',.12,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.05,0,260);
  screenTransitionBusy=true;fade.classList.add('show');
  setTimeout(()=>{
    screen(id);
@@ -8624,7 +8623,9 @@ function drawPVPDamageNumbers(ctx,now){
   const offset=((hit.serial%5)-2)*8;
   ctx.save();ctx.globalAlpha=clamp(alpha,0,1);
   ctx.font='900 22px system-ui, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.lineWidth=4;ctx.strokeStyle='#110a0bea';ctx.fillStyle='#ffdf9f';
+  ctx.lineWidth=4;ctx.strokeStyle='#110a0bea';
+  const localHero=typeof pvpLocalHero==='function'?pvpLocalHero():null;
+  ctx.fillStyle=localHero&&hit.targetId===localHero.id?'#ff3b3b':'#ffdf9f';
   const value='-'+hit.amount;
   ctx.strokeText(value,hit.x+offset,hit.y-64-48*t);
   ctx.fillText(value,hit.x+offset,hit.y-64-48*t);ctx.restore();
@@ -8966,7 +8967,8 @@ function pvpStartWarriorCombo(e,now=performance.now()){
  const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
  e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
  e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
- pvpPlayWarriorComboSfx(e,e.pvpWarriorComboSerial,duration);
+ e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+ pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',1);
  e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
  e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
@@ -9022,6 +9024,8 @@ function pvpBasicAttack(e){
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now)return false;
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorComboUntil)>now){
    e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',1);
    return true;
  }
  if(pvpIsWarriorHero(e)){
