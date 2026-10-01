@@ -272,20 +272,31 @@ assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(
  'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
-assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("function pvpRegionalAuthorityDecision"),
- 'PvP must support stable camera-region delegation with a hysteresis margin instead of changing the global host');
+assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("const PVP_REGION_STATE_INTERVAL_MS=60")&&
+ html.includes("function pvpRegionalAuthorityDecision"),
+ 'PvP must use a stable offscreen authority bubble with hysteresis instead of changing the global room host');
 assert(html.includes("pvpHostView=state.mode==='pvp'?pvpCurrentAuthorityView():null")&&html.includes("pvpDamageEvents,pvpHostView"),
  'the global host publishes its actual PvP camera rectangle with each authoritative snapshot');
-assert(html.includes("input.pvpRegionalAuthority=!!regionalPose")&&html.includes("input.pvpRegionalPose=regionalPose"),
- 'an offscreen guest publishes its locally predicted pose through the existing input channel');
-assert(html.includes("pvpApplyDelegatedRemotePose(e,input,now)")&&html.includes("if(!regionalPose&&(dx||dy))"),
- 'the host validates and adopts delegated offscreen poses instead of simulating the same movement twice');
+assert(html.includes("input.pvpRegionalAuthority=!!regionalPose")&&html.includes("input.pvpRegionalPose=regionalPose")&&
+ html.includes("input.pvpRegionalState=regionalState"),
+ 'an offscreen guest transports pose every input and complete regional state through its own Firebase input path');
+assert(html.includes("pvpRegionalAuthorityEpoch")&&html.includes("stateSeq:++pvpRegionalStateSeq")&&
+ html.includes("regional.closedEpoch"),
+ 'regional state must carry epoch/state sequence fencing so late packets cannot reopen an old authority lease');
+assert(html.includes("function pvpApplyDelegatedRegionalState")&&html.includes("pvpApplyAllRemoteRegionalInputs(now)")&&
+ html.includes("pvpHostEntityDelegated(e)"),
+ 'the host must adopt a guest region before simulation and skip entities currently owned by that guest');
+assert(html.includes("function pvpUpdateRegionalGuest(dt)")&&
+ html.includes("pvpPredictGuestLocal(dt);\n     pvpUpdateRegionalGuest(dt);\n     sendLocalPVEInput(false);"),
+ 'guest prediction and complete regional simulation must run before transmitting the new state');
+assert(html.includes("pvpGuestOwnsEntityId(e.id)")&&html.includes("pvpGuestOwnsProjectileId(p.id)"),
+ 'host snapshots must not pull locally-owned regional entities/projectiles backwards during a lease or handoff grace');
+assert(html.includes("pvpAllocateRegionalProjectileId('df')")&&html.includes("pvpAllocateRegionalProjectileId('ap')"),
+ 'projectiles created by a guest authority need collision-proof IDs scoped to that regional epoch');
+assert(html.includes("NetworkAdapter.online&&!pvpCanMutateEntityNow(target)")&&html.includes("pvpHostProjectileDelegated(p)"),
+ 'damage and projectile impacts must have exactly one mutable target authority');
 assert(html.includes("if(regional){")&&html.includes("PVP_REGION_HARD_SNAP_ERROR_PX"),
  'a delegated guest ignores stale host pullback while retaining catastrophic reconnect correction');
-assert(html.includes("if(state.mode==='pvp'){\n     pvpPredictGuestLocal(dt);\n     sendLocalPVEInput(false);"),
- 'guest prediction runs before transmission so regional pose packets contain the current local frame');
-assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
- 'the guest local hero must bypass delayed remote interpolation');
 assert(html.includes("const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;"),
  'only PvP uses the faster host snapshot cadence');
 assert(html.includes("return nick+' • Nv. '+level"),
