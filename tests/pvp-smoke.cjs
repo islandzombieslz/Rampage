@@ -353,7 +353,8 @@ assert.equal(state.players[0].pvpRoundDeaths,3);
 assert.equal(state.players[0].pvpEliminated,true,'third death eliminates the participant on hard');
 assert.equal(state.players[0].pvpReviveAt,0);
 state.difficulty='easy';
-assert(html.includes("const networkPushInterval=120;"),'PvP uses Clan War snapshot cadence');
+assert(html.includes("const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;"),
+ 'PvP uses its low-latency cadence while Clan War remains at 120ms');
 assert(html.includes("desired=pvpPreserveGifState(el,desired)"),'PvP full GIF-cycle protection');
 assert(html.includes("img.pvp-gif-loading")&&html.includes("img:not([src])"),'PvP hides unloaded sprites');
 assert(html.includes("return String(cycle.serial)!==String(serial)"),'same serial never replays; new cast can start');
