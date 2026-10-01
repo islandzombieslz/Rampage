@@ -236,8 +236,18 @@ assert(!section('async function reservePVPStart(){','async function launchPVP(){
  'PvP start must never transact the entire room because guest player nodes can be write-protected');
 assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
  'match start must rebuild players from the authoritative Firebase roster');
-assert(html.includes("const networkPushInterval=120;"),
- 'PvP snapshots use the same stable cadence as Clan War');
+assert(html.includes("const PVP_INPUT_INTERVAL_MS=40")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=90"),
+ 'PvP uses a lower-latency input and snapshot cadence without changing War constants');
+assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
+ 'non-host PvP movement must be predicted locally and softly reconciled');
+assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
+ 'the guest local hero must bypass delayed remote interpolation');
+assert(html.includes("const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;"),
+ 'only PvP uses the faster host snapshot cadence');
+assert(html.includes("return nick+' • Nv. '+level"),
+ 'human PvP combat labels must show account nick and level');
+assert(html.includes("level:currentAccountLevel()"),
+ 'PvP room participants must publish their current account level');
 assert(html.includes("state.mode!=='war'&&state.mode!=='pvp'"),
  'PvP uses the GPU camera compositor during camera motion and Warrior zoom');
 assert(html.includes("requestIdleCallback")&&html.includes("pvpWarriorSpecial','pvpWarriorAttack"),
