@@ -97,6 +97,23 @@ const pvpTestHook=`window.__pvpBrowserTest={
      remoteEntity:state.entities.some(e=>e.ownerId==='remote-user')
    };
  },
+ async roomLifecycleCycle(){
+   const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
+   finishGame('',pvpResult(NetworkAdapter.localPlayerId));
+   await new Promise(r=>setTimeout(r,4700));
+   const liveSnap=await F.get(F.ref(F.firebaseDb,'rooms/'+roomId));
+   const old=Date.now()-5*60*1000;
+   await F.set(F.ref(F.firebaseDb,'rooms/OLD123'),{
+     code:'OLD123',hostUid:'legacy-user',status:'lobby',createdAt:old,lastActivityAt:old,
+     settings:{mode:'pvp'},players:{'legacy-user':{uid:'legacy-user',slot:0,joinedAt:old,lastSeen:old}}
+   });
+   await NetworkAdapter.cleanupRooms();
+   const legacySnap=await F.get(F.ref(F.firebaseDb,'rooms/OLD123'));
+   return {
+     liveExists:liveSnap.exists(),roomId:NetworkAdapter.roomId,phase:state.phase,
+     legacyExists:legacySnap.exists()
+   };
+ },
  async addRemoteConfirmedPlayer(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
    await F.set(F.ref(F.firebaseDb,'rooms/'+roomId+'/players/remote-user'),{
@@ -520,6 +537,9 @@ async function main(){
      localHost:true,host:'browser-smoke-user',
      runningAfterHandoff:true,runningNow:true,remotePlayer:false,remoteEntity:false
    },'PvP authority must migrate through background/close without pausing, and a closed host character must leave the match');
+   const lifecycle=await page.evaluate(()=>window.__pvpBrowserTest.roomLifecycleCycle());
+   assert(lifecycle.liveExists&&lifecycle.roomId&&lifecycle.phase==='finished'&&!lifecycle.legacyExists,
+     'finished room with an active player must stay, while a stale legacy room must be deleted');
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
    console.log('BROWSER PASS: PvP two-hero picker, Warrior special rules, round clock, durability, touch aim, mage flames, linear dragon balls and one-shot specials');

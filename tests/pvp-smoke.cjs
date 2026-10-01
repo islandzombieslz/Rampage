@@ -247,14 +247,29 @@ assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=160")&&html.includes("signatu
  'unchanged PvP inputs are deduplicated with the previously validated bounded keepalive instead of flooding Firebase');
 assert(html.includes("async handoffPVPHost(reason='hidden')")&&html.includes("pvpNextHostCandidate(room,this.localPlayerId,requireForeground)"),
  'a backgrounded PvP host must hand authority to another participant instead of pausing the match');
-assert(html.includes("onDisconnect(F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`))")&&html.includes("await op.set(successorUid)"),
- 'the current PvP host must pre-arm Firebase to transfer hostUid if the app closes abruptly');
+assert(html.includes("const disconnectRef=successorUid")&&
+ html.includes("?F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`)")&&
+ html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)")&&
+ html.includes("await op.set(successorUid)")&&html.includes("await op.remove()"),
+ 'the current PvP host must transfer hostUid when a successor exists, or delete the whole room when it is the last player');
 assert(html.includes("function claimPVPHostIfOrphaned(room)")&&html.includes("function pvpSyncOnlineParticipants(room)"),
  'PvP must recover an orphaned host and remove disconnected human characters during a running match');
 assert(html.includes("if(wasHost&&runningPVP)await this.handoffPVPHost('leave')"),
  'leaving a running PvP match must migrate host authority instead of deleting the room');
 assert(html.includes("NetworkAdapter.handoffPVPHost('hidden')")&&html.includes("window.addEventListener('pagehide'"),
  'visibility/pagehide must trigger PvP host migration on PC and mobile');
+assert(html.includes("const ROOM_LEGACY_INACTIVITY_MS=2*60*1000")&&html.includes("function roomIsCurrentCode(code)"),
+ 'legacy/random room codes must use a shorter stale timeout than current room codes');
+assert(html.includes("const maxIdle=roomIsCurrentCode(code)?ROOM_INACTIVITY_MS:ROOM_LEGACY_INACTIVITY_MS"),
+ 'room expiration must depend on heartbeat age and code generation, not match-finished status');
+assert(!section('function finishGame(msg,result=null){','})();').includes("NetworkAdapter.leaveRoom().catch(console.error)"),
+ 'finishing a match must preserve the current room and its players');
+assert(!section("if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){",'function configureGameScreenForMode(){').includes("NetworkAdapter.leaveRoom().catch(console.error)"),
+ 'remote peers must remain in the room after the result screen');
+assert(html.includes("const patch={};for(const code of expired)patch[code]=null")&&html.includes("if(!bulkRemoved)await Promise.all"),
+ 'room cleanup must bulk-delete stale rooms with a per-room fallback for Firebase rules');
+assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)"),
+ 'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
 assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
