@@ -74,6 +74,28 @@ const pvpTestHook=`window.__pvpBrowserTest={
    keys.d=oldD;NetworkAdapter.hostUid=oldHost;
    return {dx:hero.x-before.x,dy:hero.y-before.y,x:hero.x,y:hero.y};
  },
+ regionalAuthorityCycle(){
+   const remote=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='remote-user');
+   if(!remote)return null;
+   const saved={x:remote.x,y:remote.y,heading:remote.heading,facing:remote.facing,moving:remote.moving,
+     knockTime:remote.knockTime,pvpWarriorChargeUntil:remote.pvpWarriorChargeUntil,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid};
+   const uid=NetworkAdapter.localPlayerId,now=performance.now(),packetAt=NetworkAdapter.serverNow();
+   remote.x=1200;remote.y=900;remote.knockTime=0;remote.pvpWarriorChargeUntil=0;
+   pvpRemoteRegionalAuthority.delete('remote-user');
+   const farView={hostUid:uid,left:250,top:250,right:800,bottom:700};
+   const accepted=pvpApplyDelegatedRemotePose(remote,{
+     t:packetAt,pvpRegionalAuthority:true,
+     pvpRegionalPose:{seq:1,x:1260,y:900,heading:0,facing:1,moving:true}
+   },now,farView);
+   const moved=remote.x>1200;
+   const nearView={hostUid:uid,left:1000,top:700,right:1500,bottom:1100};
+   const yielded=pvpApplyDelegatedRemotePose(remote,{
+     t:packetAt+16,pvpRegionalAuthority:true,
+     pvpRegionalPose:{seq:2,x:1300,y:900,heading:0,facing:1,moving:true}
+   },now+16,nearView);
+   Object.assign(remote,saved);pvpRemoteRegionalAuthority.delete('remote-user');
+   return {accepted,moved,yielded};
+ },
  async hostMigrationCycle(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId,local=NetworkAdapter.localPlayerId;
    await NetworkAdapter.setForeground(true);
@@ -452,6 +474,9 @@ async function main(){
    const prediction=await page.evaluate(()=>window.__pvpBrowserTest.guestPredictionStep());
    assert(prediction&&prediction.dx>5&&Math.abs(prediction.dy)<1,
      'a non-host local hero must respond immediately to movement before a new authoritative snapshot');
+   const regional=await page.evaluate(()=>window.__pvpBrowserTest.regionalAuthorityCycle());
+   assert.deepEqual(regional,{accepted:true,moved:true,yielded:false},
+     'a remote player may own its pose outside the host camera, but authority returns immediately inside the host view');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');
