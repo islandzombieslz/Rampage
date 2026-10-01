@@ -4240,7 +4240,7 @@ function pvpSfxEvent(e,event,serial,active,key,baseVolume=1){
  pvpCombatSfxSeen.set(id,nowSerial);
  if(!active||nowSerial<=0||prev===nowSerial)return;
  const mix=pvpEntitySfxMix(e);
- playLayeredSfx(key,baseVolume*mix.gain,mix.pan,35);
+ playLayeredSfx(key,baseVolume*mix.gain/SFX_MASTER_VOLUME,mix.pan,35);
 }
 function updatePvpCombatSfx(now){
  if(now-pvpCombatSfxLastScan<70)return;
@@ -4262,7 +4262,7 @@ function updatePvpCombatSfx(now){
      const walkId='pvp:walk:'+e.id;
      if(e.moving&&!single&&!combo&&!special){
        const mix=pvpEntitySfxMix(e);
-       setLayeredLoop('pvpWarriorWalk',mix.gain,mix.pan,walkId);
+       setLayeredLoop('pvpWarriorWalk',mix.gain/SFX_MASTER_VOLUME,mix.pan,walkId);
        activeLoops.add(walkId);
      }
    }
@@ -4271,7 +4271,7 @@ function updatePvpCombatSfx(now){
      pvpSfxEvent(e,'dragon-attack',e.dragonAttackSerial,attackActive,'pvpDragonAttack',1);
      if(e.dragonFlightState==='flying'){
        const wingId='pvp:wings:'+e.id,mix=pvpEntitySfxMix(e);
-       setLayeredLoop('pvpDragonWings',mix.gain,mix.pan,wingId);
+       setLayeredLoop('pvpDragonWings',mix.gain/SFX_MASTER_VOLUME,mix.pan,wingId);
        activeLoops.add(wingId);
      }
    }
@@ -8471,7 +8471,7 @@ const PVP_WARRIOR=Object.freeze({
  comboChainMs:950,comboContinueMs:460,comboRange:148,
  singleFallbackMs:650,comboFallbackMs:1350,specialFallbackMs:1800,deathFallbackMs:1400,
  specialUnlockHits:5,specialCooldownMs:20000,specialSpeedMultiplier:1.45,
- specialDamageMin:50,specialDamageMax:70,specialDamageHits:5,specialHitIntervalMs:90,specialHeal:30,
+ specialDamageMin:50,specialDamageMax:70,specialDamageHits:5,specialHeal:30,
  specialCameraZoom:1.12,specialSceneDim:.26,
  specialKnockForce:560,specialKnockTime:.34,specialHitTilt:20,
  deathFallMs:720,deathFadeMs:340
