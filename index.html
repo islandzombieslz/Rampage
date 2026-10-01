@@ -3176,6 +3176,7 @@ const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
   inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
+  hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
   presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){
@@ -3213,7 +3214,7 @@ const NetworkAdapter = {
           return {
             code:c,hostUid:user.uid,status:'lobby',npcCount:0,
             createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
-            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
+            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,foreground:true,visibilityAt:F.serverTimestamp(),joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
           };
         });
         if(result.committed){code=c;break}
@@ -3241,7 +3242,7 @@ const NetworkAdapter = {
       const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pvp'?4:room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
       const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
-      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
+      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,foreground:true,visibilityAt:F.serverTimestamp(),joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
       await F.update(rr,{lastActivityAt:F.serverTimestamp()});
       this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;
       await this.attachPresence(code,user.uid);
@@ -3259,6 +3260,63 @@ const NetworkAdapter = {
     }catch(_){}
     this.startRoomHeartbeat();
   },
+  async setForeground(foreground){
+    const code=this.roomId,uid=this.localPlayerId;if(!code||!uid)return false;
+    const F=await this.waitFirebase();
+    try{
+      await F.update(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`),{
+        foreground:!!foreground,visibilityAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()
+      });
+      return true;
+    }catch(_){return false}
+  },
+  async cancelPVPHostDisconnect(){
+    const op=this.hostDisconnectOp;this.hostDisconnectOp=null;this.hostDisconnectSuccessorUid=null;
+    if(op?.cancel)try{await op.cancel()}catch(_){}
+  },
+  async refreshPVPHostDisconnect(room=this.roomCache){
+    const pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
+    if(!this.roomId||!this.localPlayerId||!this.isHost||!pvp||this.roomStatus!=='playing'){
+      if(this.hostDisconnectOp)await this.cancelPVPHostDisconnect();
+      return false;
+    }
+    const successor=pvpNextHostCandidate(room,this.localPlayerId,false);
+    const successorUid=successor?.uid||null;
+    if(this.hostDisconnectOp&&this.hostDisconnectSuccessorUid===successorUid)return true;
+    await this.cancelPVPHostDisconnect();
+    const F=await this.waitFirebase(),op=F.onDisconnect(F.ref(F.firebaseDb,`rooms/${this.roomId}/hostUid`));
+    try{
+      if(successorUid&&op?.set)await op.set(successorUid);
+      else if(op?.remove)await op.remove();
+      this.hostDisconnectOp=op;this.hostDisconnectSuccessorUid=successorUid;return true;
+    }catch(_){this.hostDisconnectOp=null;this.hostDisconnectSuccessorUid=null;return false}
+  },
+  async handoffPVPHost(reason='hidden'){
+    if(this.hostHandoffInFlight||!this.roomId||!this.localPlayerId||!this.isHost||this.roomStatus!=='playing')return false;
+    const room=this.roomCache,pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
+    if(!pvp)return false;
+    const requireForeground=reason==='hidden';
+    const successor=pvpNextHostCandidate(room,this.localPlayerId,requireForeground);
+    if(!successor)return false;
+    this.hostHandoffInFlight=true;
+    try{
+      // Freeze this player's last network input before authority moves away.
+      try{const neutral={...getLocalMovement(),dx:0,dy:0};await this.sendInput(neutral)}catch(_){}
+      // Publish one final authoritative frame so the successor resumes exactly here.
+      try{if(state.running&&state.mode==='pvp')await this.pushState(serializeGame())}catch(_){}
+      const F=await this.waitFirebase(),hostRef=F.ref(F.firebaseDb,`rooms/${this.roomId}/hostUid`);
+      const currentUid=this.localPlayerId;
+      const tx=await F.runTransaction(hostRef,current=>current===currentUid?successor.uid:undefined,{applyLocally:false});
+      if(!tx.committed)return false;
+      await this.cancelPVPHostDisconnect();
+      this.hostUid=successor.uid;this.roomCache.hostUid=successor.uid;
+      return true;
+    }catch(err){console.error('PvP host handoff:',err);return false}
+    finally{
+      this.hostHandoffInFlight=false;
+      if(this.isHost)this.refreshPVPHostDisconnect(this.roomCache).catch(()=>{});
+    }
+  },
   serverNow(){return Date.now()+(Number(this.serverTimeOffset)||0)},
   async touchPresence(){
     const code=this.roomId,uid=this.localPlayerId;if(!code||!uid)return;
@@ -3271,6 +3329,8 @@ const NetworkAdapter = {
       if(!snap.exists()){this.expireLocalRoom(code);return}
       const patch={lastActivityAt:F.serverTimestamp()};
       patch[`players/${uid}/lastSeen`]=F.serverTimestamp();
+      patch[`players/${uid}/foreground`]=!document.hidden;
+      patch[`players/${uid}/visibilityAt`]=F.serverTimestamp();
       await F.update(rr,patch);
     }catch(_){}
   },
@@ -3283,6 +3343,7 @@ const NetworkAdapter = {
   expireLocalRoom(code){
     if(this.roomId!==code||this.leaving)return;
     this.stopRoomHeartbeat();
+    this.cancelPVPHostDisconnect().catch(()=>{});
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
     this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
@@ -3355,13 +3416,16 @@ const NetworkAdapter = {
   async leaveRoom(){
     if(!this.roomId||!this.localPlayerId)return;
     const F=await this.waitFirebase(),code=this.roomId,uid=this.localPlayerId,wasHost=this.isHost;
+    const runningPVP=(this.roomCache?.settings?.mode==='pvp'||state.mode==='pvp')&&this.roomStatus==='playing';
     this.leaving=true;this.stopRoomHeartbeat();
     try{
+      if(wasHost&&runningPVP)await this.handoffPVPHost('leave');
       await F.remove(F.ref(F.firebaseDb,`rooms/${code}/players/${uid}`));
       await F.remove(F.ref(F.firebaseDb,`rooms/${code}/inputs/${uid}`));
-      if(wasHost)await F.remove(F.ref(F.firebaseDb,`rooms/${code}`));
+      if(wasHost&&!runningPVP)await F.remove(F.ref(F.firebaseDb,`rooms/${code}`));
       else await this.removeRoomIfEmpty(code,false);
     }catch(_){}
+    await this.cancelPVPHostDisconnect();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
     this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.leaving=false;
@@ -4771,6 +4835,15 @@ window.addEventListener('online',()=>{
 document.addEventListener('visibilitychange',()=>{
  if(!document.hidden&&accountProgress.uid&&accountProgress.connected&&!accountProgress.verified)
    void verifyAccountXP(accountProgress.uid,accountProgress.epoch);
+ if(NetworkAdapter.online){
+   NetworkAdapter.setForeground(!document.hidden).catch(()=>{});
+   if(document.hidden)NetworkAdapter.handoffPVPHost('hidden').catch(()=>{});
+ }
+});
+window.addEventListener('pagehide',()=>{
+ if(!NetworkAdapter.online)return;
+ NetworkAdapter.setForeground(false).catch(()=>{});
+ NetworkAdapter.handoffPVPHost('pagehide').catch(()=>{});
 });
 function beginMatchTracking(){
  state.matchId='m_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12);
@@ -5116,11 +5189,11 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 // PvP guests need a much smaller visual buffer than War. Local movement is
 // predicted immediately; these constants only smooth the rest of the world.
-const PVP_REMOTE_RENDER_DELAY_MS=60;
-const PVP_REMOTE_MAX_EXTRAP_MS=130;
-const PVP_INPUT_INTERVAL_MS=33;
-const PVP_SNAPSHOT_INTERVAL_MS=80;
-const PVP_INPUT_KEEPALIVE_MS=160;
+const PVP_REMOTE_RENDER_DELAY_MS=35;
+const PVP_REMOTE_MAX_EXTRAP_MS=160;
+const PVP_INPUT_INTERVAL_MS=16;
+const PVP_SNAPSHOT_INTERVAL_MS=50;
+const PVP_INPUT_KEEPALIVE_MS=90;
 const PVP_LOCAL_SOFT_ERROR_PX=58;
 const PVP_LOCAL_SNAP_ERROR_PX=260;
 
@@ -5172,12 +5245,12 @@ function applyRemoteGame(game){
  const remoteNow=performance.now();
  const pvpRemote=game.mode==='pvp'||state.mode==='pvp';
  const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt
-   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?45:70,pvpRemote?180:220)
+   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?25:70,pvpRemote?140:220)
    :(pvpRemote?PVP_SNAPSHOT_INTERVAL_MS:120);
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
  // PvP uses a shorter visual window. War keeps the larger buffer that protects
  // its dense army movement from packet jitter.
- const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.02,52,108):clamp(remoteGapMs*1.18,105,190);
+ const remoteInterpMs=pvpRemote?clamp(remoteGapMs*.95,34,78):clamp(remoteGapMs*1.18,105,190);
  const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
@@ -5653,10 +5726,59 @@ async function reconcileClanReservations(room){
    });
  }finally{clanReservationRepairInFlight=false}
 }
+function pvpNextHostCandidate(room,excludeUid=null,requireForeground=false){
+ const candidates=Object.values(room?.players||{}).filter(p=>p?.uid&&p.uid!==excludeUid&&(!requireForeground||p.foreground!==false));
+ candidates.sort((a,b)=>{
+   const af=a.foreground===false?1:0,bf=b.foreground===false?1:0;
+   return af-bf||(Number(a.slot)||0)-(Number(b.slot)||0)||String(a.uid).localeCompare(String(b.uid));
+ });
+ return candidates[0]||null;
+}
+let pvpHostClaimInFlight=false;
+async function claimPVPHostIfOrphaned(room){
+ if(pvpHostClaimInFlight||!NetworkAdapter.roomId||!NetworkAdapter.localPlayerId||room?.status!=='playing')return false;
+ if((room?.settings?.mode||state.mode)!=='pvp')return false;
+ const players=room.players||{},current=room.hostUid;
+ if(current&&players[current])return false;
+ const candidate=pvpNextHostCandidate(room,null,false);
+ if(!candidate||candidate.uid!==NetworkAdapter.localPlayerId)return false;
+ pvpHostClaimInFlight=true;
+ try{
+   const F=await NetworkAdapter.waitFirebase(),hostRef=F.ref(F.firebaseDb,`rooms/${NetworkAdapter.roomId}/hostUid`);
+   const expected=current??null;
+   const tx=await F.runTransaction(hostRef,value=>(value===expected||!players[value])?NetworkAdapter.localPlayerId:undefined,{applyLocally:false});
+   return !!tx.committed;
+ }catch(_){return false}finally{pvpHostClaimInFlight=false}
+}
+function pvpSyncOnlineParticipants(room){
+ if(state.mode!=='pvp'||room?.status!=='playing'||!room.players)return;
+ const connected=new Set(Object.keys(room.players));
+ const departed=state.players.filter(p=>p.human&&!connected.has(String(p.id))).map(p=>String(p.id));
+ if(!departed.length)return;
+ const departedSet=new Set(departed);
+ const removedEntityIds=new Set(state.entities.filter(e=>departedSet.has(String(e.ownerId))).map(e=>e.id));
+ state.players=state.players.filter(p=>!p.human||!departedSet.has(String(p.id)));
+ state.entities=state.entities.filter(e=>!departedSet.has(String(e.ownerId)));
+ if(Array.isArray(state.dragonProjectiles))state.dragonProjectiles=state.dragonProjectiles.filter(p=>!removedEntityIds.has(p.sourceId));
+ if(state.spectator?.targetId&&removedEntityIds.has(state.spectator.targetId))state.spectator.targetId=null;
+ for(const id of removedEntityIds){
+   const node=typeof entityNodes!=='undefined'?entityNodes.get(String(id)):null;
+   if(node?.remove)node.remove();
+   if(typeof entityNodes!=='undefined')entityNodes.delete(String(id));
+ }
+}
 function syncFirebaseRoom(room){
  if(!room)return;
  reconcileClanReservations(room).catch(console.error);
- NetworkAdapter.hostUid=room.hostUid||NetworkAdapter.hostUid;NetworkAdapter.roomStatus=room.status||'lobby';NetworkAdapter.remoteInputs=room.inputs||{};
+ const oldHostUid=NetworkAdapter.hostUid,nextHostUid=room.hostUid||NetworkAdapter.hostUid;
+ const becomingPVPHost=(room?.settings?.mode||state.mode)==='pvp'&&room.status==='playing'&&
+   nextHostUid===NetworkAdapter.localPlayerId&&oldHostUid!==NetworkAdapter.localPlayerId;
+ if(becomingPVPHost&&room.game){
+   applyRemoteGame(room.game);
+   state.netSeq=Math.max(Number(state.netSeq)||0,Number(room.game.seq)||0);
+ }
+ NetworkAdapter.hostUid=nextHostUid;NetworkAdapter.roomStatus=room.status||'lobby';NetworkAdapter.remoteInputs=room.inputs||{};
+ if(becomingPVPHost){NetworkAdapter.lastStateAt=0;NetworkAdapter.pushing=false}
  if(room.settings){
    state.mode=room.settings.mode??state.mode;state.pveTime=room.settings.pveTime??state.pveTime;state.warTime=room.settings.warTime??state.warTime;state.rounds=room.settings.rounds??state.rounds;state.difficulty=room.settings.difficulty??state.difficulty;state.speed=room.settings.speed??state.speed;
    state.gems=normalizeWarStartingGems(room.settings.gems??state.gems);
@@ -5688,6 +5810,11 @@ function syncFirebaseRoom(room){
    if(room.status==='clan'){renderClanSelection();configureWarShopForClan();}
  }
  if((room.status==='playing'||room.status==='finished')&&room.game&&!NetworkAdapter.isHost)applyRemoteGame(room.game);
+ if(state.mode==='pvp'&&room.status==='playing'){
+   pvpSyncOnlineParticipants(room);
+   if(!room.hostUid||!room.players?.[room.hostUid])claimPVPHostIfOrphaned(room).catch(()=>{});
+   NetworkAdapter.refreshPVPHostDisconnect(room).catch(()=>{});
+ }
  handleHostCommands(room.commands);
  if(room.status==='lobby'||room.status==='clan')updateLobbyAuthority();
 }
