@@ -6056,19 +6056,36 @@ function updatePVPLobbyAuthority(){
  button.textContent=!ready?'Aguardando confirmações…':!host?'Aguardando anfitrião…':'Iniciar PvP';
  $$('[data-target="npcs"]').forEach(b=>b.disabled=!host);
 }
+function pvpFirebaseRoomReady(room,uid){
+ if(!room||room.hostUid!==uid||room.settings?.mode!=='pvp')return false;
+ const players=Object.values(room.players||{});
+ const npcCount=clamp(Number(room.npcCount)||0,0,Math.max(0,4-players.length));
+ return players.length>0&&players.length+npcCount<=4&&
+   players.every(p=>p?.human!==false&&p?.pvpConfirmed&&PVP_SELECTABLE_BY_ID[p?.pvpHero]);
+}
 async function reservePVPStart(){
  if(!NetworkAdapter.roomId||!NetworkAdapter.localPlayerId||!NetworkAdapter.isHost)return null;
  const F=await NetworkAdapter.waitFirebase(),roomId=NetworkAdapter.roomId,uid=NetworkAdapter.localPlayerId;
- const rr=F.ref(F.firebaseDb,`rooms/${roomId}`);
- const tx=await F.runTransaction(rr,current=>{
-   if(!current||current.hostUid!==uid||current.status!=='lobby'||current.settings?.mode!=='pvp')return;
-   const players=Object.values(current.players||{});
-   const npcCount=clamp(Number(current.npcCount)||0,0,Math.max(0,4-players.length));
-   if(!players.length||players.length+npcCount>4)return;
-   if(players.some(p=>p?.human===false||!p?.pvpConfirmed||!PVP_SELECTABLE_BY_ID[p?.pvpHero]))return;
-   return {...current,status:'starting'};
- },{applyLocally:false});
- return tx.committed?(tx.snapshot?.val()||null):null;
+ const roomRef=F.ref(F.firebaseDb,`rooms/${roomId}`);
+ const statusRef=F.ref(F.firebaseDb,`rooms/${roomId}/status`);
+ // Read/validate first, then atomically lock ONLY /status. A transaction over the
+ // whole room rewrites the guest's /players/<uid> node and can be rejected by
+ // per-player Firebase security rules even though the host may write status/game.
+ const beforeSnap=await F.get(roomRef);
+ if(!beforeSnap.exists())return null;
+ const before=beforeSnap.val();
+ if(before.status!=='lobby'||!pvpFirebaseRoomReady(before,uid))return null;
+ const tx=await F.runTransaction(statusRef,current=>current==='lobby'?'starting':undefined,{applyLocally:false});
+ if(!tx.committed)return null;
+ // No new player can join after status leaves lobby. Re-read the locked room so
+ // the match roster is the exact authoritative Firebase roster at start time.
+ const lockedSnap=await F.get(roomRef),locked=lockedSnap.exists()?lockedSnap.val():null;
+ if(locked?.status==='starting'&&pvpFirebaseRoomReady(locked,uid))return locked;
+ // Defensive rollback if the room disappeared or confirmation changed during lock.
+ try{
+   await F.runTransaction(statusRef,current=>current==='starting'?'lobby':undefined,{applyLocally:false});
+ }catch(_){}
+ return null;
 }
 async function launchPVP(){
  if(state.mode!=='pvp'||pvpStartInFlight||!NetworkAdapter.isHost||!pvpAllPlayersConfirmed())return false;
