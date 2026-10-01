@@ -247,8 +247,11 @@ assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=160")&&html.includes("signatu
  'unchanged PvP inputs are deduplicated with the previously validated bounded keepalive instead of flooding Firebase');
 assert(html.includes("async handoffPVPHost(reason='hidden')")&&html.includes("pvpNextHostCandidate(room,this.localPlayerId,requireForeground)"),
  'a backgrounded PvP host must hand authority to another participant instead of pausing the match');
-assert(html.includes("onDisconnect(F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`))")&&html.includes("await op.set(successorUid)"),
- 'the current PvP host must pre-arm Firebase to transfer hostUid if the app closes abruptly');
+assert(html.includes("const disconnectRef=successorUid")&&
+ html.includes("?F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`)")&&
+ html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)")&&
+ html.includes("await op.set(successorUid)")&&html.includes("await op.remove()"),
+ 'the current PvP host must transfer hostUid when a successor exists, or delete the whole room when it is the last player');
 assert(html.includes("function claimPVPHostIfOrphaned(room)")&&html.includes("function pvpSyncOnlineParticipants(room)"),
  'PvP must recover an orphaned host and remove disconnected human characters during a running match');
 assert(html.includes("if(wasHost&&runningPVP)await this.handoffPVPHost('leave')"),
