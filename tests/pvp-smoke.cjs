@@ -37,7 +37,12 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},pvpPlayEntitySfxNow(){},stopLayeredOneShot(){},
  beginMatchTracking(){},matchStatsFor:uid=>state.matchStats[uid]||(state.matchStats[uid]={damage:0,wonRounds:0,victorySeconds:0,victoryTimeLimit:0}),
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
- sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
+ sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){},
+ pvpRegionalSimulationUid:null,pvpLocalRegionalAuthority:false,
+ pvpHostShouldSimulateEntity:()=>true,pvpHostShouldSimulateProjectile:()=>true,
+ pvpLocalRegionOwnsEntity:()=>true,pvpLocalRegionOwnsProjectile:()=>true,
+ pvpIntegrateRemoteRegions(){},pvpMaybePublishRegion(){},pvpUpdateLocalRegionalAuthority:()=>false,
+ pvpSetLocalRegionalAuthority:()=>false
 });
 vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175; const MAGE_SPECIAL_RADIUS=215;',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
