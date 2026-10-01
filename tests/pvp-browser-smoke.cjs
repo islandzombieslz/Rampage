@@ -96,6 +96,53 @@ const pvpTestHook=`window.__pvpBrowserTest={
    Object.assign(remote,saved);pvpRemoteRegionalAuthority.delete('remote-user');
    return {accepted,moved,yielded};
  },
+ distributedRegionCycle(){
+   const remote=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='remote-user');
+   const template=state.entities.find(e=>e.alive&&e.pvpMinion&&e.team==='pvp-enemy');
+   if(!remote||!template)return null;
+   const hostView=pvpCurrentAuthorityView(),now=performance.now();
+   const bounds=pvpArenaBounds(30),cx=(Number(hostView.left)+Number(hostView.right))/2,cy=(Number(hostView.top)+Number(hostView.bottom))/2;
+   const corners=[
+     {x:bounds.left,y:bounds.top},{x:bounds.right,y:bounds.top},
+     {x:bounds.left,y:bounds.bottom},{x:bounds.right,y:bounds.bottom}
+   ];
+   corners.sort((a,b)=>((b.x-cx)**2+(b.y-cy)**2)-((a.x-cx)**2+(a.y-cy)**2));
+   const farX=corners[0].x,farY=corners[0].y;
+   const remoteSaved={x:remote.x,y:remote.y,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid,pvpRegionalEpoch:remote.pvpRegionalEpoch};
+   const templateSaved={...template,pendingDragonAttack:template.pendingDragonAttack?{...template.pendingDragonAttack}:null};
+   const regionalId=template.id;
+   const remotePacket={...remote,x:farX,y:farY,alive:true,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0};
+   const regionalEnemy={...template,id:regionalId,x:farX-55,y:farY-25,hp:73,maxHp:100,shield:12,maxShield:50,
+     alive:true,deathStarted:0,removeAt:0,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0,
+     dragonAttackSerial:9,pendingDragonAttack:{serial:9,startedAt:now-500,endAt:now+900}};
+   const view={hostUid:'remote-user',left:Math.max(0,farX-430),top:Math.max(0,farY-350),
+     right:Math.min(state.world.w,farX+430),bottom:Math.min(state.world.h,farY+350)};
+   const packet={uid:'remote-user',epoch:4,seq:1,active:true,handoff:false,at:NetworkAdapter.serverNow(),
+     view,focus:{x:farX,y:farY,entityId:remote.id},
+     entities:[pvpPackRegionalEntity(remotePacket,now),pvpPackRegionalEntity(regionalEnemy,now)],
+     dragonProjectiles:[],players:[],matchStats:{},pvpDamageEvents:[]};
+   NetworkAdapter.roomCache.regions={'remote-user':packet};pvpHostRegionState.clear();
+   pvpIntegrateRemoteRegions(now);
+   const leased=state.entities.find(e=>String(e.id)===String(regionalId));
+   const first={exists:!!leased,hp:leased?.hp,shield:leased?.shield,owner:leased?.pvpRegionalAuthorityUid,
+     remaining:leased?.pendingDragonAttack?Math.round(leased.pendingDragonAttack.endAt-now):0,
+     hostSimulates:leased?pvpHostShouldSimulateEntity(leased):true};
+   const nextNow=now+80;
+   const regionalEnemy2={...regionalEnemy,hp:61,shield:0,pendingDragonAttack:{serial:9,startedAt:now-500,endAt:now+620}};
+   NetworkAdapter.roomCache.regions={'remote-user':{...packet,seq:2,active:false,handoff:true,at:NetworkAdapter.serverNow(),
+     entities:[pvpPackRegionalEntity({...remotePacket,x:farX-10},nextNow),pvpPackRegionalEntity(regionalEnemy2,nextNow)]}};
+   pvpIntegrateRemoteRegions(nextNow);
+   const handed=state.entities.find(e=>String(e.id)===String(regionalId));
+   const second={hp:handed?.hp,shield:handed?.shield,owner:handed?.pvpRegionalAuthorityUid||null,
+     remaining:handed?.pendingDragonAttack?Math.round(handed.pendingDragonAttack.endAt-nextNow):0,
+     hostSimulates:handed?pvpHostShouldSimulateEntity(handed):false};
+   Object.assign(template,templateSaved);
+   remote.x=remoteSaved.x;remote.y=remoteSaved.y;remote.pvpRegionalAuthorityUid=remoteSaved.pvpRegionalAuthorityUid;
+   remote.pvpRegionalEpoch=remoteSaved.pvpRegionalEpoch;NetworkAdapter.roomCache.regions={};pvpHostRegionState.clear();
+   return {first,second,debug:{hostView,farX,farY,
+     allowed:pvpRegionalAuthorityDecision({alive:true,pvpMinion:false,ownerId:'remote-user',x:farX,y:farY},hostView,false),
+     fresh:pvpRegionalPacketFresh(packet),players:Object.keys(NetworkAdapter.roomCache.players||{})}};
+ },
  async hostMigrationCycle(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId,local=NetworkAdapter.localPlayerId;
    await NetworkAdapter.setForeground(true);
@@ -477,6 +524,17 @@ async function main(){
    const regional=await page.evaluate(()=>window.__pvpBrowserTest.regionalAuthorityCycle());
    assert.deepEqual(regional,{accepted:true,moved:true,yielded:false},
      'a remote player may own its pose outside the host camera, but authority returns immediately inside the host view');
+   const distributed=await page.evaluate(()=>window.__pvpBrowserTest.distributedRegionCycle());
+   assert(distributed?.first?.exists&&distributed.first.hp===73&&distributed.first.shield===12&&
+     distributed.first.owner==='remote-user'&&!distributed.first.hostSimulates,
+     'offscreen regional snapshots must lease complete enemy state to the remote player, not only its position: '+JSON.stringify(distributed));
+   assert(distributed.first.remaining>750&&distributed.first.remaining<=950,
+     'regional attack/GIF timing must arrive with its remaining runtime intact');
+   assert.deepEqual({hp:distributed.second.hp,shield:distributed.second.shield,owner:distributed.second.owner,
+     hostSimulates:distributed.second.hostSimulates},{hp:61,shield:0,owner:null,hostSimulates:true},
+     'handoff must preserve the latest regional combat state and return simulation to the host');
+   assert(distributed.second.remaining>450&&distributed.second.remaining<=700,
+     'host takeover must continue the existing attack/GIF timeline instead of restarting it');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');

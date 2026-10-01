@@ -37,7 +37,12 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
  clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},pvpPlayEntitySfxNow(){},stopLayeredOneShot(){},
  beginMatchTracking(){},matchStatsFor:uid=>state.matchStats[uid]||(state.matchStats[uid]={damage:0,wonRounds:0,victorySeconds:0,victoryTimeLimit:0}),
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
- sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
+ sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){},
+ pvpRegionalSimulationUid:null,pvpLocalRegionalAuthority:false,
+ pvpHostShouldSimulateEntity:()=>true,pvpHostShouldSimulateProjectile:()=>true,
+ pvpLocalRegionOwnsEntity:()=>true,pvpLocalRegionOwnsProjectile:()=>true,
+ pvpIntegrateRemoteRegions(){},pvpMaybePublishRegion(){},pvpUpdateLocalRegionalAuthority:()=>false,
+ pvpSetLocalRegionalAuthority:()=>false
 });
 vm.runInContext('const gifRuntime=new Map(); const pvpGifFullDurationMs=new Map(); const DRAGON_CLOSE_RANGE=175; const MAGE_SPECIAL_RADIUS=215;',ctx);
 vm.runInContext(section('const PVP_HEROES=Object.freeze(', 'function setLobbySkin('),ctx);
@@ -272,20 +277,37 @@ assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(
  'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
-assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("function pvpRegionalAuthorityDecision"),
- 'PvP must support stable camera-region delegation with a hysteresis margin instead of changing the global host');
+assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("const PVP_REGION_SIM_MARGIN_PX=380")&&
+ html.includes("function pvpRegionalAuthorityDecision"),
+ 'PvP must use stable expanded authority bubbles with hysteresis instead of changing the global room host');
 assert(html.includes("pvpHostView=state.mode==='pvp'?pvpCurrentAuthorityView():null")&&html.includes("pvpDamageEvents,pvpHostView"),
  'the global host publishes its actual PvP camera rectangle with each authoritative snapshot');
+assert(html.includes("rooms/${roomId}/regions/${uid}")&&html.includes("async pushPVPRegion(snapshot)"),
+ 'non-hosts must publish isolated regional simulation snapshots through Firebase');
+assert(html.includes("function pvpBuildRegionalSnapshot(handoff=false)")&&html.includes("pvpPackRegionalEntity")&&
+ html.includes("dragonProjectiles:projectiles.map"),
+ 'regional snapshots must carry complete entity, projectile and runtime animation state');
+assert(html.includes("function pvpIntegrateRemoteRegions(now=performance.now())")&&html.includes("pvpHostShouldSimulateEntity"),
+ 'the global host must ingest remote bubbles and stop double-simulating leased entities');
+assert(html.includes("function updatePVPRegional(dt)")&&html.includes("pvpAllyBotAction(e,dt)")&&html.includes("pvpBotAction(e,dt)"),
+ 'a delegated guest must run the complete local PvP combat engine, including NPC AI');
+assert(html.includes("updateDragonProjectiles(dt,entityById,pvpLocalRegionOwnsProjectile)")&&
+ html.includes("updateDragonBurns(now,entityById,pvpLocalRegionOwnsEntity)"),
+ 'regional authority must include projectiles and burn damage, not only player movement');
+assert(html.includes("pvpRegionEncodeRuntime")&&html.includes("__pvpRegionTime")&&html.includes("pvpRegionDecodeRuntime"),
+ 'handoff must transfer running timers so attacks and GIF timelines continue instead of restarting');
+assert(html.includes("PVP_REGION_HOST_PRIORITY_MARGIN_PX=90")&&html.includes("takeover=!!packet.handoff"),
+ 'the host must take priority when camera regions meet and continue from the final regional snapshot');
+assert(html.includes("pvpNextRegionalEntityId()")&&html.includes("pvpNextRegionalProjectileId"),
+ 'region-created summons and projectiles need collision-safe distributed IDs');
 assert(html.includes("input.pvpRegionalAuthority=!!regionalPose")&&html.includes("input.pvpRegionalPose=regionalPose"),
- 'an offscreen guest publishes its locally predicted pose through the existing input channel');
-assert(html.includes("pvpApplyDelegatedRemotePose(e,input,now)")&&html.includes("if(!regionalPose&&(dx||dy))"),
- 'the host validates and adopts delegated offscreen poses instead of simulating the same movement twice');
+ 'pose packets remain as a low-latency first-packet fallback before full regional snapshots arrive');
 assert(html.includes("if(regional){")&&html.includes("PVP_REGION_HARD_SNAP_ERROR_PX"),
  'a delegated guest ignores stale host pullback while retaining catastrophic reconnect correction');
-assert(html.includes("if(state.mode==='pvp'){\n     pvpPredictGuestLocal(dt);\n     sendLocalPVEInput(false);"),
- 'guest prediction runs before transmission so regional pose packets contain the current local frame');
-assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
- 'the guest local hero must bypass delayed remote interpolation');
+assert(html.includes("pvpPredictGuestLocal(dt);\n     if(pvpLocalRegionalAuthority){\n       updatePVPRegional(dt);"),
+ 'guest prediction must feed full regional simulation before its state is published');
+assert(html.includes("(pvpLocalRegionalAuthority&&pvpLocalRegionOwnsEntity(e))"),
+ 'all locally owned regional entities must bypass delayed host interpolation');
 assert(html.includes("const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;"),
  'only PvP uses the faster host snapshot cadence');
 assert(html.includes("return nick+' • Nv. '+level"),
@@ -300,7 +322,7 @@ assert(html.includes("syncPVPPowerEffects(domCamera.left"),'animated mage power'
 // Wave staging and the actual War AI dispatch are PvP-only.
 assert(html.includes("if(state.mode==='pvp'&&e.pvpMode&&!e.pvpWarAI)"),'NPCs must use real War GIF states');
 assert(html.includes("if(state.mode==='pvp'&&e.pvpWarAI)Object.assign(out,serializeWarEntityForNetwork(e,now))"),'real NPC attack state must reach remote peers');
-assert(html.includes('updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);'),'PvP projectiles and burns must simulate');
+assert(html.includes('updateDragonProjectiles(dt,entityById,pvpHostShouldSimulateProjectile);updateDragonBurns(now,entityById,pvpHostShouldSimulateEntity);'),'host PvP projectiles and burns must respect regional authority');
 assert(html.includes("state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode"),'NPC damage needs PvP-only tuning');
 assert(!section('function updatePVP(dt){','function updatePVPHUD(){').includes('state.timeLeft-=dt;'),'PvP simulation must not decrement a round timer');
 assert(html.includes("if(!enemiesAlive&&pvpLastWave===PVP_ENEMY_WAVES.length-1)endPVPRound()"),
