@@ -199,8 +199,12 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const dragon=state.entities.find(e=>e.type==='dragon'&&e.alive&&e.pvpDragonFirstHitSeen);
    if(!dragon)return {queued:false,shot:false};
    dragon.pvpDragonRetaliatePending=false;dragon.pvpDragonRetaliateImmediate=false;
+   // Guarantee this is a REAL second durability loss. Earlier browser steps can
+   // legitimately consume the dragon's entire shield before this regression check.
+   if(dragon.shield<=0&&dragon.hp<=10)dragon.hp=20;
    dragon.pvpDragonObservedDurability=dragon.shield+dragon.hp;
-   dragon.shield=Math.max(0,dragon.shield-10);
+   if(dragon.shield>0)dragon.shield=Math.max(0,dragon.shield-10);
+   else dragon.hp=Math.max(1,dragon.hp-10);
    const before=state.dragonProjectiles.length;
    pvpObserveDragonDamage(dragon);
    const queued=dragon.pvpDragonRetaliatePending&&!dragon.pvpDragonRetaliateImmediate;
