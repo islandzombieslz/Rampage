@@ -4021,19 +4021,19 @@ const SFX_ASSETS=Object.freeze({
  shake:'assets/audio/sfx/shake.mp3',
  burn:'assets/audio/sfx/burn.mp3',
  mage:'assets/audio/sfx/mage.mp3',
- pvpWarriorSingle:'assets/audio/sfx/pvp/warrior-single.mp3',
- pvpWarriorCombo:'assets/audio/sfx/pvp/warrior-combo.mp3',
+ pvpWarriorSingle:'assets/audio/sfx/pvp/warrior-single.mp3?v=55aa27b343a3',
+ pvpWarriorCombo:'assets/audio/sfx/pvp/warrior-combo.mp3?v=0e376ea582ec',
  pvpWarriorSpecial:'assets/audio/sfx/pvp/warrior-special.ogg',
  pvpWarriorWalk:'assets/audio/sfx/pvp/warrior-walk.ogg',
  pvpDragonWings:'assets/audio/sfx/pvp/dragon-wings.ogg',
- pvpDragonAttack:'assets/audio/sfx/pvp/dragon-attack.mp3'
+ pvpDragonAttack:'assets/audio/sfx/pvp/dragon-attack.mp3?v=0a5f9f828c6d'
 });
 const SFX_MASTER_VOLUME=1.15;
 const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15});
 let layeredSfxContext=null;
 const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
  key,
- fetch(url,{cache:'force-cache'}).then(r=>{
+ fetch(url,{cache:'no-store'}).then(r=>{
    if(!r.ok)throw Error('SFX '+key+' '+r.status);
    return r.arrayBuffer();
  }).catch(err=>{console.warn('SFX preload failed',key,err);return null})
@@ -4053,6 +4053,14 @@ function getLayeredSfxContext(){
  }
  if(layeredSfxContext.state==='suspended')layeredSfxContext.resume().catch(()=>{});
  return layeredSfxContext;
+}
+async function ensureLayeredSfxContextRunning(){
+ const ctx=getLayeredSfxContext();
+ if(!ctx)return null;
+ if(ctx.state==='suspended'){
+   try{await ctx.resume()}catch(err){console.warn('SFX AudioContext resume failed',err)}
+ }
+ return ctx.state==='running'?ctx:null;
 }
 async function ensureLayeredSfxBuffer(key){
  if(layeredSfxBuffers.has(key))return layeredSfxBuffers.get(key);
@@ -4100,19 +4108,25 @@ async function playLayeredSfx(key,volume=1,pan=0,cooldownMs=0){
  if(!SFX_ASSETS[key])return false;
  const now=performance.now(),last=Number(layeredSfxLastAt.get(key))||-Infinity;
  if(cooldownMs&&now-last<cooldownMs)return false;
- layeredSfxLastAt.set(key,now);
- const buffer=await ensureLayeredSfxBuffer(key),ctx=layeredSfxContext;
- if(!buffer||!ctx||ctx.state!=='running')return false;
- const src=ctx.createBufferSource(),gain=ctx.createGain();
- src.buffer=buffer;const keyGain=SFX_KEY_GAIN[key]||1;gain.gain.value=clamp(volume*SFX_MASTER_VOLUME*keyGain,0,1.4);
- src.connect(gain);
- if(ctx.createStereoPanner){
-   const panner=ctx.createStereoPanner();
-   panner.pan.value=clamp(pan,-1,1);
-   gain.connect(panner);panner.connect(ctx.destination);
- }else gain.connect(ctx.destination);
- src.start();
- return true;
+ const buffer=await ensureLayeredSfxBuffer(key);
+ const ctx=await ensureLayeredSfxContextRunning();
+ if(!buffer||!ctx)return false;
+ try{
+   const src=ctx.createBufferSource(),gain=ctx.createGain();
+   src.buffer=buffer;const keyGain=SFX_KEY_GAIN[key]||1;gain.gain.value=clamp(volume*SFX_MASTER_VOLUME*keyGain,0,1.4);
+   src.connect(gain);
+   if(ctx.createStereoPanner){
+     const panner=ctx.createStereoPanner();
+     panner.pan.value=clamp(pan,-1,1);
+     gain.connect(panner);panner.connect(ctx.destination);
+   }else gain.connect(ctx.destination);
+   src.start();
+   layeredSfxLastAt.set(key,performance.now());
+   return true;
+ }catch(err){
+   console.warn('SFX play failed',key,err);
+   return false;
+ }
 }
 function playWorldLayeredSfx(key,x,y,baseVolume=1,cooldownMs=0){
  const mix=worldSfxMix(x,y);
@@ -4220,6 +4234,7 @@ function updateLayeredBattleSfx(now){
 }
 
 const pvpCombatSfxSeen=new Map();
+const pvpCombatSfxPending=new Map();
 let pvpCombatSfxLastScan=0;
 function pvpEntitySfxMix(e){
  const me=typeof pvpLocalHero==='function'?pvpLocalHero():null;
@@ -4238,9 +4253,18 @@ function pvpEntitySfxMix(e){
 function pvpPlayEntitySfxNow(e,event,serial,key,baseVolume=1){
  const nowSerial=Number(serial)||0;if(nowSerial<=0)return false;
  const id=(e?.id??'x')+':'+event;
- pvpCombatSfxSeen.set(id,nowSerial);
+ if(pvpCombatSfxSeen.get(id)===nowSerial||pvpCombatSfxPending.get(id)===nowSerial)return true;
+ pvpCombatSfxPending.set(id,nowSerial);
  const mix=pvpEntitySfxMix(e);
- playLayeredSfx(key,baseVolume*mix.gain/SFX_MASTER_VOLUME,mix.pan,0);
+ Promise.resolve(playLayeredSfx(key,baseVolume*mix.gain/SFX_MASTER_VOLUME,mix.pan,0))
+   .then(played=>{
+     if(pvpCombatSfxPending.get(id)===nowSerial)pvpCombatSfxPending.delete(id);
+     if(played)pvpCombatSfxSeen.set(id,nowSerial);
+   })
+   .catch(err=>{
+     if(pvpCombatSfxPending.get(id)===nowSerial)pvpCombatSfxPending.delete(id);
+     console.warn('PvP SFX failed',key,err);
+   });
  return true;
 }
 function pvpSfxEvent(e,event,serial,active,key,baseVolume=1){
