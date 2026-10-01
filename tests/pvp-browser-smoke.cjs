@@ -138,7 +138,9 @@ const pvpTestHook=`window.__pvpBrowserTest={
    state.entities=state.entities.filter(e=>e.id!==fakeId);
    remote.x=remoteSaved.x;remote.y=remoteSaved.y;remote.pvpRegionalAuthorityUid=remoteSaved.pvpRegionalAuthorityUid;
    remote.pvpRegionalEpoch=remoteSaved.pvpRegionalEpoch;NetworkAdapter.roomCache.regions={};pvpHostRegionState.clear();
-   return {first,second};
+   return {first,second,debug:{hostView,farX,farY,
+     allowed:pvpRegionalAuthorityDecision({alive:true,pvpMinion:false,ownerId:'remote-user',x:farX,y:farY},hostView,false),
+     fresh:pvpRegionalPacketFresh(packet),players:Object.keys(NetworkAdapter.roomCache.players||{})}};
  },
  async hostMigrationCycle(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId,local=NetworkAdapter.localPlayerId;
@@ -524,7 +526,7 @@ async function main(){
    const distributed=await page.evaluate(()=>window.__pvpBrowserTest.distributedRegionCycle());
    assert(distributed?.first?.exists&&distributed.first.hp===73&&distributed.first.shield===12&&
      distributed.first.owner==='remote-user'&&!distributed.first.hostSimulates,
-     'offscreen regional snapshots must lease complete enemy state to the remote player, not only its position');
+     'offscreen regional snapshots must lease complete enemy state to the remote player, not only its position: '+JSON.stringify(distributed));
    assert(distributed.first.remaining>750&&distributed.first.remaining<=950,
      'regional attack/GIF timing must arrive with its remaining runtime intact');
    assert.deepEqual({hp:distributed.second.hp,shield:distributed.second.shield,owner:distributed.second.owner,
