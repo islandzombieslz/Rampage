@@ -8,7 +8,7 @@ const gif=Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=','base64');
 const firebaseStub=String.raw`
 (() => {
  const user={uid:'browser-smoke-user',displayName:'Tester',isAnonymous:false};
- const database={rooms:{},profiles:{}},subscriptions=new Set();
+ const database={rooms:{},profiles:{}},subscriptions=new Set(),disconnectOps=new Map();
  const parts=path=>String(path).split('/').filter(Boolean);
  function read(path){return parts(path).reduce((obj,key)=>obj?.[key],database)??null}
  function snapshotValue(path){return path==='.info/connected'?true:path==='.info/serverTimeOffset'?0:read(path)}
@@ -32,7 +32,11 @@ const firebaseStub=String.raw`
   set:async(path,value)=>write(path,value),
   update:async(path,patch)=>{for(const [key,val] of Object.entries(patch))write(path+'/'+key,val)},
   remove:async path=>write(path,null),
-  onDisconnect:()=>({remove:async()=>{}}),
+  onDisconnect:path=>({
+    remove:async()=>{disconnectOps.set(path,{type:'remove'})},
+    set:async value=>{disconnectOps.set(path,{type:'set',value})},
+    cancel:async()=>{disconnectOps.delete(path)}
+  }),
   onValue:(path,cb)=>{const listener={path,cb};subscriptions.add(listener);
     queueMicrotask(()=>cb(snapshot(path)));
     return()=>subscriptions.delete(listener);
@@ -69,6 +73,29 @@ const pvpTestHook=`window.__pvpBrowserTest={
    pvpPredictGuestLocal(.05);
    keys.d=oldD;NetworkAdapter.hostUid=oldHost;
    return {dx:hero.x-before.x,dy:hero.y-before.y,x:hero.x,y:hero.y};
+ },
+ async hostMigrationCycle(){
+   const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId,local=NetworkAdapter.localPlayerId;
+   await NetworkAdapter.setForeground(true);
+   await NetworkAdapter.refreshPVPHostDisconnect(NetworkAdapter.roomCache);
+   const armed=NetworkAdapter.hostDisconnectSuccessorUid;
+   const handoff=await NetworkAdapter.handoffPVPHost('hidden');
+   await new Promise(r=>setTimeout(r,0));
+   const afterHandoff=(await F.get(F.ref(F.firebaseDb,'rooms/'+roomId+'/hostUid'))).val();
+   const runningAfterHandoff=state.running&&state.phase==='combat';
+   // Emulate the server-side onDisconnect results of the new remote host closing:
+   // authority moves back and the closed player's own presence/input nodes disappear.
+   await F.set(F.ref(F.firebaseDb,'rooms/'+roomId+'/hostUid'),local);
+   await F.remove(F.ref(F.firebaseDb,'rooms/'+roomId+'/players/remote-user'));
+   await F.remove(F.ref(F.firebaseDb,'rooms/'+roomId+'/inputs/remote-user'));
+   await new Promise(r=>setTimeout(r,0));
+   return {
+     armed,handoff,afterHandoff,
+     localHost:NetworkAdapter.isHost,host:NetworkAdapter.hostUid,
+     runningAfterHandoff,runningNow:state.running&&state.phase==='combat',
+     remotePlayer:state.players.some(p=>p.id==='remote-user'),
+     remoteEntity:state.entities.some(e=>e.ownerId==='remote-user')
+   };
  },
  async addRemoteConfirmedPlayer(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
@@ -487,6 +514,12 @@ async function main(){
    const replayed=await page.evaluate(()=>window.__pvpBrowserTest.expireAndReplayWarriorFx());
    assert.equal(replayed,false,'spent PvP special never recreates its GIF on a late snapshot');
    assert(!renderErrors.length,'Fullscreen PvP visuals must remain stable: '+renderErrors.join(' | '));
+   const migration=await page.evaluate(()=>window.__pvpBrowserTest.hostMigrationCycle());
+   assert.deepEqual(migration,{
+     armed:'remote-user',handoff:true,afterHandoff:'remote-user',
+     localHost:true,host:'browser-smoke-user',
+     runningAfterHandoff:true,runningNow:true,remotePlayer:false,remoteEntity:false
+   },'PvP authority must migrate through background/close without pausing, and a closed host character must leave the match');
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
    console.log('BROWSER PASS: PvP two-hero picker, Warrior special rules, round clock, durability, touch aim, mage flames, linear dragon balls and one-shot specials');
