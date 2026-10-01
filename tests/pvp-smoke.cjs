@@ -236,8 +236,15 @@ assert(!section('async function reservePVPStart(){','async function launchPVP(){
  'PvP start must never transact the entire room because guest player nodes can be write-protected');
 assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
  'match start must rebuild players from the authoritative Firebase roster');
-assert(html.includes("const PVP_INPUT_INTERVAL_MS=40")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=90"),
- 'PvP uses a lower-latency input and snapshot cadence without changing War constants');
+assert(html.includes("const PVP_INPUT_INTERVAL_MS=33")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=80")&&
+ html.includes("const PVP_REMOTE_RENDER_DELAY_MS=60"),
+ 'PvP uses the polished low-latency cadence and visual buffer without changing War constants');
+assert(html.includes("inputSending:false,inputQueue:[]")&&html.includes("const sameDiscrete=tail&&Number(tail.attackSeq||0)===Number(packet.attackSeq||0)"),
+ 'PvP input transport coalesces repeated movement while preserving discrete attack sequences');
+assert(html.includes("const roomId=this.roomId,uid=this.localPlayerId")&&html.includes("this.roomId===roomId&&this.localPlayerId===uid"),
+ 'queued inputs stay scoped to the room and player that created them');
+assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=160")&&html.includes("signature===NetworkAdapter.lastInputSignature"),
+ 'unchanged PvP inputs are deduplicated with a bounded keepalive instead of flooding Firebase');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
 assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
