@@ -3212,7 +3212,7 @@ const NetworkAdapter = {
           return {
             code:c,hostUid:user.uid,status:'lobby',npcCount:0,
             createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
-            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
+            players:{[user.uid]:{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot:0,color:COLORS[0],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()}}
           };
         });
         if(result.committed){code=c;break}
@@ -3240,7 +3240,7 @@ const NetworkAdapter = {
       const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pvp'?4:room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
       const slot=Object.values(room.players||{}).reduce((m,p)=>Math.max(m,Number(p.slot)||0),-1)+1;
-      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
+      await F.set(F.ref(F.firebaseDb,`rooms/${code}/players/${user.uid}`),{uid:user.uid,name:getCurrentNick(),level:currentAccountLevel(),human:true,slot,color:COLORS[slot%COLORS.length],clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,pvpHero:'warrior',pvpConfirmed:false,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()});
       await F.update(rr,{lastActivityAt:F.serverTimestamp()});
       this.roomId=code;this.hostUid=room.hostUid;this.localPlayerId=user.uid;
       await this.attachPresence(code,user.uid);
@@ -4491,6 +4491,10 @@ function xpLevelProgress(totalXp){
  while(remainder>=needed&&level<10000){remainder-=needed;level++;needed=xpRequiredForLevel(level)}
  return {level,xp:remainder,needed,totalXp:Math.max(0,Math.floor(Number(totalXp)||0))};
 }
+function currentAccountLevel(){
+ if(!accountProgress.verified||accountProgress.totalXp==null)return 1;
+ return xpLevelProgress(accountProgress.totalXp).level;
+}
 function isGameScreenVisible(){return $('#gameScreen')?.style.display==='flex'}
 function accountXPErrorMessage(error){
  const code=String(error?.code||error?.message||error||'').toLowerCase();
@@ -5083,6 +5087,14 @@ function serializeGame(){
 const REMOTE_WAR_RENDER_DELAY_MS=160;
 const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
+// PvP guests need a much smaller visual buffer than War. Local movement is
+// predicted immediately; these constants only smooth the rest of the world.
+const PVP_REMOTE_RENDER_DELAY_MS=80;
+const PVP_REMOTE_MAX_EXTRAP_MS=110;
+const PVP_INPUT_INTERVAL_MS=40;
+const PVP_SNAPSHOT_INTERVAL_MS=90;
+const PVP_LOCAL_SOFT_ERROR_PX=58;
+const PVP_LOCAL_SNAP_ERROR_PX=260;
 
 function appendRemotePositionSample(old,x,y,timestamp){
  // Reutiliza o buffer curto da própria entidade: evita duas novas arrays por
@@ -5100,7 +5112,8 @@ function appendRemotePositionSample(old,x,y,timestamp){
 function sampleRemotePosition(obj,now,allowExtrapolation=false){
  const history=obj?.netHistory;
  if(!Array.isArray(history)||!history.length)return null;
- const renderAt=now-REMOTE_WAR_RENDER_DELAY_MS;
+ const pvp=state.mode==='pvp';
+ const renderAt=now-(pvp?PVP_REMOTE_RENDER_DELAY_MS:REMOTE_WAR_RENDER_DELAY_MS);
  if(history.length===1)return {x:Number(history[0].x)||0,y:Number(history[0].y)||0};
  const first=history[0];
  if(renderAt<=Number(first.t))return {x:Number(first.x)||0,y:Number(first.y)||0};
@@ -5114,7 +5127,7 @@ function sampleRemotePosition(obj,now,allowExtrapolation=false){
  const last=history[history.length-1],prev=history[history.length-2];
  if(!allowExtrapolation)return {x:Number(last.x)||0,y:Number(last.y)||0};
  const gap=Math.max(16,(Number(last.t)||0)-(Number(prev.t)||0));
- const extra=Math.min(REMOTE_WAR_MAX_EXTRAP_MS,Math.max(0,renderAt-(Number(last.t)||0)));
+ const extra=Math.min(pvp?PVP_REMOTE_MAX_EXTRAP_MS:REMOTE_WAR_MAX_EXTRAP_MS,Math.max(0,renderAt-(Number(last.t)||0)));
  let vx=((Number(last.x)||0)-(Number(prev.x)||0))/(gap/1000);
  let vy=((Number(last.y)||0)-(Number(prev.y)||0))/(gap/1000);
  const maxSpeed=Math.max(120,(Number(obj?.speed)||DRAGON_FIREBALL_SPEED||120)*1.7);
@@ -5129,12 +5142,15 @@ function applyRemoteGame(game){
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
  const remoteNow=performance.now();
- const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,70,220):120;
+ const pvpRemote=game.mode==='pvp'||state.mode==='pvp';
+ const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt
+   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?45:70,pvpRemote?180:220)
+   :(pvpRemote?PVP_SNAPSHOT_INTERVAL_MS:120);
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
- // Um pouco maior que o intervalo observado: o proximo snapshot normalmente chega
- // antes do tween terminar, evitando a micro-parada entre pacotes sem prever fisica.
- const remoteInterpMs=clamp(remoteGapMs*1.18,105,190);
- const firstFrame=(game.mode==='pvp'||state.mode==='pvp')?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
+ // PvP uses a shorter visual window. War keeps the larger buffer that protects
+ // its dense army movement from packet jitter.
+ const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.05,65,125):clamp(remoteGapMs*1.18,105,190);
+ const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
@@ -5175,11 +5191,14 @@ function applyRemoteGame(game){
    const previous=remotePreviousEntities;
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=remoteNow;
+     const localPredicted=pvpRemote&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId&&old&&old.alive===e.alive;
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
-     const netHistory=appendRemotePositionSample(old,toX,toY,remoteNow);
-     const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,netHistory,target:null,controlled:!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId};
+     const netHistory=localPredicted?(Array.isArray(old?.netHistory)?old.netHistory:[]):appendRemotePositionSample(old,toX,toY,remoteNow);
+     const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,
+       netAuthX:toX,netAuthY:toY,netAuthAt:remoteNow,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,
+       netHistory,target:null,controlled:!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId};
      if(state.mode==='pvp'){
        out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
        out.pvpPowerUntil=localNow+Math.max(0,Number(out.pvpPowerRemainingMs)||0);
@@ -5974,14 +5993,15 @@ const PVP_ENEMY_HEROES=Object.freeze({
 let pvpPickerDraft='warrior',pvpStartInFlight=false;
 function pvpRosterFromFirebaseRoom(room){
  const humans=Object.values(room?.players||{}).sort((a,b)=>(a.slot??999)-(b.slot??999)).map((p,i)=>({
-   id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,human:true,local:p.uid===NetworkAdapter.localPlayerId,
+   id:p.uid,uid:p.uid,name:p.name||`Player ${i+1}`,level:clamp(Math.floor(Number(p.level)||1),1,10000),
+   human:true,local:p.uid===NetworkAdapter.localPlayerId,
    color:p.color||COLORS[i%COLORS.length],clan:normalizeClan(p.clan),clanChosen:!!p.clanChosen,
    clanConfirmed:!!p.clanConfirmed,clanSelectedAt:Number(p.clanSelectedAt)||0,
    pvpHero:PVP_SELECTABLE_BY_ID[p.pvpHero]?p.pvpHero:'warrior',pvpConfirmed:!!p.pvpConfirmed
  }));
  const npcCount=clamp(Number(room?.npcCount)||0,0,Math.max(0,4-humans.length));
  const bots=Array.from({length:npcCount},(_,i)=>({
-   id:`npc_${i+1}`,name:`NPC ${i+1}`,human:false,local:false,
+   id:`npc_${i+1}`,name:`NPC ${i+1}`,level:null,human:false,local:false,
    color:COLORS[(humans.length+i)%COLORS.length],clan:'warriors',clanChosen:true,clanConfirmed:true,
    clanSelectedAt:0,pvpHero:PVP_SELECTABLE_HEROES[i%PVP_SELECTABLE_HEROES.length].id,pvpConfirmed:true
  }));
@@ -5999,7 +6019,8 @@ function renderPVPPlayers(humans,npcs){
    const card=document.createElement(mine?'button':'div');
    if(mine)card.type='button';
    card.className='pvp-player-card'+(mine?' mine':'')+(p.pvpConfirmed?' confirmed':'');
-   const nick=document.createElement('span');nick.className='pvp-name';nick.textContent=p.name;
+   const nick=document.createElement('span');nick.className='pvp-name';
+   nick.textContent=p.human?`${p.name} • Nv. ${clamp(Math.floor(Number(p.level)||1),1,10000)}`:p.name;
    const img=document.createElement('img');img.src=hero.card;img.alt=hero.name;img.draggable=false;img.loading='lazy';
    const ready=document.createElement('span');ready.className='pvp-ready';
    ready.textContent=p.human?(p.pvpConfirmed?'✓ Confirmado':mine?'Toque para escolher':'Escolhendo…'):'ALIADO • '+hero.name;
@@ -6040,7 +6061,7 @@ async function commitPVPCharacterPicker(){
  btn.disabled=true;
  try{
    await F.update(F.ref(F.firebaseDb,'rooms/'+NetworkAdapter.roomId+'/players/'+uid),{
-     pvpHero:pvpPickerDraft,pvpConfirmed:true
+     pvpHero:pvpPickerDraft,pvpConfirmed:true,level:currentAccountLevel()
    });
    const mine=state.players.find(p=>p.id===uid);
    if(mine){mine.pvpHero=pvpPickerDraft;mine.pvpConfirmed=true}
@@ -8607,8 +8628,44 @@ function getLocalMovement(){
 }
 function sendLocalPVEInput(force=false){
  if(!NetworkAdapter.online||(state.mode!=='pve'&&state.mode!=='pvp')||!state.running)return;
- const now=performance.now();if(!force&&now-NetworkAdapter.lastInputAt<65)return;NetworkAdapter.lastInputAt=now;
+ const now=performance.now(),interval=state.mode==='pvp'?PVP_INPUT_INTERVAL_MS:65;
+ if(!force&&now-NetworkAdapter.lastInputAt<interval)return;
+ NetworkAdapter.lastInputAt=now;
  NetworkAdapter.sendInput(getLocalMovement()).catch(console.error);
+}
+function pvpPredictGuestLocal(dt){
+ if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!NetworkAdapter.online||NetworkAdapter.isHost)return;
+ const e=pvpLocalHero();
+ if(!e?.alive)return;
+ const now=performance.now();
+ const input=getLocalMovement();
+ let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
+ if(len>1){dx/=len;dy/=len}
+ const locked=Number(e.knockTime)>0||Number(e.pvpWarriorChargeUntil)>now;
+ if(!locked&&(dx||dy)){
+   const b=pvpArenaBounds(e.r||30);
+   e.x=clamp(e.x+dx*e.speed*dt,b.left,b.right);
+   e.y=clamp(e.y+dy*e.speed*dt,b.top,b.bottom);
+   e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
+ }else if(!locked)e.moving=false;
+
+ const ax=Number(e.netAuthX),ay=Number(e.netAuthY);
+ if(!Number.isFinite(ax)||!Number.isFinite(ay))return;
+ const ex=ax-e.x,ey=ay-e.y,error=Math.hypot(ex,ey);
+ if(!Number.isFinite(error)||error<.01)return;
+ // Huge divergence means teleport/knockback/respawn: authority wins immediately.
+ if(error>PVP_LOCAL_SNAP_ERROR_PX||(locked&&error>90)){
+   e.x=ax;e.y=ay;pvpClampEntity(e);return;
+ }
+ // While moving, ignore the normal network-distance gap so stale snapshots do not
+ // pull the guest backwards. When idle, converge quickly and invisibly.
+ const deadZone=(dx||dy)?PVP_LOCAL_SOFT_ERROR_PX:3;
+ if(error<=deadZone)return;
+ const strength=(dx||dy)?4.2:11;
+ const alpha=1-Math.exp(-strength*Math.max(0,dt));
+ const excess=(error-deadZone)/error;
+ e.x+=ex*alpha*excess;e.y+=ey*alpha*excess;
+ pvpClampEntity(e);
 }
 
 
@@ -11400,10 +11457,16 @@ function loop(now){
  if(state.running&&authoritative){
    if(state.mode==='pve')updatePVE(dt);else if(state.mode==='pvp')updatePVP(dt);else updateWar(dt);
  }
- if(state.running&&NetworkAdapter.online&&!NetworkAdapter.isHost)sendLocalPVEInput(false);
+ if(state.running&&NetworkAdapter.online&&!NetworkAdapter.isHost){
+   sendLocalPVEInput(false);
+   if(state.mode==='pvp')pvpPredictGuestLocal(dt);
+ }
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
    const clientNow=performance.now();
    for(const e of state.entities){
+     // The guest's own PvP hero is client-predicted and softly reconciled.
+     // Never send it back through the delayed interpolation buffer.
+     if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue;
      // Walking units are rendered from a short authoritative history buffer.
      // This is true snapshot interpolation: Firebase arrival jitter no longer
      // restarts a tween or creates a tiny stop on every packet.
@@ -11440,7 +11503,7 @@ function loop(now){
  updateLayeredBattleSfx(now);
  updatePvpCombatSfx(now);
 
- const networkPushInterval=120;
+ const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
    NetworkAdapter.lastStateAt=now;NetworkAdapter.pushing=true;
    if(state.mode==='pvp'){
@@ -11780,6 +11843,14 @@ const entityUiAlphaCtx=entityUiAlphaCanvas.getContext('2d',{willReadFrequently:t
 
 function entityUiDisplayName(e){
  if(!e)return 'Unidade';
+ if(state.mode==='pvp'&&e.ownerId&&!e.pvpMinion){
+   const player=state.players.find(p=>p.id===e.ownerId);
+   if(player?.human){
+     const nick=String(player.name||'Player').trim().slice(0,18)||'Player';
+     const level=clamp(Math.floor(Number(player.level)||1),1,10000);
+     return nick+' • Nv. '+level;
+   }
+ }
  if(e.type==='poseidon')return 'Poseidon';
  if(e.type==='seahorse')return 'Cavalo-marinho';
  if(e.type==='warrior'){
