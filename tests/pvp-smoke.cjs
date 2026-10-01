@@ -272,6 +272,18 @@ assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(
  'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
+assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("function pvpRegionalAuthorityDecision"),
+ 'PvP must support stable camera-region delegation with a hysteresis margin instead of changing the global host');
+assert(html.includes("pvpHostView=state.mode==='pvp'?pvpCurrentAuthorityView():null")&&html.includes("pvpDamageEvents,pvpHostView"),
+ 'the global host publishes its actual PvP camera rectangle with each authoritative snapshot');
+assert(html.includes("input.pvpRegionalAuthority=!!regionalPose")&&html.includes("input.pvpRegionalPose=regionalPose"),
+ 'an offscreen guest publishes its locally predicted pose through the existing input channel');
+assert(html.includes("pvpApplyDelegatedRemotePose(e,input,now)")&&html.includes("if(!regionalPose&&(dx||dy))"),
+ 'the host validates and adopts delegated offscreen poses instead of simulating the same movement twice');
+assert(html.includes("if(regional){")&&html.includes("PVP_REGION_HARD_SNAP_ERROR_PX"),
+ 'a delegated guest ignores stale host pullback while retaining catastrophic reconnect correction');
+assert(html.includes("if(state.mode==='pvp'){\n     pvpPredictGuestLocal(dt);\n     sendLocalPVEInput(false);"),
+ 'guest prediction runs before transmission so regional pose packets contain the current local frame');
 assert(html.includes("if(state.mode==='pvp'&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)continue"),
  'the guest local hero must bypass delayed remote interpolation');
 assert(html.includes("const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;"),
