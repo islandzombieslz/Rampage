@@ -6061,7 +6061,7 @@ async function commitPVPCharacterPicker(){
  btn.disabled=true;
  try{
    await F.update(F.ref(F.firebaseDb,'rooms/'+NetworkAdapter.roomId+'/players/'+uid),{
-     pvpHero:pvpPickerDraft,pvpConfirmed:true,level:currentAccountLevel()
+     pvpHero:pvpPickerDraft,pvpConfirmed:true
    });
    const mine=state.players.find(p=>p.id===uid);
    if(mine){mine.pvpHero=pvpPickerDraft;mine.pvpConfirmed=true}
