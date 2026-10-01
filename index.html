@@ -4030,7 +4030,7 @@ const SFX_ASSETS=Object.freeze({
  pvpDragonAttack:'assets/audio/sfx/pvp/dragon-attack.mp3?v=0a5f9f828c6d'
 });
 const SFX_MASTER_VOLUME=1.15;
-const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15,transition:.52,pvpWarriorWalk:.30,pvpWarriorCombo:.82,pvpWarriorSpecial:1.12});
+const SFX_KEY_GAIN=Object.freeze({click:1.18,click2:1.15,pvpWarriorWalk:.30,pvpWarriorCombo:.82,pvpWarriorSpecial:1.12});
 let layeredSfxContext=null;
 const layeredSfxRaw=new Map(Object.entries(SFX_ASSETS).map(([key,url])=>[
  key,
@@ -4410,7 +4410,7 @@ function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- if(playTransitionSound)playLayeredSfx('transition',.80,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.34,0,260);
  screenTransitionBusy=true;fade.classList.add('show');
  setTimeout(()=>{
    screen(id);
