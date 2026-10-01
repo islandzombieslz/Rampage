@@ -3925,7 +3925,7 @@ const MENU_SCREEN_IDS=new Set(['menuScreen','joinScreen','modeScreen','configScr
 /* ==================== TRILHA SONORA ==================== */
 const menuMusicEl=$('#menuMusic'),battleMusicEl=$('#battleMusic');
 const MUSIC_VOLUME={menu:.11,battle:.14,pvpBattle:.17};
-function musicTargetVolume(mode){return mode==='battle'&&state.mode==='pvp'?MUSIC_VOLUME.pvpBattle:musicTargetVolume(mode)}
+function musicTargetVolume(mode){return mode==='battle'&&state.mode==='pvp'?MUSIC_VOLUME.pvpBattle:MUSIC_VOLUME[mode]}
 const MUSIC_SWITCH_FADE_MS=850,MUSIC_LOOP_FADE_MS=1800,MUSIC_LOOP_FADE_SECONDS=2;
 const musicFadeTokens=new WeakMap(),musicTailFading=new WeakSet();
 let desiredMusicMode='menu',activeMusicEl=null;
@@ -4410,7 +4410,7 @@ function screenWithFade(id,playTransitionSound=true){
  if(screenTransitionBusy){queuedScreenId=id;return}
  const fade=$('#screenTransitionFade');
  if(!fade){screen(id);return}
- if(playTransitionSound)playLayeredSfx('transition',.34,0,260);
+ if(playTransitionSound)playLayeredSfx('transition',.12,0,260);
  screenTransitionBusy=true;fade.classList.add('show');
  setTimeout(()=>{
    screen(id);
