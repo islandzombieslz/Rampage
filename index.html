@@ -3175,6 +3175,7 @@ window.dispatchEvent(new Event('firebase-ready'));
 const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
+  inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
   presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){
@@ -3284,6 +3285,7 @@ const NetworkAdapter = {
     this.stopRoomHeartbeat();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
     try{state.running=false}catch(_){}
     try{navigateScreen('menuScreen')}catch(_){}
   },
@@ -3361,7 +3363,8 @@ const NetworkAdapter = {
       else await this.removeRoomIfEmpty(code,false);
     }catch(_){}
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
-    this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';this.leaving=false;
+    this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.leaving=false;
   },
   async pushLobbyState(patch){if(!this.roomId)return;const F=await this.waitFirebase();await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),patch)},
   async setClan(clan){
@@ -3405,7 +3408,31 @@ const NetworkAdapter = {
     await F.update(playerRef,{clan:selected,clanChosen:true,clanConfirmed:true,clanSelectedAt:now,clanConfirmedAt:now});
     return true;
   },
-  async sendInput(input){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase();await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/inputs/${this.localPlayerId}`),{...input,t:F.serverTimestamp()})},
+  async sendInput(input){
+    if(!this.roomId||!this.localPlayerId)return;
+    const roomId=this.roomId,uid=this.localPlayerId;
+    const packet={...input};
+    const tail=this.inputQueue[this.inputQueue.length-1];
+    const sameDiscrete=tail&&Number(tail.attackSeq||0)===Number(packet.attackSeq||0)&&
+      Number(tail.pvpComboCancelSeq||0)===Number(packet.pvpComboCancelSeq||0);
+    if(sameDiscrete)this.inputQueue[this.inputQueue.length-1]=packet;
+    else this.inputQueue.push(packet);
+    if(this.inputSending)return this.inputSendPromise;
+    this.inputSending=true;
+    this.inputSendPromise=(async()=>{
+      try{
+        const F=await this.waitFirebase();
+        while(this.inputQueue.length&&this.roomId===roomId&&this.localPlayerId===uid){
+          const next=this.inputQueue.shift();
+          await F.set(F.ref(F.firebaseDb,`rooms/${roomId}/inputs/${uid}`),{...next,t:F.serverTimestamp()});
+        }
+      }finally{
+        this.inputSending=false;this.inputSendPromise=null;
+        if(this.inputQueue.length&&this.roomId&&this.localPlayerId)this.sendInput(this.inputQueue.shift()).catch(console.error);
+      }
+    })();
+    return this.inputSendPromise;
+  },
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
   async pushState(snapshot){if(!this.roomId||!this.isHost||state.phase==='finished')return;const F=await this.waitFirebase();if(state.phase==='finished')return;await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
   async removeCommand(uid,id){const F=await this.waitFirebase();await F.remove(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${uid}/${id}`))}
@@ -5089,10 +5116,11 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 // PvP guests need a much smaller visual buffer than War. Local movement is
 // predicted immediately; these constants only smooth the rest of the world.
-const PVP_REMOTE_RENDER_DELAY_MS=80;
-const PVP_REMOTE_MAX_EXTRAP_MS=110;
-const PVP_INPUT_INTERVAL_MS=40;
-const PVP_SNAPSHOT_INTERVAL_MS=90;
+const PVP_REMOTE_RENDER_DELAY_MS=60;
+const PVP_REMOTE_MAX_EXTRAP_MS=130;
+const PVP_INPUT_INTERVAL_MS=33;
+const PVP_SNAPSHOT_INTERVAL_MS=80;
+const PVP_INPUT_KEEPALIVE_MS=160;
 const PVP_LOCAL_SOFT_ERROR_PX=58;
 const PVP_LOCAL_SNAP_ERROR_PX=260;
 
@@ -5149,7 +5177,7 @@ function applyRemoteGame(game){
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
  // PvP uses a shorter visual window. War keeps the larger buffer that protects
  // its dense army movement from packet jitter.
- const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.05,65,125):clamp(remoteGapMs*1.18,105,190);
+ const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.02,52,108):clamp(remoteGapMs*1.18,105,190);
  const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
@@ -8628,10 +8656,21 @@ function getLocalMovement(){
 }
 function sendLocalPVEInput(force=false){
  if(!NetworkAdapter.online||(state.mode!=='pve'&&state.mode!=='pvp')||!state.running)return;
- const now=performance.now(),interval=state.mode==='pvp'?PVP_INPUT_INTERVAL_MS:65;
+ const now=performance.now(),pvp=state.mode==='pvp',interval=pvp?PVP_INPUT_INTERVAL_MS:65;
  if(!force&&now-NetworkAdapter.lastInputAt<interval)return;
  NetworkAdapter.lastInputAt=now;
- NetworkAdapter.sendInput(getLocalMovement()).catch(console.error);
+ const input=getLocalMovement();
+ if(pvp&&!force){
+   const signature=[
+     Number(input.dx||0).toFixed(3),Number(input.dy||0).toFixed(3),Number(input.attackSeq||0),
+     input.pvpAction||'',input.pvpTargetId??'',input.pvpAimAngle==null?'':Number(input.pvpAimAngle).toFixed(3),
+     Number(input.pvpComboCancelSeq||0)
+   ].join('|');
+   if(signature===NetworkAdapter.lastInputSignature&&now-NetworkAdapter.lastInputSentAt<PVP_INPUT_KEEPALIVE_MS)return;
+   NetworkAdapter.lastInputSignature=signature;
+ }
+ NetworkAdapter.lastInputSentAt=now;
+ NetworkAdapter.sendInput(input).catch(console.error);
 }
 function pvpPredictGuestLocal(dt){
  if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!NetworkAdapter.online||NetworkAdapter.isHost)return;
