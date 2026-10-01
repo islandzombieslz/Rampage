@@ -3284,10 +3284,14 @@ const NetworkAdapter = {
     const successorUid=successor?.uid||null;
     if(this.hostDisconnectOp&&this.hostDisconnectSuccessorUid===successorUid)return true;
     await this.cancelPVPHostDisconnect();
-    const F=await this.waitFirebase(),op=F.onDisconnect(F.ref(F.firebaseDb,`rooms/${this.roomId}/hostUid`));
+    const F=await this.waitFirebase();
+    const disconnectRef=successorUid
+      ?F.ref(F.firebaseDb,`rooms/${this.roomId}/hostUid`)
+      :F.ref(F.firebaseDb,`rooms/${this.roomId}`);
+    const op=F.onDisconnect(disconnectRef);
     try{
       if(successorUid&&op?.set)await op.set(successorUid);
-      else if(op?.remove)await op.remove();
+      else if(!successorUid&&op?.remove)await op.remove();
       this.hostDisconnectOp=op;this.hostDisconnectSuccessorUid=successorUid;return true;
     }catch(_){this.hostDisconnectOp=null;this.hostDisconnectSuccessorUid=null;return false}
   },
@@ -4529,6 +4533,8 @@ function navigateScreen(id){
 /* ROOM LIFECYCLE 2026-09-09 */
 const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];
 const ROOM_INACTIVITY_MS=10*60*1000;
+const ROOM_FINISHED_CLEANUP_MS=15*1000;
+const ROOM_LEGACY_FINISHED_MAX_MS=2*60*1000;
 const ROOM_HEARTBEAT_MS=30*1000;
 const ROOM_CLEANUP_MS=60*1000;
 function roomPlayers(room){return Object.values(room?.players||{})}
@@ -4540,6 +4546,16 @@ function roomLatestSeenAt(room){
 function roomIsExpired(room,now){
  const players=roomPlayers(room);
  if(!players.length)return true;
+ // Finished rooms are disposable. New matches stamp finishedAt and get a short
+ // grace period so every peer can receive the final result before cleanup.
+ if(room?.status==='finished'){
+   const finishedAt=Number(room.finishedAt)||0;
+   if(finishedAt)return now-finishedAt>ROOM_FINISHED_CLEANUP_MS;
+   // Legacy finished rooms did not have finishedAt and could heartbeat forever.
+   // Use their creation time as a bounded fallback instead of preserving them indefinitely.
+   const createdAt=Number(room.createdAt)||0;
+   if(createdAt&&now-createdAt>ROOM_LEGACY_FINISHED_MAX_MS)return true;
+ }
  const last=roomLatestSeenAt(room);
  return !last || now-last>ROOM_INACTIVITY_MS;
 }
@@ -5664,7 +5680,10 @@ function applyRemoteGame(game){
  if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){
    NetworkAdapter.remoteFinishScheduled=true;
    flash(game.matchResult?matchResultMessage(game.matchResult,NetworkAdapter.localPlayerId):'PARTIDA ENCERRADA',4);
-   setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false},4200);
+   setTimeout(()=>{
+     navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false;
+     NetworkAdapter.leaveRoom().catch(console.error);
+   },4200);
  }
 }
 function configureGameScreenForMode(){
@@ -13632,10 +13651,13 @@ function finishGame(msg,result=null){
    NetworkAdapter.roomStatus='finished';
    (async()=>{
      while(NetworkAdapter.pushing)await new Promise(resolve=>setTimeout(resolve,25));
-     await NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()});
+     await NetworkAdapter.pushLobbyState({status:'finished',finishedAt:(await NetworkAdapter.waitFirebase()).serverTimestamp(),game:serializeGame()});
    })().catch(console.error);
  }
- setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
+ setTimeout(()=>{
+   navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open');
+   NetworkAdapter.leaveRoom().catch(console.error);
+ },4200);
 }
 
 })();
