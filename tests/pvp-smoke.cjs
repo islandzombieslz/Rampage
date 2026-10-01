@@ -228,8 +228,12 @@ assert(html.includes("if(state.mode==='pvp')updatePVP(dt);else updateWar(dt)"));
 assert(html.includes("pvpConfirmed:true"),'networked hero confirmation');
 assert(!html.includes("state.players.filter(p=>p.human).length===1)await launchPVP()"),
  'hero confirmation must never auto-start PvP from a stale one-player roster');
-assert(html.includes("async function reservePVPStart()")&&html.includes("status:'starting'"),
- 'host start must atomically reserve the authoritative Firebase room before simulation');
+assert(html.includes("async function reservePVPStart()")&&html.includes("rooms/${roomId}/status"),
+ 'host start must atomically reserve only the Firebase status node before simulation');
+assert(html.includes("function pvpFirebaseRoomReady(room,uid)"),
+ 'server-side roster validation must gate the PvP start');
+assert(!section('async function reservePVPStart(){','async function launchPVP(){').includes("runTransaction(roomRef"),
+ 'PvP start must never transact the entire room because guest player nodes can be write-protected');
 assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
  'match start must rebuild players from the authoritative Firebase roster');
 assert(html.includes("const networkPushInterval=120;"),
