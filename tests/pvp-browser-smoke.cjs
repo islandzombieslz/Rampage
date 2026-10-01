@@ -101,8 +101,13 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const template=state.entities.find(e=>e.alive&&e.pvpMinion&&e.team==='pvp-enemy');
    if(!remote||!template)return null;
    const hostView=pvpCurrentAuthorityView(),now=performance.now();
-   const farX=Number(hostView.right)<state.world.w-330?state.world.w-330:330;
-   const farY=Number(hostView.bottom)<state.world.h-310?state.world.h-310:310;
+   const bounds=pvpArenaBounds(30),cx=(Number(hostView.left)+Number(hostView.right))/2,cy=(Number(hostView.top)+Number(hostView.bottom))/2;
+   const corners=[
+     {x:bounds.left,y:bounds.top},{x:bounds.right,y:bounds.top},
+     {x:bounds.left,y:bounds.bottom},{x:bounds.right,y:bounds.bottom}
+   ];
+   corners.sort((a,b)=>((b.x-cx)**2+(b.y-cy)**2)-((a.x-cx)**2+(a.y-cy)**2));
+   const farX=corners[0].x,farY=corners[0].y;
    const remoteSaved={x:remote.x,y:remote.y,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid,pvpRegionalEpoch:remote.pvpRegionalEpoch};
    const fakeId=-987654321;
    const remotePacket={...remote,x:farX,y:farY,alive:true,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0};
