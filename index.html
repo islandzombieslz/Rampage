@@ -7271,7 +7271,8 @@ attackBtn.addEventListener('lostpointercapture',stopPVPAttackHold);
 attackBtn.addEventListener('contextmenu',e=>e.preventDefault());
 
 function entityBase(type,x,y,team,color){
- return {id:state.nextId++,type,x,y,vx:0,vy:0,team,color,r:30,hp:100,maxHp:100,shield:50,maxShield:50,damage:20,
+ const entityId=(state.mode==='pvp'&&pvpRegionalSimulationUid)?pvpNextRegionalEntityId():state.nextId++;
+ return {id:entityId,type,x,y,vx:0,vy:0,team,color,r:30,hp:100,maxHp:100,shield:50,maxShield:50,damage:20,
  speed:speedMap[state.speed],alive:true,attackCooldown:0,attackAnim:0,attackSerial:0,comboStep:0,lastAttackAt:0,
  hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,shakeSerial:0,shakePower:0,knockVX:0,knockVY:0,knockTime:0,
  deathStarted:0,removeAt:0,deathDir:1,heading:0,facing:1,moving:false,target:null,controlled:false,
@@ -8904,7 +8905,7 @@ function launchAnubisProjectile(e,target){
  e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
  const startX=e.x+Math.cos(angle)*40,startY=e.y-14+Math.sin(angle)*16;
  state.dragonProjectiles.push({
-   id:'ap_'+(++state.dragonProjectileSeq),kind:'anubis',serial:e.anubisAttackSerial,
+   id:pvpRegionalSimulationUid?pvpNextRegionalProjectileId('ap'):'ap_'+(++state.dragonProjectileSeq),kind:'anubis',serial:e.anubisAttackSerial,
    x:startX,y:startY,vx:Math.cos(angle)*ANUBIS_PROJECTILE_SPEED,vy:Math.sin(angle)*ANUBIS_PROJECTILE_SPEED,
    speed:ANUBIS_PROJECTILE_SPEED,damage:ANUBIS_PROJECTILE_DAMAGE,burn:false,
    targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500
@@ -9492,13 +9493,14 @@ function pvpSpawnNPC(heroId=null,owner=null){
  return e;
 }
 function pvpNearestEnemy(e,preferred=null){
+ const regionalOnly=!!pvpRegionalSimulationUid;
  if(preferred!=null){
-   const target=state.entities.find(t=>t.id===Number(preferred)&&t.alive&&t.team!==e.team);
+   const target=state.entities.find(t=>String(t.id)===String(preferred)&&t.alive&&t.team!==e.team&&(!regionalOnly||pvpLocalRegionOwnsEntity(t)));
    if(target)return target;
  }
  let nearest=null,best=Infinity;
  for(const t of state.entities){
-   if(!t.alive||t===e||t.team===e.team)continue;
+   if(!t.alive||t===e||t.team===e.team||(regionalOnly&&!pvpLocalRegionOwnsEntity(t)))continue;
    const d=(t.x-e.x)**2+(t.y-e.y)**2;
    if(d<best){nearest=t;best=d}
  }
@@ -10016,6 +10018,18 @@ function pvpTriggerAttack(override=null){
  NetworkAdapter.attackSeq++;
  const me=pvpLocalHero();
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
+   if(pvpLocalRegionalAuthority&&me){
+     me.pvpLastAttackSeq=NetworkAdapter.attackSeq;
+     try{
+       const handled=!!pvpHandleAction(me,action,pvpControls.targetId);
+       sendLocalPVEInput(true);pvpMaybePublishRegion(performance.now(),true);
+       return handled||true;
+     }catch(err){
+       pvpReportError('ação regional',err);
+       me.pvpPowerUntil=0;me.pvpPowerVisualUntil=0;me.pvpActionUntil=0;me.pvpSpecialFxUntil=0;
+       sendLocalPVEInput(true);return true;
+     }
+   }
    if(action==='attack')pvpPreviewBasicAttack(me);
    sendLocalPVEInput(true);return true;
  }
@@ -10155,14 +10169,14 @@ function pvpTickPower(e,now,manualAngle=null){
  // Discard the hit backlog if a mobile browser suspended the animation.
  if(e.pvpPowerNextTick<=now)e.pvpPowerNextTick=now+PVP_BASE.fireTick;
 }
-function pvpExpireSummons(now){
+function pvpExpireSummons(now,shouldSimulate=null){
  for(const minion of [...state.entities]){
-   if(!minion.alive||minion.pvpSummonerId==null)continue;
+   if(!minion.alive||minion.pvpSummonerId==null||(shouldSimulate&&!shouldSimulate(minion)))continue;
    const owner=state.entities.find(e=>e.id===minion.pvpSummonerId);
    if(!owner?.alive||now>=owner.pvpSpecialReadyAt)startEntityDeath(minion);
  }
  for(const owner of state.entities){
-   if(!owner.pvpSummonedIds?.length)continue;
+   if(!owner.pvpSummonedIds?.length||(shouldSimulate&&!shouldSimulate(owner)))continue;
    if(owner.alive&&now<owner.pvpSpecialReadyAt)continue;
    for(const id of owner.pvpSummonedIds){
      const minion=state.entities.find(e=>e.id===id);
@@ -10182,7 +10196,10 @@ function pvpRebuildTargets(){
   for(const e of pvpFrameLiving)if(e.team!==team)targets.push(e);
  }
 }
-function pvpTargetsFor(e){return pvpFrameTargetLists.get(e.team)||state.entities}
+function pvpTargetsFor(e){
+ const targets=pvpFrameTargetLists.get(e.team)||state.entities;
+ return pvpRegionalSimulationUid?targets.filter(t=>pvpLocalRegionOwnsEntity(t)):targets;
+}
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
  if(e.type==='golem')return e.golemAttackSerial||0;
@@ -11598,7 +11615,7 @@ function beginDragonTakeoff(e){
              e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,now+DRAGON_CLOSE_SHOT_COOLDOWN_MS);
            }
            const startX=e.x+Math.cos(angle)*42,startY=e.y-16+Math.sin(angle)*18;
-           state.dragonProjectiles.push({id:'df_'+(++state.dragonProjectileSeq),kind:'dragon',serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,speed:DRAGON_FIREBALL_SPEED,damage:DRAGON_FIREBALL_DAMAGE,burn:true,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
+           state.dragonProjectiles.push({id:pvpRegionalSimulationUid?pvpNextRegionalProjectileId('df'):'df_'+(++state.dragonProjectileSeq),kind:'dragon',serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,speed:DRAGON_FIREBALL_SPEED,damage:DRAGON_FIREBALL_DAMAGE,burn:true,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
            addWarGoalProgress(e.team,'ranged');
            return true;
           }
