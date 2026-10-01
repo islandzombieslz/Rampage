@@ -8968,7 +8968,8 @@ function pvpStartWarriorCombo(e,now=performance.now()){
  e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
  e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
  e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
- pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',1);
+ pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',.38);
+ e.pvpWarriorComboSfxIndex=1;
  e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
  e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
@@ -8979,7 +8980,7 @@ function pvpCancelWarriorCombo(e,now=performance.now()){
  if(!pvpIsWarriorHero(e))return false;
  const active=Number(e.pvpWarriorComboUntil)>now||Number(e.pvpWarriorComboUntil)>0;
  stopLayeredOneShot('pvp:combo:'+e.id);
- e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboSfxIndex=0;
  e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
  e.pvpMeleeVisualUntil=Math.min(Number(e.pvpMeleeVisualUntil)||0,now);
@@ -8994,6 +8995,14 @@ function pvpTickWarriorCombo(e,now=performance.now()){
  if(Number(e.pvpWarriorComboRequestUntil)>0&&now>Number(e.pvpWarriorComboRequestUntil))
    return pvpCancelWarriorCombo(e,now);
  const duration=Math.max(1,end-start),fractions=[.18,.50,.82];
+ const sfxFractions=[0,.50,.86],sfxVolumes=[.38,.52,.38];
+ while((Number(e.pvpWarriorComboSfxIndex)||0)<sfxFractions.length&&
+       now>=start+duration*sfxFractions[Number(e.pvpWarriorComboSfxIndex)||0]){
+   const sfxIndex=Number(e.pvpWarriorComboSfxIndex)||0;
+   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',sfxVolumes[sfxIndex]);
+   e.pvpWarriorComboSfxIndex=sfxIndex+1;
+ }
  while((Number(e.pvpWarriorComboHitIndex)||0)<fractions.length&&
        now>=start+duration*fractions[Number(e.pvpWarriorComboHitIndex)||0]){
    const target=pvpNearestEnemy(e);
@@ -9010,7 +9019,7 @@ function pvpTickWarriorCombo(e,now=performance.now()){
  }
  if(now<end)return true;
  const repeat=Number(e.pvpWarriorComboRequestUntil)>=now;
- e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboSfxIndex=0;
  e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
  if(repeat)return pvpStartWarriorCombo(e,now);
  // Se o combo terminou normalmente, deixa o arquivo original concluir inteiro.
@@ -9024,8 +9033,6 @@ function pvpBasicAttack(e){
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now)return false;
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorComboUntil)>now){
    e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
-   e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
-   pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',1);
    return true;
  }
  if(pvpIsWarriorHero(e)){
