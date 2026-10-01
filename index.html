@@ -5729,8 +5729,14 @@ function applyRemoteGame(game){
    remotePreviousEntities.clear();
    for(const previousEntity of state.entities)remotePreviousEntities.set(previousEntity.id,previousEntity);
    const previous=remotePreviousEntities;
+   const incomingRegionalEntityIds=new Set(game.entities.map(e=>String(e.id)));
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=remoteNow;
+     if(pvpRemote&&pvpLocalRegionalAuthority&&old&&pvpLocalRegionOwnsEntity(old)){
+       old.netAuthX=Number(e.x)||0;old.netAuthY=Number(e.y)||0;old.netAuthAt=remoteNow;
+       old.controlled=!old.pvpMinion&&old.ownerId===NetworkAdapter.localPlayerId;
+       return old;
+     }
      const localPredicted=pvpRemote&&!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId&&old&&old.alive===e.alive;
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
@@ -6045,6 +6051,12 @@ function applyRemoteGame(game){
      }
      return out;
    });
+   if(pvpRemote&&pvpLocalRegionalAuthority){
+     for(const old of previous.values()){
+       if(incomingRegionalEntityIds.has(String(old.id))||!pvpLocalRegionOwnsEntity(old))continue;
+       state.entities.push(old);
+     }
+   }
  }
  if(Array.isArray(game.dragonProjectiles)){
    // Fireballs use the SAME delayed timeline as remote troops. This keeps a
@@ -6053,8 +6065,9 @@ function applyRemoteGame(game){
    const previousProjectiles=new Map((state.dragonProjectiles||[]).map(p=>[p.id,p]));
    const incomingIds=new Set();
    const nextProjectiles=game.dragonProjectiles.map(p=>{
-     incomingIds.add(p.id);
+     incomingIds.add(String(p.id));
      const old=previousProjectiles.get(p.id),authX=Number(p.x)||0,authY=Number(p.y)||0;
+     if(pvpRemote&&pvpLocalRegionalAuthority&&old&&pvpLocalRegionOwnsProjectile(old))return old;
      const netHistory=appendRemotePositionSample(old,authX,authY,remoteNow);
      return {...p,x:old?.x??authX,y:old?.y??authY,netAuthX:authX,netAuthY:authY,netHistory,netRemovedAt:0};
    });
@@ -6063,7 +6076,10 @@ function applyRemoteGame(game){
    // A final sample at the authoritative target position makes the fireball
    // visibly arrive at the unit instead of crossing it and flying away.
    for(const old of previousProjectiles.values()){
-     if(incomingIds.has(old.id))continue;
+     if(incomingIds.has(String(old.id)))continue;
+     if(pvpRemote&&pvpLocalRegionalAuthority&&pvpLocalRegionOwnsProjectile(old)){
+       nextProjectiles.push(old);continue;
+     }
      const removedAt=Number(old.netRemovedAt)||remoteNow;
      if(remoteNow-removedAt>REMOTE_WAR_RENDER_DELAY_MS+REMOTE_WAR_MAX_EXTRAP_MS+40)continue;
      let history=old.netHistory;
