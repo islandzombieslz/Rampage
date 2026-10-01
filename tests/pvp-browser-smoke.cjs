@@ -109,9 +109,10 @@ const pvpTestHook=`window.__pvpBrowserTest={
    corners.sort((a,b)=>((b.x-cx)**2+(b.y-cy)**2)-((a.x-cx)**2+(a.y-cy)**2));
    const farX=corners[0].x,farY=corners[0].y;
    const remoteSaved={x:remote.x,y:remote.y,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid,pvpRegionalEpoch:remote.pvpRegionalEpoch};
-   const fakeId=-987654321;
+   const templateSaved={...template,pendingDragonAttack:template.pendingDragonAttack?{...template.pendingDragonAttack}:null};
+   const regionalId=template.id;
    const remotePacket={...remote,x:farX,y:farY,alive:true,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0};
-   const regionalEnemy={...template,id:fakeId,x:farX-55,y:farY-25,hp:73,maxHp:100,shield:12,maxShield:50,
+   const regionalEnemy={...template,id:regionalId,x:farX-55,y:farY-25,hp:73,maxHp:100,shield:12,maxShield:50,
      alive:true,deathStarted:0,removeAt:0,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0,
      dragonAttackSerial:9,pendingDragonAttack:{serial:9,startedAt:now-500,endAt:now+900}};
    const view={hostUid:'remote-user',left:Math.max(0,farX-430),top:Math.max(0,farY-350),
@@ -122,7 +123,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
      dragonProjectiles:[],players:[],matchStats:{},pvpDamageEvents:[]};
    NetworkAdapter.roomCache.regions={'remote-user':packet};pvpHostRegionState.clear();
    pvpIntegrateRemoteRegions(now);
-   const leased=state.entities.find(e=>e.id===fakeId);
+   const leased=state.entities.find(e=>String(e.id)===String(regionalId));
    const first={exists:!!leased,hp:leased?.hp,shield:leased?.shield,owner:leased?.pvpRegionalAuthorityUid,
      remaining:leased?.pendingDragonAttack?Math.round(leased.pendingDragonAttack.endAt-now):0,
      hostSimulates:leased?pvpHostShouldSimulateEntity(leased):true};
@@ -131,11 +132,11 @@ const pvpTestHook=`window.__pvpBrowserTest={
    NetworkAdapter.roomCache.regions={'remote-user':{...packet,seq:2,active:false,handoff:true,at:NetworkAdapter.serverNow(),
      entities:[pvpPackRegionalEntity({...remotePacket,x:farX-10},nextNow),pvpPackRegionalEntity(regionalEnemy2,nextNow)]}};
    pvpIntegrateRemoteRegions(nextNow);
-   const handed=state.entities.find(e=>e.id===fakeId);
+   const handed=state.entities.find(e=>String(e.id)===String(regionalId));
    const second={hp:handed?.hp,shield:handed?.shield,owner:handed?.pvpRegionalAuthorityUid||null,
      remaining:handed?.pendingDragonAttack?Math.round(handed.pendingDragonAttack.endAt-nextNow):0,
      hostSimulates:handed?pvpHostShouldSimulateEntity(handed):false};
-   state.entities=state.entities.filter(e=>e.id!==fakeId);
+   Object.assign(template,templateSaved);
    remote.x=remoteSaved.x;remote.y=remoteSaved.y;remote.pvpRegionalAuthorityUid=remoteSaved.pvpRegionalAuthorityUid;
    remote.pvpRegionalEpoch=remoteSaved.pvpRegionalEpoch;NetworkAdapter.roomCache.regions={};pvpHostRegionState.clear();
    return {first,second,debug:{hostView,farX,farY,
