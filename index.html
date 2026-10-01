@@ -7796,14 +7796,14 @@ function cleanupDeadEntities(now){
 
 /* Evita guerreiros vivos ocuparem exatamente o mesmo ponto.
    Mortos não participam da colisão, então nunca "grudam" no jogador. */
-function separateLivingEntities(){
+function separateLivingEntities(shouldSimulate=null){
  const living=warSeparationLiving;living.length=0;
  const airborne=warSeparationAirborne;airborne.length=0;
  const grid=warSeparationGrid;grid.clear();
  const cellSize=64,now=performance.now();
 
  for(const e of state.entities){
-   if(!e.alive||najaIsUnderground(e))continue;
+   if(!e.alive||najaIsUnderground(e)||(shouldSimulate&&!shouldSimulate(e)))continue;
    const i=living.length;living.push(e);airborne.push(isAirborneCombatTarget(e,now));
    const cx=Math.floor(e.x/cellSize),cy=Math.floor(e.y/cellSize);
    const key=(cx<<16)|cy;
@@ -11583,9 +11583,10 @@ function beginDragonTakeoff(e){
           function dragonBurnAttacker(target,entityById=warEntityById){
            return entityById.get(target.dragonBurnSourceId)||{id:'dragon-burn',type:'dragon',team:target.dragonBurnSourceTeam??null,x:Number(target.dragonBurnSourceX)||target.x,y:Number(target.dragonBurnSourceY)||target.y,heading:0,lastCombatAt:0,pvpWarAI:!!target.dragonBurnSourcePvpWarAI};
           }
-          function updateDragonBurns(now,entityById=warEntityById){
+          function updateDragonBurns(now,entityById=warEntityById,shouldSimulate=null){
            for(const target of warBurningEntities){
              if(!target.alive||!target.dragonBurnUntil){warBurningEntities.delete(target);continue}
+             if(shouldSimulate&&!shouldSimulate(target))continue;
              while(target.alive&&target.dragonBurnNextTick&&now>=target.dragonBurnNextTick&&target.dragonBurnNextTick<=target.dragonBurnUntil){
                const burnSource=dragonBurnAttacker(target,entityById);
                applyCombatHit(target,burnSource,DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:burnSource.type==='king'});
@@ -11619,10 +11620,11 @@ function beginDragonTakeoff(e){
            addWarGoalProgress(e.team,'ranged');
            return true;
           }
-          function updateDragonProjectiles(dt,entityById=warEntityById){
+          function updateDragonProjectiles(dt,entityById=warEntityById,shouldSimulate=null){
            const now=performance.now(),list=state.dragonProjectiles||[];
            for(let i=list.length-1;i>=0;i--){
              const p=list[i];
+             if(shouldSimulate&&!shouldSimulate(p))continue;
              if(state.mode==='pvp'&&p.kind==='dragon'&&p.pvpHit){
                if(now>=Number(p.pvpVisualUntil||0))list.splice(i,1);
                continue;
@@ -12174,9 +12176,10 @@ runBootLoader().catch(err=>{
  playDesiredMusic({restart:true});
 });
 
-function updateEntities(dt){
+function updateEntities(dt,shouldSimulate=null){
  const now=performance.now();
  for(const e of state.entities){
+   if(shouldSimulate&&!shouldSimulate(e))continue;
    e.attackCooldown=Math.max(0,e.attackCooldown-dt);
    e.attackAnim=Math.max(0,e.attackAnim-dt);
    e.specialCooldown=Math.max(0,(e.specialCooldown||0)-dt);
@@ -12234,8 +12237,11 @@ function updateEntities(dt){
    // Clamp físico continua em TODOS os frames.
    constrainWarEntitiesToArena();
  }else{
-   separateLivingEntities();
-   if(state.mode==='pvp')pvpClampAllEntities();
+   separateLivingEntities(shouldSimulate);
+   if(state.mode==='pvp'){
+     if(shouldSimulate){for(const e of state.entities)if(shouldSimulate(e))pvpClampEntity(e)}
+     else pvpClampAllEntities();
+   }
  }
  cleanupDeadEntities(now);
 }
