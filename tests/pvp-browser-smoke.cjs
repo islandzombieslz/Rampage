@@ -38,7 +38,12 @@ const firebaseStub=String.raw`
     return()=>subscriptions.delete(listener);
   },
   runTransaction:async(path,fn)=>{
-    const candidate=fn(read(path));if(candidate===undefined)return {committed:false,snapshot:{val:()=>read(path)}};
+    const current=read(path);
+    if(/^rooms\/[^/]+$/.test(path)&&current!==null){
+      const err=new Error('PERMISSION_DENIED: whole-room rewrite blocked by per-player rules');
+      err.code='PERMISSION_DENIED';throw err;
+    }
+    const candidate=fn(current);if(candidate===undefined)return {committed:false,snapshot:{val:()=>read(path)}};
     write(path,candidate);return {committed:true,snapshot:{val:()=>read(path)}};
   }
  };
@@ -50,6 +55,16 @@ const firebaseStub=String.raw`
 // the production build and no production code is changed for browser tests.
 const pvpTestHook=`window.__pvpBrowserTest={
  roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
+ humanRoster(){return state.players.filter(p=>p.human).map(p=>p.id)},
+ async addRemoteConfirmedPlayer(){
+   const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
+   await F.set(F.ref(F.firebaseDb,'rooms/'+roomId+'/players/remote-user'),{
+     uid:'remote-user',name:'Amigo',human:true,slot:1,color:'#58a6ff',
+     clan:'warriors',clanChosen:false,clanConfirmed:false,clanSelectedAt:0,
+     pvpHero:'warrior',pvpConfirmed:true,joinedAt:F.serverTimestamp(),lastSeen:F.serverTimestamp()
+   });
+   return roomId;
+ },
  castLocalMageSpecial(){
    const hero=pvpLocalHero();
    if(!hero||hero.pvpHero!=='mageFemale')return false;
@@ -339,6 +354,13 @@ async function main(){
    await page.waitForFunction(()=>document.querySelector('#npcCountVal')?.textContent==='3');
    assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card').count(),4,'maximum four allies in PvP lobby');
    assert.equal(await page.locator('#lobbyScreen.pvp-lobby .pvp-player-card:not(.empty)').count(),4,'one player and three allied NPCs');
+   const minus=page.locator('#lobbyScreen button.minus[data-target="npcs"]');
+   for(let i=0;i<3;i++)await minus.click();
+   await page.waitForFunction(()=>document.querySelector('#npcCountVal')?.textContent==='0');
+   await page.evaluate(()=>window.__pvpBrowserTest.addRemoteConfirmedPlayer());
+   await page.waitForFunction(()=>document.querySelectorAll('#playerList .pvp-player-card:not(.empty)').length===2);
+   assert.equal(await page.locator('#playerList .pvp-player-card:not(.empty)').count(),2,
+     'PvP lobby must show host and remote human as two real players');
    try{
      await page.locator('#playerList .pvp-player-card.mine').click({timeout:12000});
    }catch(err){
@@ -361,6 +383,9 @@ async function main(){
    assert.equal(await page.locator('#lobbyContinue').textContent(),'Iniciar PvP');
    await page.locator('#lobbyContinue').click();
    await page.locator('#gameScreen.active.pvp-mode').waitFor({timeout:13000});
+   const humanRoster=await page.evaluate(()=>window.__pvpBrowserTest.humanRoster());
+   assert.deepEqual(humanRoster.sort(),['remote-user','test-user'],
+     'the started match must preserve both Firebase humans instead of replacing the remote player with an NPC');
    await page.locator('#pvpCombatHud:not([hidden])').waitFor();
    const clock=await page.evaluate(()=>window.__pvpBrowserTest.roundClock());
    assert.deepEqual(clock,{duration:0,left:0},'PvP round has no countdown timer');
