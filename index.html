@@ -3210,7 +3210,7 @@ const NetworkAdapter = {
       for(const c of roomCandidates){
         const rr=F.ref(F.firebaseDb,`rooms/${c}`);
         const result=await F.runTransaction(rr,current=>{
-          if(current&&!roomIsExpired(current,now))return;
+          if(current&&!roomIsExpired(current,now,c))return;
           return {
             code:c,hostUid:user.uid,status:'lobby',npcCount:0,
             createdAt:F.serverTimestamp(),lastActivityAt:F.serverTimestamp(),settings,
@@ -3237,7 +3237,7 @@ const NetworkAdapter = {
       const rr=F.ref(F.firebaseDb,`rooms/${code}`),snap=await F.get(rr);
       if(!snap.exists())return {ok:false,reason:'not-found'};
       const room=snap.val();
-      if(roomIsExpired(room,this.serverNow())){await F.remove(rr);return {ok:false,reason:'not-found'}}
+      if(roomIsExpired(room,this.serverNow(),code)){await F.remove(rr);return {ok:false,reason:'not-found'}}
       if(room.status!=='lobby')return {ok:false,reason:'started'};
       const count=room.players?Object.keys(room.players).length:0,max=room.settings?.mode==='pvp'?4:room.settings?.mode==='pve'?10:3;
       if(count+(room.npcCount||0)>=max&&!room.players?.[user.uid])return {ok:false,reason:'full'};
@@ -3376,9 +3376,14 @@ const NetworkAdapter = {
       if(!all.exists())return;
       const rooms=all.val()||{};
       const expired=[];
-      for(const [code,room] of Object.entries(rooms))if(roomIsExpired(room,now))expired.push(code);
+      for(const [code,room] of Object.entries(rooms))if(roomIsExpired(room,now,code))expired.push(code);
       if(expired.length){
-        await Promise.all(expired.map(code=>F.remove(F.ref(F.firebaseDb,`rooms/${code}`)).catch(()=>{})));
+        // Prefer one multi-location delete; fall back to per-room removes when
+        // Firebase rules do not allow a parent-level multi-location update.
+        const patch={};for(const code of expired)patch[code]=null;
+        let bulkRemoved=false;
+        try{await F.update(F.ref(F.firebaseDb,'rooms'),patch);bulkRemoved=true}catch(_){}
+        if(!bulkRemoved)await Promise.all(expired.map(code=>F.remove(F.ref(F.firebaseDb,`rooms/${code}`)).catch(()=>{})));
         for(const code of expired)this.expireLocalRoom(code);
       }
     }catch(_){}finally{this.cleanupRunning=false}
@@ -4533,8 +4538,7 @@ function navigateScreen(id){
 /* ROOM LIFECYCLE 2026-09-09 */
 const ROOM_CODES=['REI','PLEBEU','CONDE','VINHO','FURIA','PAZ','DRAGON'];
 const ROOM_INACTIVITY_MS=10*60*1000;
-const ROOM_FINISHED_CLEANUP_MS=15*1000;
-const ROOM_LEGACY_FINISHED_MAX_MS=2*60*1000;
+const ROOM_LEGACY_INACTIVITY_MS=2*60*1000;
 const ROOM_HEARTBEAT_MS=30*1000;
 const ROOM_CLEANUP_MS=60*1000;
 function roomPlayers(room){return Object.values(room?.players||{})}
@@ -4543,21 +4547,16 @@ function roomLatestSeenAt(room){
  for(const p of players)latest=Math.max(latest,Number(p?.lastSeen)||Number(p?.joinedAt)||0);
  return Math.max(latest,Number(room?.lastActivityAt)||0,Number(room?.createdAt)||0);
 }
-function roomIsExpired(room,now){
+function roomIsCurrentCode(code){return ROOM_CODES.includes(String(code||'').toUpperCase())}
+function roomIsExpired(room,now,code=''){
  const players=roomPlayers(room);
  if(!players.length)return true;
- // Finished rooms are disposable. New matches stamp finishedAt and get a short
- // grace period so every peer can receive the final result before cleanup.
- if(room?.status==='finished'){
-   const finishedAt=Number(room.finishedAt)||0;
-   if(finishedAt)return now-finishedAt>ROOM_FINISHED_CLEANUP_MS;
-   // Legacy finished rooms did not have finishedAt and could heartbeat forever.
-   // Use their creation time as a bounded fallback instead of preserving them indefinitely.
-   const createdAt=Number(room.createdAt)||0;
-   if(createdAt&&now-createdAt>ROOM_LEGACY_FINISHED_MAX_MS)return true;
- }
  const last=roomLatestSeenAt(room);
- return !last || now-last>ROOM_INACTIVITY_MS;
+ if(!last)return true;
+ // Current rooms are preserved while players keep heartbeating, even after a match.
+ // Legacy/random codes get a shorter stale timeout so old database debris disappears.
+ const maxIdle=roomIsCurrentCode(code)?ROOM_INACTIVITY_MS:ROOM_LEGACY_INACTIVITY_MS;
+ return now-last>maxIdle;
 }
 function normalizeRoomCode(value){
  const raw=String(value||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -5680,10 +5679,7 @@ function applyRemoteGame(game){
  if(state.phase==='finished'&&!NetworkAdapter.remoteFinishScheduled){
    NetworkAdapter.remoteFinishScheduled=true;
    flash(game.matchResult?matchResultMessage(game.matchResult,NetworkAdapter.localPlayerId):'PARTIDA ENCERRADA',4);
-   setTimeout(()=>{
-     navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false;
-     NetworkAdapter.leaveRoom().catch(console.error);
-   },4200);
+   setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];clearEntityVisuals();NetworkAdapter.remoteFinishScheduled=false},4200);
  }
 }
 function configureGameScreenForMode(){
@@ -13651,13 +13647,10 @@ function finishGame(msg,result=null){
    NetworkAdapter.roomStatus='finished';
    (async()=>{
      while(NetworkAdapter.pushing)await new Promise(resolve=>setTimeout(resolve,25));
-     await NetworkAdapter.pushLobbyState({status:'finished',finishedAt:(await NetworkAdapter.waitFirebase()).serverTimestamp(),game:serializeGame()});
+     await NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()});
    })().catch(console.error);
  }
- setTimeout(()=>{
-   navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open');
-   NetworkAdapter.leaveRoom().catch(console.error);
- },4200);
+ setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
 }
 
 })();
