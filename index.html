@@ -4235,12 +4235,18 @@ function pvpEntitySfxMix(e){
  const pan=visible?clamp((sx-vp.w*.5)/Math.max(1,vp.w*.5),-1,1):clamp((sx-vp.w*.5)/Math.max(1,vp.w),-1,1);
  return {gain,pan};
 }
+function pvpPlayEntitySfxNow(e,event,serial,key,baseVolume=1){
+ const nowSerial=Number(serial)||0;if(nowSerial<=0)return false;
+ const id=(e?.id??'x')+':'+event;
+ pvpCombatSfxSeen.set(id,nowSerial);
+ const mix=pvpEntitySfxMix(e);
+ playLayeredSfx(key,baseVolume*mix.gain/SFX_MASTER_VOLUME,mix.pan,0);
+ return true;
+}
 function pvpSfxEvent(e,event,serial,active,key,baseVolume=1){
  const id=(e?.id??'x')+':'+event,nowSerial=Number(serial)||0,prev=pvpCombatSfxSeen.get(id);
- pvpCombatSfxSeen.set(id,nowSerial);
  if(!active||nowSerial<=0||prev===nowSerial)return;
- const mix=pvpEntitySfxMix(e);
- playLayeredSfx(key,baseVolume*mix.gain/SFX_MASTER_VOLUME,mix.pan,35);
+ pvpPlayEntitySfxNow(e,event,nowSerial,key,baseVolume);
 }
 function updatePvpCombatSfx(now){
  if(now-pvpCombatSfxLastScan<70)return;
@@ -8855,6 +8861,7 @@ function pvpStartWarriorCombo(e,now=performance.now()){
  const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
  e.pvpWarriorComboStartedAt=now;e.pvpWarriorComboUntil=now+duration;
  e.pvpWarriorComboSerial=(Number(e.pvpWarriorComboSerial)||0)+1;
+ pvpPlayEntitySfxNow(e,'warrior-combo',e.pvpWarriorComboSerial,'pvpWarriorCombo',1);
  e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
  e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
  e.pvpActionUntil=e.pvpWarriorComboUntil;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;
@@ -8920,6 +8927,7 @@ function pvpBasicAttack(e){
  if(pvpIsWarriorHero(e)){
    e.pvpWarriorLastBasicAt=now;
    e.pvpWarriorSingleSerial=(Number(e.pvpWarriorSingleSerial)||0)+1;
+   pvpPlayEntitySfxNow(e,'warrior-single',e.pvpWarriorSingleSerial,'pvpWarriorSingle',1);
    e.pvpWarriorSingleUntil=now+pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
    e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
  }else e.pvpMeleeVisualUntil=now+360;
@@ -10688,6 +10696,7 @@ function beginDragonTakeoff(e){
            if(now<gate)return false;
            const angle=Math.atan2(target.y-e.y,target.x-e.x);e.heading=angle;if(Math.abs(target.x-e.x)>4)e.facing=target.x<e.x?-1:1;
            e.moving=false;e.dragonAttackSerial=(e.dragonAttackSerial||0)+1;
+           if(state.mode==='pvp')pvpPlayEntitySfxNow(e,'dragon-attack',e.dragonAttackSerial,'pvpDragonAttack',1);
            e.pendingDragonAttack={serial:e.dragonAttackSerial,startedAt:now,endAt:now+DRAGON_ATTACK_VISUAL_MS,emergency:!!emergency};
            if(emergency){
              e.dragonCloseShotAt=now+DRAGON_CLOSE_SHOT_COOLDOWN_MS;
