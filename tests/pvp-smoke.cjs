@@ -34,7 +34,7 @@ const ctx=vm.createContext({Math,Object,Date,Number,JSON,String,Map,Set,console,
    const dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy)));
    return Math.hypot(px-(ax+t*dx),py-(ay+t*dy))
  },
- clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},pvpPlayEntitySfxNow(){},
+ clearEntityVisuals(){},flash(){},navigateScreen(){},configureGameScreenForMode(){},pvpPlayEntitySfxNow(){},stopLayeredOneShot(){},
  beginMatchTracking(){},matchStatsFor:uid=>state.matchStats[uid]||(state.matchStats[uid]={damage:0,wonRounds:0,victorySeconds:0,victoryTimeLimit:0}),
  finishGame(){},difficultyConfig:{easy:{initial:1,every:20,wave:1}},getLocalMovement:()=>({dx:0,dy:0,attackSeq:net.attackSeq}),
  sendLocalPVEInput(){},setTimeout(){},requestAnimationFrame(){}
