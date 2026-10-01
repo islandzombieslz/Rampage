@@ -135,13 +135,18 @@ run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())
 let chargeDamage=foeBefore-(foe.hp+foe.shield);
 assert(chargeDamage>=50&&chargeDamage<=70,'first Warrior special contact deals 50-70 damage');
 assert.equal(damageCalls.at(-1).options.knockForce,0,'first four Warrior special hits keep the target in the sequence');
-for(let hit=2;hit<=5;hit++){
-  now+=90;
+const specialSequence=hero.pvpWarriorChargeHitState[foe.id];
+const specialSequenceStart=specialSequence.startedAt;
+const specialSequenceEnd=specialSequence.endAt;
+for(const fraction of [.24,.49,.74,.96]){
+  now=specialSequenceStart+(specialSequenceEnd-specialSequenceStart)*fraction+1;
   run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
 }
 chargeDamage=foeBefore-(foe.hp+foe.shield);
-assert(chargeDamage>=250&&chargeDamage<=350,'Warrior special deals five consecutive 50-70 damage hits');
+assert(chargeDamage>=250&&chargeDamage<=350,'Warrior special deals five 50-70 damage hits across the full GIF');
 assert.equal(hero.pvpWarriorChargeHitState[foe.id].count,5,'same enemy receives exactly five special hits');
+assert(html.includes('const fractions=[0,.24,.49,.74,.96]'),
+ 'Warrior special distributes its five impacts from contact until near the final GIF frame');
 const specialHit=damageCalls.at(-1);
 assert.equal(specialHit.options.knockForce,560,'fifth Warrior special hit uses the stronger PvP-only shove');
 assert.equal(specialHit.options.tilt,20,'final Warrior special hit uses the stronger impact tilt');
@@ -150,7 +155,7 @@ assert(Math.hypot(foe.knockVX,foe.knockVY)>550,'Warrior special finishes with a 
 assert(html.includes('pvpWarriorSpecialCinematic')&&html.includes('specialCameraZoom:1.12')&&html.includes('specialSceneDim:.26'),
  'Warrior special includes PvP-only linear zoom and scene dimming');
 const afterFifthCharge=foe.hp+foe.shield;
-now+=90;
+now=specialSequenceEnd+1;
 run('pvpTickWarriorSpecial(state.entities[0],{dx:1,dy:0},.016,performance.now())');
 assert.equal(foe.hp+foe.shield,afterFifthCharge,'same enemy is capped at five hits per special');
 assert(html.includes("target.pvpHero==='warrior'")&&html.includes('amount=2')&&html.includes('knockForce:0,knockTime:0'),
