@@ -97,6 +97,13 @@ const pvpTestHook=`window.__pvpBrowserTest={
      remoteEntity:state.entities.some(e=>e.ownerId==='remote-user')
    };
  },
+ async finishCleanupCycle(){
+   const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
+   finishGame('',pvpResult(NetworkAdapter.localPlayerId));
+   await new Promise(r=>setTimeout(r,4700));
+   const snap=await F.get(F.ref(F.firebaseDb,'rooms/'+roomId));
+   return {exists:snap.exists(),roomId:NetworkAdapter.roomId,phase:state.phase};
+ },
  async addRemoteConfirmedPlayer(){
    const F=window.FirebaseBridge,roomId=NetworkAdapter.roomId;
    await F.set(F.ref(F.firebaseDb,'rooms/'+roomId+'/players/remote-user'),{
@@ -520,6 +527,9 @@ async function main(){
      localHost:true,host:'browser-smoke-user',
      runningAfterHandoff:true,runningNow:true,remotePlayer:false,remoteEntity:false
    },'PvP authority must migrate through background/close without pausing, and a closed host character must leave the match');
+   const cleanup=await page.evaluate(()=>window.__pvpBrowserTest.finishCleanupCycle());
+   assert.deepEqual(cleanup,{exists:false,roomId:null,phase:'finished'},
+     'after the result screen the host must remove the finished Firebase room instead of leaving a heartbeat zombie');
    assert.equal(await page.locator('#gameScreen.war-lobby').count(),0);
    assert(!errors.length,'browser JavaScript errors: '+errors.join('\n'));
    console.log('BROWSER PASS: PvP two-hero picker, Warrior special rules, round clock, durability, touch aim, mage flames, linear dragon balls and one-shot specials');
