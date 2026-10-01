@@ -5639,7 +5639,7 @@ function pvpApplyAllRemoteRegionalInputs(now=performance.now()){
 function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvpCurrentAuthorityView()){
  if(!entity?.alive||!entity.ownerId||entity.pvpMinion||entity.ownerId===NetworkAdapter.localPlayerId)return false;
  const regional=pvpRemoteRegionalState(entity.ownerId);
- if(regional.active&&regional.entityIds.has(pvpRegionalKey(entity.id)))return true;
+ if(regional.active&&regional.stateSeq>0&&regional.entityIds.has(pvpRegionalKey(entity.id)))return true;
  const pose=input?.pvpRegionalPose;
  const packetAt=Number(input?.t)||0,seq=Number(pose?.seq)||0;
  const proposed=pose&&Number.isFinite(Number(pose.x))&&Number.isFinite(Number(pose.y))
@@ -5647,7 +5647,10 @@ function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvp
  const requested=!!input?.pvpRegionalAuthority&&!!proposed;
  const validView=pvpValidAuthorityView(view)&&String(view.hostUid||'')===String(NetworkAdapter.localPlayerId||'');
  const delegated=requested&&validView&&pvpRegionalAuthorityDecision(proposed,view,regional.active);
- if(!delegated){return false}
+ if(!delegated){
+   if(regional.stateSeq===0){regional.active=false;regional.entityIds.delete(pvpRegionalKey(entity.id))}
+   return false;
+ }
  if(seq<=regional.poseSeq||!packetAt||Math.abs(NetworkAdapter.serverNow()-packetAt)>PVP_REGION_PACKET_MAX_AGE_MS)return regional.active;
  const bounds=pvpArenaBounds(entity.r||30);
  let targetX=clamp(Number(pose.x),bounds.left,bounds.right),targetY=clamp(Number(pose.y),bounds.top,bounds.bottom);
