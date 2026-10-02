@@ -1,4 +1,5 @@
 name: One-time History hit-sync polish v2
+# retry after latency-test update
 on:
   push:
     branches: [main]
