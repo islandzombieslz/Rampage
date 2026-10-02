@@ -230,12 +230,14 @@ assert(html.includes("specialInactive:'assets/ui/pvp/punho-especial-inativo.png'
 assert(html.includes('class="pvp-special-fill"')&&
  html.includes("button.style.setProperty('--pvp-special-progress'"),
  'special HUD must use the existing cooldown/unlock state to fill its progress bar');
-assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(74px,9.4vw,92px);height:clamp(46px,6.6vw,60px)"),
- 'special control remains rectangular but is slightly smaller');
-assert(html.includes('repeating-linear-gradient(110deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
- 'special HUD uses diagonal XP-style stripes and lights up the whole control when ready');
-assert(html.includes("width:clamp(82px,11vw,104px);height:clamp(82px,11vw,104px)"),
- 'Warrior special fist icon is significantly larger');
+assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(68px,8.6vw,84px);height:clamp(44px,6.2vw,56px)"),
+ 'special control is slightly smaller again while remaining rectangular');
+assert(html.includes('repeating-linear-gradient(110deg,#a9461d 0px,#a9461d 11px,#f0a22f 11px,#f0a22f 22px)'),
+ 'special HUD uses exactly two diagonal stripe colors');
+assert(html.includes("width:clamp(94px,12.5vw,118px);height:clamp(94px,12.5vw,118px)")&&html.includes('bottom:-3px'),
+ 'Warrior special fist is larger and positioned higher');
+assert(html.includes('@keyframes pvpSpecialReadyTremble')&&html.includes('.pvp-special-wrap.ready{animation:pvpSpecialReadyTremble'),
+ 'the entire special HUD trembles slightly while ready');
 assert(html.includes("pvpSpecialWrap.addEventListener('pointerdown',activateWholeSpecialHud)"),
  'the entire special HUD fires on pointerdown for click/touch multitouch support');
 assert(html.includes('pvpCancelWarriorCombo(e,now)')&&html.includes('e.attackCooldown=0;e.attackAnim=0'),
