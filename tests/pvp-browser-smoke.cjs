@@ -74,6 +74,30 @@ const pvpTestHook=`window.__pvpBrowserTest={
    keys.d=oldD;NetworkAdapter.hostUid=oldHost;
    return {dx:hero.x-before.x,dy:hero.y-before.y,x:hero.x,y:hero.y};
  },
+ staleSnapshotReconciliation(){
+   const hero=pvpLocalHero();if(!hero)return null;
+   const saved={
+     x:hero.x,y:hero.y,heading:hero.heading,facing:hero.facing,moving:hero.moving,knockTime:hero.knockTime,
+     pvpWarriorChargeUntil:hero.pvpWarriorChargeUntil,netAuthX:hero.netAuthX,netAuthY:hero.netAuthY,
+     netAuthInputSeq:hero.netAuthInputSeq,netAuthArrivalAt:hero.netAuthArrivalAt,
+     hostUid:NetworkAdapter.hostUid,pvpInputSeq:NetworkAdapter.pvpInputSeq,
+     latestHostView:pvpLatestHostView,regional:pvpLocalRegionalAuthority,d:keys.d
+   };
+   const now=performance.now();
+   NetworkAdapter.hostUid='remote-host';NetworkAdapter.pvpInputSeq=10;pvpLatestHostView=null;pvpSetLocalRegionalAuthority(false);
+   hero.knockTime=0;hero.pvpWarriorChargeUntil=0;hero.netAuthX=hero.x-310;hero.netAuthY=hero.y;
+   hero.netAuthInputSeq=8;hero.netAuthArrivalAt=now;keys.d=true;
+   const before=hero.x;pvpPredictGuestLocal(1/60);const afterStale=hero.x;
+   keys.d=false;hero.netAuthX=hero.x-80;hero.netAuthY=hero.y;hero.netAuthInputSeq=10;hero.netAuthArrivalAt=performance.now();
+   const beforeAck=hero.x;pvpPredictGuestLocal(1/60);const afterAck=hero.x;
+   const result={staleForward:afterStale>before,staleDidNotSnap:afterStale>before-20,ackedCorrected:afterAck<beforeAck};
+   Object.assign(hero,{x:saved.x,y:saved.y,heading:saved.heading,facing:saved.facing,moving:saved.moving,knockTime:saved.knockTime,
+     pvpWarriorChargeUntil:saved.pvpWarriorChargeUntil,netAuthX:saved.netAuthX,netAuthY:saved.netAuthY,
+     netAuthInputSeq:saved.netAuthInputSeq,netAuthArrivalAt:saved.netAuthArrivalAt});
+   NetworkAdapter.hostUid=saved.hostUid;NetworkAdapter.pvpInputSeq=saved.pvpInputSeq;pvpLatestHostView=saved.latestHostView;
+   pvpSetLocalRegionalAuthority(saved.regional);keys.d=saved.d;
+   return result;
+ },
  regionalAuthorityCycle(){
    const remote=state.entities.find(e=>e.alive&&!e.pvpMinion&&e.ownerId==='remote-user');
    if(!remote)return null;
@@ -524,6 +548,9 @@ async function main(){
    const prediction=await page.evaluate(()=>window.__pvpBrowserTest.guestPredictionStep());
    assert(prediction&&prediction.dx>5&&Math.abs(prediction.dy)<1,
      'a non-host local hero must respond immediately to movement before a new authoritative snapshot');
+   const reconciliation=await page.evaluate(()=>window.__pvpBrowserTest.staleSnapshotReconciliation());
+   assert.deepEqual(reconciliation,{staleForward:true,staleDidNotSnap:true,ackedCorrected:true},
+     'guest prediction must ignore stale unacknowledged host poses, then reconcile once the host acknowledges the input');
    const regional=await page.evaluate(()=>window.__pvpBrowserTest.regionalAuthorityCycle());
    assert.deepEqual(regional,{accepted:true,moved:true,yielded:false},
      'a remote player may own its pose outside the host camera, but authority returns immediately inside the host view');
