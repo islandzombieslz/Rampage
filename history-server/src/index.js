@@ -233,7 +233,7 @@ export class HistoryRoom extends DurableObject {
       specialHits: 0, specialUnlocked: false, specialCooldownUntil: 0,
       specialSerial: 0, specialStartedAt: 0, specialActiveUntil: 0, specialAngle: 0, specialHitState: {},
       regenSerial: 0,
-      burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null,
+      burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null, burnSourceX: 0, burnSourceY: 0,
       knockUntil: 0, knockVX: 0, knockVY: 0,
       lastPoseSeq: 0, lastPoseAt: 0
     };
@@ -372,7 +372,7 @@ export class HistoryRoom extends DurableObject {
     player.moving = false;
     player.respawnAt = now + PLAYER_RESPAWN_MS;
     player.input = { dx: 0, dy: 0 };
-    player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null;
+    player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null; player.burnSourceX = 0; player.burnSourceY = 0;
     player.singleUntil = 0; player.lastBasicAt = 0;
     player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
     player.specialStartedAt = 0; player.specialActiveUntil = 0; player.specialHitState = {};
@@ -583,6 +583,8 @@ export class HistoryRoom extends DurableObject {
     player.burnUntil = now + DRAGON_BURN_DURATION_MS;
     player.burnNextTick = now + DRAGON_BURN_TICK_MS;
     player.burnSourceId = dragon?.id || null;
+    player.burnSourceX = Number(dragon?.x) || Number(player.x) || 0;
+    player.burnSourceY = Number(dragon?.y) || Number(player.y) || 0;
     this.broadcast({
       type: "burn", targetId: player.id, sourceId: player.burnSourceId,
       serial: player.burnSerial, burnUntil: player.burnUntil, at: now
@@ -671,12 +673,16 @@ export class HistoryRoom extends DurableObject {
     for (const player of Object.values(this.room.players)) {
       if (!player.alive || !player.burnUntil) continue;
       while (player.alive && player.burnNextTick && now >= player.burnNextTick && player.burnNextTick <= player.burnUntil) {
-        this.applyDamage("player", player, DRAGON_BURN_DAMAGE, "burn", player.burnSourceId);
+        const burnImpact = normalizedImpact(
+          { x: Number(player.burnSourceX) || player.x, y: Number(player.burnSourceY) || player.y, facing: 1 },
+          player, 4
+        );
+        this.applyDamage("player", player, DRAGON_BURN_DAMAGE, "burn", player.burnSourceId, burnImpact);
         player.burnNextTick += DRAGON_BURN_TICK_MS;
         if (player.hp <= 0) this.defeatPlayer(player, now);
       }
       if (!player.alive || now > Number(player.burnUntil || 0)) {
-        player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null;
+        player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null; player.burnSourceX = 0; player.burnSourceY = 0;
       }
     }
   }
@@ -774,7 +780,7 @@ export class HistoryRoom extends DurableObject {
           player.attackCooldownUntil = 0; player.singleUntil = 0; player.lastBasicAt = 0;
           player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
           player.specialStartedAt = 0; player.specialActiveUntil = 0; player.specialHitState = {};
-          player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null;
+          player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null; player.burnSourceX = 0; player.burnSourceY = 0;
           this.broadcast({ type: "player_respawned", uid: player.id, at: now });
         }
         continue;
