@@ -10947,10 +10947,12 @@ function updatePVPHUD(){
      if(specialIcon){
        specialIcon.hidden=!warriorIcon;
        if(warriorIcon){
-         const specialActive=Number(me?.pvpSpecialVisualUntil)>now;
-         const iconState=specialActive?'active':'inactive';
+         const specialRunning=Number(me?.pvpSpecialVisualUntil)>now;
+         const specialReady=!warriorUnlock&&remaining<=0;
+         const iconActive=specialReady||specialRunning;
+         const iconState=iconActive?'active':'inactive';
          if(specialIcon.dataset.state!==iconState){
-           specialIcon.src=specialActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive;
+           specialIcon.src=iconActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive;
            specialIcon.dataset.state=iconState;
          }
        }
