@@ -10,8 +10,14 @@ assert(html.includes('id="historyServerScreen"')&&html.includes('id="historyServ
   'History must have a dedicated server-browser screen');
 assert(html.includes("state.mode='history'")&&html.includes("openHistoryServerBrowser"),
   'History card must open the server browser directly');
-assert(html.includes("HISTORY_SERVER_BASE_DEFAULT=''"),
-  'History client must wait for the deployed workers.dev endpoint instead of falling back to player-host Firebase');
+assert(html.includes("HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.workers.dev'"),
+  'History client must use the deployed Cloudflare Worker endpoint');
+assert(html.includes('const HistoryAdapter=')&&html.includes("new WebSocket(url)")&&html.includes("state.historyActive=true"),
+  'History must connect directly to Cloudflare over WebSocket with no player host');
+assert(html.includes("if(state.historyActive){if(state.running)HistoryAdapter.tick(dt,now);return}"),
+  'History simulation must bypass the Firebase host simulation loop');
+assert(html.includes("HistoryAdapter.sendAction(action)")&&html.includes("HistoryAdapter.connect(historySelectedServerId)"),
+  'History controls and server selection must use the Cloudflare adapter');
 
 assert(worker.includes('class HistoryRoom extends DurableObject'),
   'History must use a Durable Object as the server authority');
@@ -23,6 +29,12 @@ assert(worker.includes('this.room.dragons.every(d => !d.alive)')&&worker.include
   'both dragons must respawn two seconds after both are defeated');
 assert(worker.includes('rounds: null')&&worker.includes('mode: "history"'),
   'History snapshots must not contain round progression');
+assert(worker.includes('const PVP_WORLD = Object.freeze({ width: 1850, height: 1542 })'),
+  'History must use the exact PvP arena dimensions');
+assert(worker.includes('WARRIOR_SPECIAL_UNLOCK_HITS = 5')&&worker.includes('specialActiveUntil'),
+  'History server must own warrior special unlock, cooldown and movement');
+assert(worker.includes('DRAGON_ATTACK_COOLDOWN_MS')&&worker.includes('player_defeated'),
+  'History dragons must attack players authoritatively');
 assert(wrangler.includes('"HISTORY_ROOMS"')&&wrangler.includes('"new_sqlite_classes": ["HistoryRoom"]'),
   'Wrangler must bind and migrate the History Durable Object');
 
