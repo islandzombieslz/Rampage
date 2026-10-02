@@ -1,0 +1,30 @@
+name: One-time History Worker recheck
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-history-worker-recheck.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Validate Worker
+        working-directory: history-server
+        run: |
+          npm install
+          npx wrangler deploy --dry-run
+      - name: Run History smoke test
+        run: node tests/history-smoke.cjs
+      - name: Remove temporary workflow
+        run: |
+          rm -f .github/workflows/one-time-history-worker-recheck.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/one-time-history-worker-recheck.yml
+          git commit -m "Remove temporary History Worker recheck"
+          git push origin HEAD:main
