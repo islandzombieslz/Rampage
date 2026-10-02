@@ -1,0 +1,108 @@
+name: One-time special HUD tremble polish
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-special-hud-tremble.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply special HUD polish
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def swap(text, old, new, label):
+              n=text.count(old)
+              if n!=1:
+                  raise SystemExit(f"{label}: expected 1 match, found {n}")
+              return text.replace(old,new,1)
+
+          p=Path("index.html")
+          s=p.read_text(encoding="utf-8")
+
+          s=swap(s,
+          """#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(98px,12.5vw,122px);height:clamp(46px,6.6vw,60px);
+           display:flex;align-items:flex-end;justify-content:flex-start;isolation:isolate;cursor:pointer}
+          #pvpCombatHud .pvp-special-button{position:relative;width:clamp(74px,9.4vw,92px);height:clamp(46px,6.6vw,60px);min-height:0;margin:0;
+           padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:11px;background:#17191c;
+           box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007;transition:border-color .13s ease,box-shadow .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
+           border-radius:8px 0 0 8px;
+           background:repeating-linear-gradient(110deg,#a9461d 0px,#a9461d 10px,#e58a27 10px,#e58a27 20px,#ffd34d 20px,#ffd34d 30px,#cf6b20 30px,#cf6b20 40px);
+           box-shadow:inset -2px 0 4px #0007;transition:width .12s linear,filter .13s ease}""",
+          """#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(90px,11.3vw,112px);height:clamp(44px,6.2vw,56px);
+           display:flex;align-items:flex-end;justify-content:flex-start;isolation:isolate;cursor:pointer;transform-origin:50% 70%}
+          #pvpCombatHud .pvp-special-button{position:relative;width:clamp(68px,8.6vw,84px);height:clamp(44px,6.2vw,56px);min-height:0;margin:0;
+           padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:11px;background:#17191c;
+           box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007;transition:border-color .13s ease,box-shadow .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
+           border-radius:8px 0 0 8px;
+           background:repeating-linear-gradient(110deg,#a9461d 0px,#a9461d 11px,#f0a22f 11px,#f0a22f 22px);
+           box-shadow:inset -2px 0 4px #0007;transition:width .12s linear,filter .13s ease}""",
+          "smaller special rectangle and two-color stripes")
+
+          s=swap(s,
+          """#pvpCombatHud .pvp-special-icon{position:absolute;right:-13px;bottom:-13px;width:clamp(82px,11vw,104px);height:clamp(82px,11vw,104px);
+           object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 5px #000a);transition:transform .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-wrap.ready .pvp-special-icon{transform:scale(1.06);
+           filter:drop-shadow(0 0 9px #ffd95fbb) drop-shadow(0 3px 5px #000a)}""",
+          """#pvpCombatHud .pvp-special-icon{position:absolute;right:-18px;bottom:-3px;width:clamp(94px,12.5vw,118px);height:clamp(94px,12.5vw,118px);
+           object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 5px #000a);transition:transform .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-wrap.ready{animation:pvpSpecialReadyTremble .42s steps(2,end) infinite}
+          #pvpCombatHud .pvp-special-wrap.ready .pvp-special-icon{transform:scale(1.08);
+           filter:drop-shadow(0 0 10px #ffd95fcc) drop-shadow(0 3px 5px #000a)}
+          @keyframes pvpSpecialReadyTremble{
+           0%,100%{transform:translate(0,0) rotate(0deg)}
+           20%{transform:translate(-1px,0) rotate(-.35deg)}
+           40%{transform:translate(1px,-1px) rotate(.35deg)}
+           60%{transform:translate(-1px,1px) rotate(-.25deg)}
+           80%{transform:translate(1px,0) rotate(.25deg)}
+          }
+          @media (prefers-reduced-motion:reduce){
+           #pvpCombatHud .pvp-special-wrap.ready{animation:none}
+          }""",
+          "larger higher fist and ready tremble")
+
+          p.write_text(s,encoding="utf-8")
+
+          p=Path("tests/pvp-smoke.cjs")
+          s=p.read_text(encoding="utf-8")
+          s=swap(s,
+          """assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(74px,9.4vw,92px);height:clamp(46px,6.6vw,60px)"),
+           'special control remains rectangular but is slightly smaller');
+          assert(html.includes('repeating-linear-gradient(110deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
+           'special HUD uses diagonal XP-style stripes and lights up the whole control when ready');
+          assert(html.includes("width:clamp(82px,11vw,104px);height:clamp(82px,11vw,104px)"),
+           'Warrior special fist icon is significantly larger');""",
+          """assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(68px,8.6vw,84px);height:clamp(44px,6.2vw,56px)"),
+           'special control is slightly smaller again while remaining rectangular');
+          assert(html.includes('repeating-linear-gradient(110deg,#a9461d 0px,#a9461d 11px,#f0a22f 11px,#f0a22f 22px)'),
+           'special HUD uses exactly two diagonal stripe colors');
+          assert(html.includes("width:clamp(94px,12.5vw,118px);height:clamp(94px,12.5vw,118px)")&&html.includes('bottom:-3px'),
+           'Warrior special fist is larger and positioned higher');
+          assert(html.includes('@keyframes pvpSpecialReadyTremble')&&html.includes('.pvp-special-wrap.ready{animation:pvpSpecialReadyTremble'),
+           'the entire special HUD trembles slightly while ready');""",
+          "special HUD regression assertions")
+          p.write_text(s,encoding="utf-8")
+          PY
+      - name: Run regression tests
+        run: |
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Commit changes and remove workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/one-time-special-hud-tremble.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html tests/pvp-smoke.cjs .github/workflows/one-time-special-hud-tremble.yml
+          git commit -m "Tune special HUD size stripes fist and ready tremble"
+          git push origin HEAD:main
