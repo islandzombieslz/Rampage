@@ -10,7 +10,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: "arena-pvp", maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 4;
+const HISTORY_SCHEMA_VERSION = 5;
 const PVP_WORLD = Object.freeze({ width: 1850, height: 1542 });
 const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1550, top: 305, bottom: 1267 });
 
@@ -19,10 +19,28 @@ const PLAYER_MAX_SHIELD = 250;
 const PLAYER_SPEED = 195;
 const PLAYER_RESPAWN_MS = 3000;
 
+const WARRIOR_MELEE_RANGE = 112;
+const WARRIOR_MELEE_COOLDOWN_MS = 300;
+const WARRIOR_DAMAGE_MIN = 25;
+const WARRIOR_DAMAGE_MAX = 40;
+const WARRIOR_COMBO_CHAIN_MIN_MS = 120;
+const WARRIOR_COMBO_CHAIN_MS = 950;
+const WARRIOR_COMBO_CONTINUE_MS = 460;
+const WARRIOR_COMBO_RANGE = 148;
+const WARRIOR_SINGLE_VISUAL_MS = 650;
+const WARRIOR_COMBO_DURATION_MS = 1350;
 const WARRIOR_SPECIAL_UNLOCK_HITS = 5;
 const WARRIOR_SPECIAL_COOLDOWN_MS = 20000;
 const WARRIOR_SPECIAL_DURATION_MS = 1800;
 const WARRIOR_SPECIAL_SPEED_MULTIPLIER = 1.45;
+const WARRIOR_SPECIAL_DAMAGE_MIN = 50;
+const WARRIOR_SPECIAL_DAMAGE_MAX = 70;
+const WARRIOR_SPECIAL_DAMAGE_HITS = 5;
+const WARRIOR_SPECIAL_HEAL = 30;
+const WARRIOR_SPECIAL_KNOCK_FORCE = 560;
+const WARRIOR_SPECIAL_KNOCK_TIME_MS = 340;
+const WARRIOR_SPECIAL_HIT_TILT = 20;
+const COMBAT_ENTITY_RADIUS = 30;
 
 const DRAGON_MAX_HP = 100;
 const DRAGON_MAX_SHIELD = 50;
@@ -58,6 +76,21 @@ function json(data, status = 200) {
 }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function warriorDamageForRange(d) {
+  return WARRIOR_DAMAGE_MIN + (WARRIOR_DAMAGE_MAX - WARRIOR_DAMAGE_MIN) *
+    clamp(1 - Number(d || 0) / WARRIOR_MELEE_RANGE, 0, 1);
+}
+function randomWarriorSpecialDamage() {
+  return WARRIOR_SPECIAL_DAMAGE_MIN +
+    Math.floor(Math.random() * (WARRIOR_SPECIAL_DAMAGE_MAX - WARRIOR_SPECIAL_DAMAGE_MIN + 1));
+}
+function normalizedImpact(from, to, tilt = HISTORY_HIT_TILT) {
+  let dx = Number(to?.x || 0) - Number(from?.x || 0);
+  let dy = Number(to?.y || 0) - Number(from?.y || 0);
+  let len = Math.hypot(dx, dy);
+  if (len < .001) { dx = Number(from?.facing) < 0 ? -1 : 1; dy = 0; len = 1; }
+  return { dirX: dx / len, dirY: dy / len, force: 0, timeMs: 0, tilt };
+}
 function distanceToSegment(px, py, ax, ay, bx, by) {
   const abx = bx - ax, aby = by - ay, len2 = abx * abx + aby * aby;
   if (len2 <= 1e-9) return Math.hypot(px - ax, py - ay);
@@ -193,8 +226,12 @@ export class HistoryRoom extends DurableObject {
       shield: PLAYER_MAX_SHIELD, maxShield: PLAYER_MAX_SHIELD,
       alive: true, respawnAt: 0, facing: 1, heading: 0, moving: false, input: { dx: 0, dy: 0 },
       lastInputSeq: 0, attackCooldownUntil: 0,
+      attackSerial: 0, comboStep: 0,
+      singleSerial: 0, singleUntil: 0, lastBasicAt: 0,
+      comboSerial: 0, comboStartedAt: 0, comboUntil: 0, comboHitIndex: 0, comboSfxIndex: 0, comboRequestUntil: 0,
       specialHits: 0, specialUnlocked: false, specialCooldownUntil: 0,
-      specialActiveUntil: 0, specialAngle: 0, specialHitIds: [],
+      specialSerial: 0, specialStartedAt: 0, specialActiveUntil: 0, specialAngle: 0, specialHitState: {},
+      regenSerial: 0,
       burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null,
       knockUntil: 0, knockVX: 0, knockVY: 0,
       lastPoseSeq: 0, lastPoseAt: 0
@@ -237,8 +274,10 @@ export class HistoryRoom extends DurableObject {
       this.applyClientPose(player, message.pose, inputSeq);
       player.input = { dx, dy };
       player.lastInputSeq = inputSeq;
-      if (len > 0.05 && Date.now() >= Number(player.specialActiveUntil || 0)) {
-        player.heading = Math.atan2(dy, dx);
+      if (len > 0.05) {
+        const heading = Math.atan2(dy, dx);
+        if (Date.now() < Number(player.specialActiveUntil || 0)) player.specialAngle = heading;
+        player.heading = heading;
         player.facing = dx < 0 ? -1 : dx > 0 ? 1 : player.facing;
       }
       return;
@@ -333,7 +372,112 @@ export class HistoryRoom extends DurableObject {
     player.respawnAt = now + PLAYER_RESPAWN_MS;
     player.input = { dx: 0, dy: 0 };
     player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null;
+    player.singleUntil = 0; player.lastBasicAt = 0;
+    player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
+    player.specialStartedAt = 0; player.specialActiveUntil = 0; player.specialHitState = {};
     this.broadcast({ type: "player_defeated", uid: player.id, respawnAt: player.respawnAt, at: now });
+  }
+
+  actionPayload(player, action, kind, extra = {}, now = Date.now()) {
+    return {
+      type: "action", uid: player.id, action, kind,
+      attackSerial: Number(player.attackSerial) || 0,
+      comboStep: Number(player.comboStep) || 0,
+      singleSerial: Number(player.singleSerial) || 0,
+      singleUntil: Number(player.singleUntil) || 0,
+      comboSerial: Number(player.comboSerial) || 0,
+      comboStartedAt: Number(player.comboStartedAt) || 0,
+      comboUntil: Number(player.comboUntil) || 0,
+      comboRequestUntil: Number(player.comboRequestUntil) || 0,
+      specialSerial: Number(player.specialSerial) || 0,
+      specialStartedAt: Number(player.specialStartedAt) || 0,
+      specialActiveUntil: Number(player.specialActiveUntil) || 0,
+      angle: Number(player.specialAngle) || Number(player.heading) || 0,
+      heading: Number(player.heading) || 0,
+      facing: Number(player.facing) < 0 ? -1 : 1,
+      ...extra, at: now
+    };
+  }
+
+  registerWarriorBasicHit(player) {
+    if (!player || player.specialUnlocked) return;
+    player.specialHits = Math.min(WARRIOR_SPECIAL_UNLOCK_HITS, (Number(player.specialHits) || 0) + 1);
+    if (player.specialHits >= WARRIOR_SPECIAL_UNLOCK_HITS) player.specialUnlocked = true;
+  }
+
+  cancelWarriorCombo(player) {
+    if (!player) return;
+    player.comboStartedAt = 0;
+    player.comboUntil = 0;
+    player.comboHitIndex = 0;
+    player.comboSfxIndex = 0;
+    player.comboRequestUntil = 0;
+    player.lastBasicAt = 0;
+  }
+
+  startWarriorCombo(player, now) {
+    player.comboStartedAt = now;
+    player.comboUntil = now + WARRIOR_COMBO_DURATION_MS;
+    player.comboSerial = (Number(player.comboSerial) || 0) + 1;
+    player.singleSerial = (Number(player.singleSerial) || 0) + 1;
+    player.comboSfxIndex = 1;
+    player.comboHitIndex = 0;
+    player.comboRequestUntil = now + WARRIOR_COMBO_CONTINUE_MS;
+    player.singleUntil = 0;
+    player.lastBasicAt = 0;
+    player.attackCooldownUntil = 0;
+    player.attackSerial = (Number(player.attackSerial) || 0) + 1;
+    this.broadcast({
+      type: "combat_sfx", uid: player.id, event: "warrior-single",
+      serial: player.singleSerial, volume: .38, at: now
+    });
+  }
+
+  updateWarriorCombo(player, now) {
+    if (!player?.alive || !(Number(player.comboUntil) > 0)) return false;
+    const end = Number(player.comboUntil) || 0;
+    const start = Number(player.comboStartedAt) || now;
+    if (Number(player.comboRequestUntil) > 0 && now > Number(player.comboRequestUntil)) {
+      this.cancelWarriorCombo(player);
+      return false;
+    }
+    const duration = Math.max(1, end - start);
+    const sfxFractions = [0, .50, .86];
+    const sfxVolumes = [.38, .52, .38];
+    while ((Number(player.comboSfxIndex) || 0) < sfxFractions.length &&
+           now >= start + duration * sfxFractions[Number(player.comboSfxIndex) || 0]) {
+      const index = Number(player.comboSfxIndex) || 0;
+      player.singleSerial = (Number(player.singleSerial) || 0) + 1;
+      this.broadcast({
+        type: "combat_sfx", uid: player.id, event: "warrior-single",
+        serial: player.singleSerial, volume: sfxVolumes[index], at: now
+      });
+      player.comboSfxIndex = index + 1;
+    }
+
+    const hitFractions = [.18, .50, .82];
+    while ((Number(player.comboHitIndex) || 0) < hitFractions.length &&
+           now >= start + duration * hitFractions[Number(player.comboHitIndex) || 0]) {
+      const living = this.room.dragons.filter(d => d.alive);
+      const target = living.slice().sort((a, b) => distance(player, a) - distance(player, b))[0];
+      if (target) {
+        const d = distance(player, target);
+        player.heading = Math.atan2(target.y - player.y, target.x - player.x);
+        if (Math.abs(target.x - player.x) > 3) player.facing = target.x < player.x ? -1 : 1;
+        if (d <= WARRIOR_COMBO_RANGE + COMBAT_ENTITY_RADIUS * .36) {
+          const impact = this.armKnockback(target, target.x - player.x, target.y - player.y);
+          const dealt = this.damageDragon(target, warriorDamageForRange(d), "melee", player.id, impact);
+          if (dealt > 0) this.registerWarriorBasicHit(player);
+        }
+      }
+      player.comboHitIndex = (Number(player.comboHitIndex) || 0) + 1;
+    }
+
+    if (now < end) return true;
+    const repeat = Number(player.comboRequestUntil) >= now;
+    this.cancelWarriorCombo(player);
+    if (repeat) this.startWarriorCombo(player, now);
+    return false;
   }
 
   applyAction(player, action, message = {}) {
@@ -343,33 +487,66 @@ export class HistoryRoom extends DurableObject {
     if (!living.length) return;
 
     if (action === "special") {
-      if (!player.specialUnlocked || now < Number(player.specialCooldownUntil || 0) || now < Number(player.specialActiveUntil || 0)) return;
+      if (!player.specialUnlocked || now < Number(player.specialCooldownUntil || 0) ||
+          now < Number(player.specialActiveUntil || 0) || now < Number(player.knockUntil || 0)) return;
+      this.cancelWarriorCombo(player);
+      player.singleUntil = 0;
+      player.lastBasicAt = 0;
       const requestedAngle = Number(message.angle);
       player.specialAngle = Number.isFinite(requestedAngle) ? requestedAngle : Number(player.heading) || 0;
       player.heading = player.specialAngle;
       player.facing = Math.cos(player.specialAngle) < 0 ? -1 : 1;
       player.specialCooldownUntil = now + WARRIOR_SPECIAL_COOLDOWN_MS;
+      player.specialStartedAt = now;
       player.specialActiveUntil = now + WARRIOR_SPECIAL_DURATION_MS;
-      player.specialHitIds = [];
-      this.broadcast({ type: "action", uid: player.id, action: "special", angle: player.specialAngle, at: now });
+      player.specialSerial = (Number(player.specialSerial) || 0) + 1;
+      player.specialHitState = {};
+      player.knockUntil = 0; player.knockVX = 0; player.knockVY = 0;
+      const before = Number(player.hp) || 0;
+      player.hp = Math.min(Number(player.maxHp) || PLAYER_MAX_HP, before + WARRIOR_SPECIAL_HEAL);
+      if (player.hp > before) player.regenSerial = (Number(player.regenSerial) || 0) + 1;
+      this.broadcast(this.actionPayload(player, "special", "special", {}, now));
+      return;
+    }
+
+    if (now < Number(player.specialActiveUntil || 0) || now < Number(player.knockUntil || 0)) return;
+
+    if (Number(player.comboUntil) > now) {
+      player.comboRequestUntil = now + WARRIOR_COMBO_CONTINUE_MS;
+      player.attackSerial = (Number(player.attackSerial) || 0) + 1;
+      this.broadcast(this.actionPayload(player, "attack", "combo-continue", {}, now));
+      return;
+    }
+
+    const sinceLast = now - Number(player.lastBasicAt || 0);
+    if (Number(player.lastBasicAt) > 0 && sinceLast >= WARRIOR_COMBO_CHAIN_MIN_MS && sinceLast <= WARRIOR_COMBO_CHAIN_MS) {
+      this.startWarriorCombo(player, now);
+      this.broadcast(this.actionPayload(player, "attack", "combo", {}, now));
       return;
     }
 
     if (now < Number(player.attackCooldownUntil || 0)) return;
-    player.attackCooldownUntil = now + 300;
+    player.attackCooldownUntil = now + WARRIOR_MELEE_COOLDOWN_MS;
+    player.attackSerial = (Number(player.attackSerial) || 0) + 1;
+    player.comboStep = ((Number(player.comboStep) || 0) % 2) + 1;
+    player.lastBasicAt = now;
+    player.singleSerial = (Number(player.singleSerial) || 0) + 1;
+    player.singleUntil = now + WARRIOR_SINGLE_VISUAL_MS;
+
     const target = living.slice().sort((a, b) => distance(player, a) - distance(player, b))[0];
     let hit = false;
-    if (target && distance(player, target) <= 135) {
-      const dx = target.x - player.x, dy = target.y - player.y;
-      const impact = this.armKnockback(target, dx, dy);
-      const dealt = this.damageDragon(target, 32, "melee", player.id, impact);
-      hit = dealt > 0;
-      if (hit) {
-        player.specialHits = Math.min(WARRIOR_SPECIAL_UNLOCK_HITS, (Number(player.specialHits) || 0) + 1);
-        if (player.specialHits >= WARRIOR_SPECIAL_UNLOCK_HITS) player.specialUnlocked = true;
+    if (target) {
+      const d = distance(player, target);
+      player.heading = Math.atan2(target.y - player.y, target.x - player.x);
+      if (Math.abs(target.x - player.x) > 3) player.facing = target.x < player.x ? -1 : 1;
+      if (d <= WARRIOR_MELEE_RANGE + COMBAT_ENTITY_RADIUS * .36) {
+        const impact = this.armKnockback(target, target.x - player.x, target.y - player.y);
+        const dealt = this.damageDragon(target, warriorDamageForRange(d), "melee", player.id, impact);
+        hit = dealt > 0;
+        if (hit) this.registerWarriorBasicHit(player);
       }
     }
-    this.broadcast({ type: "action", uid: player.id, action: "attack", targetId: target?.id || null, hit, at: now });
+    this.broadcast(this.actionPayload(player, "attack", "single", { targetId: target?.id || null, hit }, now));
   }
 
   damageDragon(dragon, amount, kind = "player", sourceId = null, impact = null) {
@@ -551,6 +728,9 @@ export class HistoryRoom extends DurableObject {
           player.hp = player.maxHp; player.shield = player.maxShield;
           player.x = PVP_WORLD.width / 2; player.y = 1040;
           player.input = { dx: 0, dy: 0 };
+          player.attackCooldownUntil = 0; player.singleUntil = 0; player.lastBasicAt = 0;
+          player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
+          player.specialStartedAt = 0; player.specialActiveUntil = 0; player.specialHitState = {};
           player.burnUntil = 0; player.burnNextTick = 0; player.burnSourceId = null;
           this.broadcast({ type: "player_respawned", uid: player.id, at: now });
         }
@@ -572,15 +752,46 @@ export class HistoryRoom extends DurableObject {
         player.y = clamp(player.y + dy * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
       }
 
+      this.updateWarriorCombo(player, now);
+
       if (specialActive) {
-        const hitIds = Array.isArray(player.specialHitIds) ? player.specialHitIds : (player.specialHitIds = []);
+        const hitState = player.specialHitState && typeof player.specialHitState === "object"
+          ? player.specialHitState : (player.specialHitState = {});
+        const fractions = [0, .24, .49, .74, .96];
         for (const dragon of this.room.dragons) {
-          if (!dragon.alive || hitIds.includes(dragon.id) || distance(player, dragon) > 105) continue;
-          hitIds.push(dragon.id);
-          const angle = Number(player.specialAngle) || 0;
-          const impact = this.armKnockback(dragon, Math.cos(angle), Math.sin(angle), 560, 340);
-          if (impact) impact.tilt = 20;
-          this.damageDragon(dragon, 65, "special", player.id, impact);
+          if (!dragon.alive) continue;
+          const contact = distance(player, dragon) <= COMBAT_ENTITY_RADIUS * 2 + 10;
+          if (contact && !hitState[dragon.id]) {
+            hitState[dragon.id] = { count: 0, startedAt: now, endAt: Number(player.specialActiveUntil) || now };
+          }
+          const sequence = hitState[dragon.id];
+          if (!sequence || Number(sequence.count) >= WARRIOR_SPECIAL_DAMAGE_HITS) continue;
+          const count = Number(sequence.count) || 0;
+          const seqStart = Number(sequence.startedAt) || now;
+          const seqEnd = Math.max(seqStart + 1, Number(sequence.endAt) || Number(player.specialActiveUntil) || now);
+          const dueAt = seqStart + (seqEnd - seqStart) * fractions[count];
+          if (now < dueAt) continue;
+
+          sequence.count = count + 1;
+          const finalHit = sequence.count >= WARRIOR_SPECIAL_DAMAGE_HITS;
+          let impact;
+          if (finalHit) {
+            const angle = Number(player.specialAngle) || 0;
+            const sideAxisX = -Math.sin(angle), sideAxisY = Math.cos(angle);
+            const sideDot = (dragon.x - player.x) * sideAxisX + (dragon.y - player.y) * sideAxisY;
+            const side = sideDot === 0 ? (String(dragon.id).endsWith("a") ? 1 : -1) : (sideDot > 0 ? 1 : -1);
+            let knockX = sideAxisX * side, knockY = sideAxisY * side;
+            if (Math.abs(knockX) < .20) knockX = .20 * side;
+            const knockLen = Math.hypot(knockX, knockY) || 1;
+            impact = this.armKnockback(
+              dragon, knockX / knockLen, knockY / knockLen,
+              WARRIOR_SPECIAL_KNOCK_FORCE, WARRIOR_SPECIAL_KNOCK_TIME_MS
+            );
+            if (impact) impact.tilt = WARRIOR_SPECIAL_HIT_TILT;
+          } else {
+            impact = normalizedImpact(player, dragon, 4);
+          }
+          this.damageDragon(dragon, randomWarriorSpecialDamage(), "special", player.id, impact);
         }
       }
     }
@@ -623,7 +834,7 @@ export class HistoryRoom extends DurableObject {
   }
 
   publicPlayers() {
-    return Object.values(this.room.players).map(({ input, specialHitIds, ...player }) => player);
+    return Object.values(this.room.players).map(({ input, specialHitState, ...player }) => player);
   }
 
   snapshot() {
