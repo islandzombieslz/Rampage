@@ -38,4 +38,22 @@ assert(worker.includes('DRAGON_SHOT_COOLDOWN_MS')&&worker.includes('DRAGON_CLOSE
 assert(wrangler.includes('"HISTORY_ROOMS"')&&wrangler.includes('"new_sqlite_classes": ["HistoryRoom"]'),
   'Wrangler must bind and migrate the History Durable Object');
 
+
+assert(html.includes('HISTORY_RENDER_DELAY_MIN_MS=45')&&html.includes('HISTORY_RENDER_DELAY_MAX_MS=95'),
+  'History must use a lower adaptive interpolation buffer than Firebase PvP');
+assert(html.includes("data.type==='damage'")&&html.includes('recordPVPDamage(e,Number(data.amount)||0)'),
+  'History server damage events must update damage text immediately');
+assert(html.includes("e.dragonFlightState=flight")&&html.includes('historySyncProjectiles(snapshot.projectiles||[],this.lastServerTime)'),
+  'History must render authoritative dragon flight and fireballs');
+assert(html.includes("unacked=ack<(Number(this.inputSeq)||0)")&&html.includes('error>760'),
+  'History local prediction must avoid reconciling against snapshots that have not acknowledged recent input');
+assert(worker.includes('const DRAGON_MAX_HP = 100')&&worker.includes('const DRAGON_MAX_SHIELD = 50'),
+  'History dragons must have exactly 100 HP and 50 shield');
+assert(worker.includes('const DRAGON_DAMAGE = 10')&&worker.includes('const DRAGON_BURN_DAMAGE = 2.5')&&worker.includes('const DRAGON_BURN_TICK_MS = 1000'),
+  'History dragon direct damage must be 10 and burn damage 2.5 per second');
+assert(worker.includes('launchDragonFireball')&&worker.includes('flightState: "takeoff"')&&worker.includes('flightState = "flying"'),
+  'History dragons must take off, fly and launch server-authoritative fireballs');
+assert(worker.includes('now - this.lastBroadcastAt >= 50')&&worker.includes('}, 33);'),
+  'History server must run a faster active simulation and snapshot cadence');
+
 console.log('History smoke checks passed.');
