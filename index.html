@@ -3231,7 +3231,8 @@ const NetworkAdapter = {
   hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
   hostDisconnectVersion:0,hostDisconnectRefreshPromise:null,
   hostDisconnectRefreshDirty:false,
-  presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
+  presenceTimer:null,pvpQualityTimer:null,pvpQualityRttMs:0,pvpQualityJitterMs:0,pvpQualityFailures:0,pvpQualitySamples:0,pvpLastQualityHandoffAt:0,
+  cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){
      if(this.authPromise)return this.authPromise;
@@ -3369,7 +3370,7 @@ const NetworkAdapter = {
     if(this.hostHandoffInFlight||!this.roomId||!this.localPlayerId||!this.isHost||this.roomStatus!=='playing')return false;
     const room=this.roomCache,pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
     if(!pvp)return false;
-    const requireForeground=reason==='hidden';
+    const requireForeground=reason==='hidden'||reason==='unstable';
     const successor=pvpNextHostCandidate(room,this.localPlayerId,requireForeground);
     if(!successor)return false;
     this.hostHandoffInFlight=true;
@@ -3392,6 +3393,52 @@ const NetworkAdapter = {
     }
   },
   serverNow(){return Date.now()+(Number(this.serverTimeOffset)||0)},
+  async measurePVPConnectionQuality(){
+    const code=this.roomId,uid=this.localPlayerId;
+    if(!code||!uid)return false;
+    const pvp=this.roomCache?.settings?.mode==='pvp'||state.mode==='pvp';
+    if(!pvp)return false;
+    const F=await this.waitFirebase(),playerRef=F.ref(F.firebaseDb,'rooms/'+code+'/players/'+uid);
+    const started=performance.now();
+    try{
+      const snap=await F.get(F.ref(F.firebaseDb,'rooms/'+code+'/players/'+uid+'/lastSeen'));
+      if(!snap.exists()){this.expireLocalRoom(code);return false}
+      const sample=clamp(performance.now()-started,1,3000);
+      const previous=this.pvpQualitySamples?Number(this.pvpQualityRttMs)||sample:sample;
+      const mean=previous+(sample-previous)*.25;
+      const jitterSample=Math.abs(sample-mean);
+      const oldJitter=this.pvpQualitySamples?Number(this.pvpQualityJitterMs)||jitterSample:jitterSample;
+      const jitter=oldJitter+(jitterSample-oldJitter)*.25;
+      this.pvpQualityRttMs=mean;this.pvpQualityJitterMs=jitter;this.pvpQualityFailures=0;this.pvpQualitySamples++;
+      await F.update(playerRef,{netRttMs:Math.round(mean),netJitterMs:Math.round(jitter),netFailures:0,netMeasuredAt:F.serverTimestamp(),foreground:!document.hidden});
+      if(this.isHost&&this.roomStatus==='playing')this.evaluatePVPHostQuality();
+      return true;
+    }catch(_){
+      this.pvpQualityFailures=Math.min(9,(Number(this.pvpQualityFailures)||0)+1);
+      try{await F.update(playerRef,{netFailures:this.pvpQualityFailures,netMeasuredAt:F.serverTimestamp()})}catch(__){}
+      if(this.isHost&&this.roomStatus==='playing')this.evaluatePVPHostQuality();
+      return false;
+    }
+  },
+  startPVPQualityMonitor(){
+    this.stopPVPQualityMonitor();
+    this.measurePVPConnectionQuality().catch(()=>{});
+    this.pvpQualityTimer=setInterval(()=>this.measurePVPConnectionQuality().catch(()=>{}),PVP_QUALITY_PROBE_MS);
+  },
+  stopPVPQualityMonitor(){if(this.pvpQualityTimer){clearInterval(this.pvpQualityTimer);this.pvpQualityTimer=null}},
+  evaluatePVPHostQuality(){
+    if(!this.isHost||this.roomStatus!=='playing'||state.mode!=='pvp'||document.hidden)return false;
+    const nowServer=this.serverNow(),nowPerf=performance.now();
+    if(nowPerf-Number(this.pvpLastQualityHandoffAt||0)<PVP_QUALITY_HANDOFF_COOLDOWN_MS)return false;
+    const successor=pvpNextHostCandidate(this.roomCache,this.localPlayerId,true);
+    if(!successor||!pvpPlayerQualityFresh(successor,nowServer))return false;
+    const hostRtt=Math.max(1,Number(this.pvpQualityRttMs)||999),hostJitter=Math.max(0,Number(this.pvpQualityJitterMs)||0),hostFailures=Math.max(0,Number(this.pvpQualityFailures)||0);
+    const hostScore=hostRtt+hostJitter*1.7+hostFailures*700,successorScore=pvpHostQualityScore(successor,nowServer);
+    const hostUnstable=hostFailures>=2||hostRtt>=PVP_QUALITY_BAD_RTT_MS||hostJitter>=PVP_QUALITY_BAD_JITTER_MS;
+    const successorGood=Number(successor.netFailures||0)===0&&Number(successor.netRttMs||999)<=PVP_QUALITY_GOOD_RTT_MS;
+    if(!hostUnstable||!successorGood||successorScore+PVP_QUALITY_SWITCH_MARGIN>=hostScore)return false;
+    this.pvpLastQualityHandoffAt=nowPerf;this.handoffPVPHost('unstable').catch(()=>{});return true;
+  },
   async touchPresence(){
     const code=this.roomId,uid=this.localPlayerId;if(!code||!uid)return;
     const F=await this.waitFirebase(),rr=F.ref(F.firebaseDb,`rooms/${code}`);
@@ -3412,15 +3459,19 @@ const NetworkAdapter = {
     this.stopRoomHeartbeat();
     this.touchPresence().catch(()=>{});
     this.presenceTimer=setInterval(()=>this.touchPresence().catch(()=>{}),ROOM_HEARTBEAT_MS);
+    this.startPVPQualityMonitor();
   },
-  stopRoomHeartbeat(){if(this.presenceTimer){clearInterval(this.presenceTimer);this.presenceTimer=null}},
+  stopRoomHeartbeat(){
+    if(this.presenceTimer){clearInterval(this.presenceTimer);this.presenceTimer=null}
+    this.stopPVPQualityMonitor();
+  },
   expireLocalRoom(code){
     if(this.roomId!==code||this.leaving)return;
     this.stopRoomHeartbeat();
     this.cancelPVPHostDisconnect().catch(()=>{});
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=120;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=120;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;this.pvpQualityRttMs=0;this.pvpQualityJitterMs=0;this.pvpQualityFailures=0;this.pvpQualitySamples=0;this.pvpLastQualityHandoffAt=0;
     this.regionPending=null;this.regionSending=false;this.regionSendPromise=null;resetPVPRegionalAuthority();
     try{state.running=false}catch(_){}
     try{navigateScreen('menuScreen')}catch(_){}
@@ -3522,7 +3573,7 @@ const NetworkAdapter = {
     await this.cancelPVPHostDisconnect();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=120;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=120;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;this.pvpQualityRttMs=0;this.pvpQualityJitterMs=0;this.pvpQualityFailures=0;this.pvpQualitySamples=0;this.pvpLastQualityHandoffAt=0;
     this.regionPending=null;this.regionSending=false;this.regionSendPromise=null;this.leaving=false;
     resetPVPRegionalAuthority();
   },
@@ -4664,6 +4715,13 @@ const ROOM_INACTIVITY_MS=10*60*1000;
 const ROOM_LEGACY_INACTIVITY_MS=2*60*1000;
 const ROOM_HEARTBEAT_MS=30*1000;
 const ROOM_CLEANUP_MS=60*1000;
+const PVP_QUALITY_PROBE_MS=5000;
+const PVP_QUALITY_STALE_MS=15000;
+const PVP_QUALITY_BAD_RTT_MS=450;
+const PVP_QUALITY_BAD_JITTER_MS=170;
+const PVP_QUALITY_GOOD_RTT_MS=300;
+const PVP_QUALITY_SWITCH_MARGIN=120;
+const PVP_QUALITY_HANDOFF_COOLDOWN_MS=15000;
 function roomPlayers(room){return Object.values(room?.players||{})}
 function roomLatestSeenAt(room){
  const players=roomPlayers(room);let latest=0;
@@ -6279,6 +6337,32 @@ function applyRemoteGame(game){
        out.dragonBurnStartedAt=localNow-Math.max(0,DRAGON_BURN_DURATION_MS-remaining);
      }
      if(localPredicted&&old){
+     const previewSeq=Number(old.pvpLocalPreviewAttackSeq)||0,hostAttackSeq=Number(out.pvpLastAttackSeq)||0;
+     const previewPending=previewSeq>hostAttackSeq;
+     if(previewPending){
+       out.attackSerial=Math.max(Number(out.attackSerial)||0,Number(old.attackSerial)||0);
+       out.pvpMeleeVisualUntil=Math.max(Number(out.pvpMeleeVisualUntil)||0,Number(old.pvpMeleeVisualUntil)||0);
+       out.pvpWarriorSingleSerial=Math.max(Number(out.pvpWarriorSingleSerial)||0,Number(old.pvpWarriorSingleSerial)||0);
+       out.pvpWarriorSingleUntil=Math.max(Number(out.pvpWarriorSingleUntil)||0,Number(old.pvpWarriorSingleUntil)||0);
+       out.pvpWarriorComboSerial=Math.max(Number(out.pvpWarriorComboSerial)||0,Number(old.pvpWarriorComboSerial)||0);
+       out.pvpWarriorComboUntil=Math.max(Number(out.pvpWarriorComboUntil)||0,Number(old.pvpWarriorComboUntil)||0);
+       out.pvpWarriorComboStartedAt=Number(old.pvpWarriorComboStartedAt)||Number(out.pvpWarriorComboStartedAt)||0;
+       out.pvpPowerSerial=Math.max(Number(out.pvpPowerSerial)||0,Number(old.pvpPowerSerial)||0);
+       out.pvpPowerUntil=Math.max(Number(out.pvpPowerUntil)||0,Number(old.pvpPowerUntil)||0);
+       out.pvpPowerVisualUntil=Math.max(Number(out.pvpPowerVisualUntil)||0,Number(old.pvpPowerVisualUntil)||0);
+       out.pvpPowerStartedAt=Number(old.pvpPowerStartedAt)||Number(out.pvpPowerStartedAt)||0;
+       out.pvpAimTarget=old.pvpAimTarget??out.pvpAimTarget;out.pvpAimAngle=old.pvpAimAngle??out.pvpAimAngle;
+       out.pvpSpecialSerial=Math.max(Number(out.pvpSpecialSerial)||0,Number(old.pvpSpecialSerial)||0);
+       out.pvpSpecialVisualUntil=Math.max(Number(out.pvpSpecialVisualUntil)||0,Number(old.pvpSpecialVisualUntil)||0);
+       out.pvpSpecialFxStartedAt=Number(old.pvpSpecialFxStartedAt)||Number(out.pvpSpecialFxStartedAt)||0;
+       out.pvpSpecialFxUntil=Math.max(Number(out.pvpSpecialFxUntil)||0,Number(old.pvpSpecialFxUntil)||0);
+       out.pvpSpecialBodyDuration=Number(old.pvpSpecialBodyDuration)||Number(out.pvpSpecialBodyDuration)||0;
+       out.pvpSpecialOriginX=old.pvpSpecialOriginX??out.pvpSpecialOriginX;out.pvpSpecialOriginY=old.pvpSpecialOriginY??out.pvpSpecialOriginY;
+       out.pvpWarriorChargeStartedAt=Number(old.pvpWarriorChargeStartedAt)||Number(out.pvpWarriorChargeStartedAt)||0;
+       out.pvpWarriorChargeUntil=Math.max(Number(out.pvpWarriorChargeUntil)||0,Number(old.pvpWarriorChargeUntil)||0);
+       out.pvpWarriorChargeAngle=old.pvpWarriorChargeAngle??out.pvpWarriorChargeAngle;
+       out.pvpActionUntil=Math.max(Number(out.pvpActionUntil)||0,Number(old.pvpActionUntil)||0);
+     }else old.pvpLocalPreviewAttackSeq=0;
      const hostLocksMovement=Number(out.knockTime)>0||Number(out.pvpWarriorChargeUntil)>localNow;
      if(!hostLocksMovement){
        out.heading=Number(old.heading)||0;out.facing=Number(old.facing)<0?-1:1;out.moving=!!old.moving;
@@ -6432,12 +6516,19 @@ async function reconcileClanReservations(room){
    });
  }finally{clanReservationRepairInFlight=false}
 }
+function pvpPlayerQualityFresh(player,now=NetworkAdapter.serverNow()){
+ const measuredAt=Number(player?.netMeasuredAt)||0;
+ return measuredAt>0&&Math.abs(now-measuredAt)<=PVP_QUALITY_STALE_MS;
+}
+function pvpHostQualityScore(player,now=NetworkAdapter.serverNow()){
+ const fresh=pvpPlayerQualityFresh(player,now);
+ const rtt=fresh?clamp(Number(player?.netRttMs)||999,1,3000):1600,jitter=fresh?clamp(Number(player?.netJitterMs)||0,0,1500):500,failures=clamp(Number(player?.netFailures)||0,0,9);
+ return (player?.foreground===false?5000:0)+(fresh?0:2500)+rtt+jitter*1.7+failures*700;
+}
 function pvpNextHostCandidate(room,excludeUid=null,requireForeground=false){
  const candidates=Object.values(room?.players||{}).filter(p=>p?.uid&&p.uid!==excludeUid&&(!requireForeground||p.foreground!==false));
- candidates.sort((a,b)=>{
-   const af=a.foreground===false?1:0,bf=b.foreground===false?1:0;
-   return af-bf||(Number(a.slot)||0)-(Number(b.slot)||0)||String(a.uid).localeCompare(String(b.uid));
- });
+ const now=NetworkAdapter.serverNow();
+ candidates.sort((a,b)=>pvpHostQualityScore(a,now)-pvpHostQualityScore(b,now)||(Number(a.slot)||0)-(Number(b.slot)||0)||String(a.uid).localeCompare(String(b.uid)));
  return candidates[0]||null;
 }
 let pvpHostClaimInFlight=false;
@@ -9574,8 +9665,14 @@ function pvpPredictGuestLocal(dt){
  const input=getLocalMovement();
  let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
  if(len>1){dx/=len;dy/=len}
- const locked=Number(e.knockTime)>0||Number(e.pvpWarriorChargeUntil)>now;
- if(!locked&&(dx||dy)){
+ const localWarriorCharge=pvpIsWarriorHero(e)&&Number(e.pvpLocalPredictedWarriorChargeUntil)>now&&Number(e.pvpWarriorChargeUntil)>now;
+ const locked=Number(e.knockTime)>0||(Number(e.pvpWarriorChargeUntil)>now&&!localWarriorCharge);
+ if(localWarriorCharge&&!Number(e.knockTime)){
+   if(len>.12)e.pvpWarriorChargeAngle=Math.atan2(dy,dx);
+   const angle=Number(e.pvpWarriorChargeAngle)||0,b=pvpArenaBounds(e.r||30),speed=e.speed*PVP_WARRIOR.specialSpeedMultiplier;
+   e.x=clamp(e.x+Math.cos(angle)*speed*dt,b.left,b.right);e.y=clamp(e.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+   e.heading=angle;e.facing=Math.cos(angle)<0?-1:1;e.moving=true;
+ }else if(!locked&&(dx||dy)){
    const b=pvpArenaBounds(e.r||30);
    e.x=clamp(e.x+dx*e.speed*dt,b.left,b.right);
    e.y=clamp(e.y+dy*e.speed*dt,b.top,b.bottom);
@@ -10360,6 +10457,33 @@ function pvpPreviewBasicAttack(e){
    if(Math.abs(target.x-e.x)>3)e.facing=target.x<e.x?-1:1;
  }
 }
+function pvpPreviewGuestAction(e,action,targetId){
+ if(!e?.alive)return false;
+ if(action==='attack'){pvpPreviewBasicAttack(e);e.pvpLocalPreviewAttackSeq=NetworkAdapter.attackSeq;return true}
+ const now=performance.now();e.pvpLocalPreviewAttackSeq=NetworkAdapter.attackSeq;
+ if(action==='power'){
+   if(e.type!=='mage')return false;
+   const target=pvpNearestEnemy(e,targetId);if(!target)return false;
+   const duration=pvpFullGifDuration(e.clan==='egypt'?'egyptMagePower':'magePower',3000),angle=Math.atan2(target.y-e.y,target.x-e.x);
+   e.pvpPowerUntil=now+duration;e.pvpPowerVisualUntil=e.pvpPowerUntil;e.pvpActionUntil=e.pvpPowerUntil;
+   e.pvpPowerNextTick=now+100;e.pvpPowerStartedAt=now;e.pvpAimTarget=target.id;e.pvpAimAngle=angle;
+   e.pvpPowerSerial=(Number(e.pvpPowerSerial)||0)+1;e.mageAttackSerial=(Number(e.mageAttackSerial)||0)+1;
+   e.heading=angle;e.facing=target.x<e.x?-1:1;pvpLoadFlameFrames();pvpFlameImage(e);return true;
+ }
+ if(action!=='special')return false;
+ if(pvpIsWarriorHero(e)){
+   const duration=pvpFullGifDuration('pvpWarriorSpecial',PVP_WARRIOR.specialFallbackMs);
+   pvpCancelWarriorCombo(e,now);e.pvpWarriorSingleUntil=0;e.pvpMeleeVisualUntil=Math.min(Number(e.pvpMeleeVisualUntil)||0,now);
+   e.pvpWarriorChargeStartedAt=now;e.pvpWarriorChargeUntil=now+duration;e.pvpLocalPredictedWarriorChargeUntil=e.pvpWarriorChargeUntil;
+   e.pvpWarriorChargeAngle=Number.isFinite(Number(e.heading))?Number(e.heading):(e.facing<0?Math.PI:0);
+   e.pvpActionUntil=e.pvpWarriorChargeUntil;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;e.pvpSpecialBodyDuration=duration;
+   e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1;e.pvpSpecialFxUntil=0;e.attackAnim=0;return true;
+ }
+ const bodyDuration=pvpFullGifDuration(pvpBodySpecialKey(e),3000);
+ e.pvpSpecialBodyDuration=bodyDuration;e.pvpSpecialOriginX=e.x;e.pvpSpecialOriginY=e.y;e.pvpActionUntil=now+bodyDuration;
+ e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1;e.pvpSpecialVisualUntil=now+bodyDuration;e.pvpSpecialFxStartedAt=now;
+ e.pvpSpecialFxUntil=now+Math.max(1500,pvpFullGifDuration(pvpSpecialEffectKey(e),3200));return true;
+}
 function pvpTriggerAttack(override=null){
  if(state.mode!=='pvp'||!state.running||state.phase!=='combat')return false;
  const action=override||pvpControls.selected;
@@ -10384,7 +10508,7 @@ function pvpTriggerAttack(override=null){
        sendLocalPVEInput(true);return true;
      }finally{pvpRegionalSimulationUid=previousRegionalSimulationUid}
    }
-   if(action==='attack')pvpPreviewBasicAttack(me);
+   if(me)pvpPreviewGuestAction(me,action,pvpControls.targetId);
    sendLocalPVEInput(true);return true;
  }
  if(me){
