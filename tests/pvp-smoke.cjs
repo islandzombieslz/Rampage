@@ -230,11 +230,19 @@ assert(html.includes("specialInactive:'assets/ui/pvp/punho-especial-inativo.png'
 assert(html.includes('class="pvp-special-fill"')&&
  html.includes("button.style.setProperty('--pvp-special-progress'"),
  'special HUD must use the existing cooldown/unlock state to fill its progress bar');
-assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px)"),
- 'special control must match the stone power/weapon slot size');
-assert(html.includes("const iconActive=specialReady||specialRunning")&&
- html.includes("specialIcon.src=iconActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive"),
- 'Warrior special icon must switch between inactive sprite and active GIF from the existing special state');
+assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(82px,10.5vw,104px);height:clamp(48px,7vw,64px)"),
+ 'special control keeps the current height but uses a rectangular HUD');
+assert(html.includes('repeating-linear-gradient(90deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
+ 'special HUD uses striped progress and lights up the whole control when ready');
+assert(html.includes("width:clamp(64px,8.8vw,82px);height:clamp(64px,8.8vw,82px)"),
+ 'Warrior special fist icon is deliberately larger');
+assert(html.includes("button.addEventListener('pointerdown',event=>pvpActivateHudAction(button,event))"),
+ 'special fires on pointerdown so multitouch does not wait for click release');
+assert(html.includes('pvpCancelWarriorCombo(e,now)')&&html.includes('e.attackCooldown=0;e.attackAnim=0'),
+ 'ready Warrior special can preempt a basic attack/combo');
+assert(html.includes("const specialHudActive=!!(available&&!warriorUnlock&&(specialReady||specialRunning))")&&
+ html.includes("specialIcon.src=specialHudActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive"),
+ 'Warrior special icon and full HUD must switch together between inactive and ready/running state');
 assert(html.includes("background:transparent url('assets/ui/pvp/moldura-armas.png')")&&
  html.includes('class="pvp-slot-icon"'),
  'power and weapon slots must use the requested local frame with their existing icons');
