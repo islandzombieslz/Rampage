@@ -7303,9 +7303,10 @@ const HistoryAdapter={
      const attackSerial=Number(sd.attackSerial)||0,attackRemaining=Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime);
      e.dragonAttackSerial=Math.max(Number(e.dragonAttackSerial)||0,attackSerial);
      if(attackRemaining>0){
-       const attackElapsed=Math.max(0,DRAGON_ATTACK_VISUAL_MS-attackRemaining);
-       e.pendingDragonAttack={serial:attackSerial,startedAt:arrival-attackElapsed,soundAt:arrival+Math.max(0,1000-attackElapsed),endAt:arrival+attackRemaining};
-     }else e.pendingDragonAttack=null;
+       if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.serial)!==attackSerial){
+         e.pendingDragonAttack={serial:attackSerial,startedAt:arrival,soundAt:arrival+1000,endAt:arrival+DRAGON_ATTACK_VISUAL_MS};
+       }
+     }else if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.endAt)<=arrival)e.pendingDragonAttack=null;
      historyPushRemoteSample(e,Number(sd.x)||0,Number(sd.y)||0,arrival);next.push(e);
    }
    state.entities=next;
