@@ -7090,17 +7090,18 @@ function historyUpsertProjectile(raw,serverTime=Date.now()){
  if(!p){
    p={id:raw.id,kind:'dragon',serial:Number(raw.serial)||0,x:Number(raw.x)||0,y:Number(raw.y)||0,
      vx:Number(raw.vx)||0,vy:Number(raw.vy)||0,speed:Number(raw.speed)||DRAGON_FIREBALL_SPEED,damage:Number(raw.damage)||10,
-     burn:raw.burn!==false,targetId:raw.targetId,team:raw.team||'pvp-enemy',sourceId:raw.sourceId,
+     burn:raw.burn!==false,targetId:raw.targetId,team:raw.team||'pvp-enemy',sourceId:raw.sourceId,pvpHit:!!raw.pvpHit,
      historyAuthX:Number(raw.x)||0,historyAuthY:Number(raw.y)||0};
    state.dragonProjectiles.push(p);
  }else{
-   p.vx=Number(raw.vx)||0;p.vy=Number(raw.vy)||0;p.speed=Number(raw.speed)||DRAGON_FIREBALL_SPEED;
+   p.vx=Number(raw.vx)||0;p.vy=Number(raw.vy)||0;p.speed=Number(raw.speed)||DRAGON_FIREBALL_SPEED;p.pvpHit=!!raw.pvpHit;
    p.targetId=raw.targetId;p.sourceId=raw.sourceId;p.serial=Number(raw.serial)||p.serial||0;
    p.historyAuthX=Number(raw.x)||0;p.historyAuthY=Number(raw.y)||0;
    const err=Math.hypot(p.historyAuthX-p.x,p.historyAuthY-p.y);
    if(err>100){p.x=p.historyAuthX;p.y=p.historyAuthY}
  }
- const expireMs=Math.max(0,(Number(raw.expireAt)||serverTime)-serverTime);
+ const expiry=raw.pvpHit&&Number(raw.hitUntil)>0?Number(raw.hitUntil):Number(raw.expireAt);
+ const expireMs=Math.max(0,(expiry||serverTime)-serverTime);
  p.expireAt=performance.now()+expireMs;
  return p;
 }
@@ -7175,6 +7176,15 @@ const HistoryAdapter={
      return;
    }
    if(data.type==='combat_sfx'){historyApplyCombatSfx(data);return}
+   if(data.type==='projectile_hit'){
+     const p=(state.dragonProjectiles||[]).find(x=>String(x.id)===String(data.projectileId));
+     if(p){
+       p.x=Number(data.x)||p.x;p.y=Number(data.y)||p.y;p.vx=0;p.vy=0;p.pvpHit=true;
+       p.historyAuthX=p.x;p.historyAuthY=p.y;
+       p.expireAt=performance.now()+Math.max(0,(Number(data.hitUntil)||0)-(Number(data.at)||Date.now()));
+     }
+     return;
+   }
    if(data.type==='damage'){
      const e=historyFindEntity(data.targetKind,data.targetId);
      if(e){
