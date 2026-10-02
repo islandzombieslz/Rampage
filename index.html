@@ -6904,40 +6904,44 @@ function historyApplyAuthoritativeAction(e,data){
  }
 
  if(action!=='attack')return false;
+ if(kind==='combo-cancel'){
+   e.historyServerComboSerial=Math.max(Number(e.historyServerComboSerial)||0,Number(data.comboSerial)||0);
+   pvpCancelWarriorCombo(e,now);
+   return true;
+ }
  if(kind==='combo'){
    const serial=Number(data.comboSerial)||0,remaining=historyServerRemaining(data.comboUntil,data.at);
    const previous=Number(e.historyServerComboSerial)||0,authoritativeNew=serial>previous;
-   const matchingPreview=serial===Number(e.pvpWarriorComboSerial)&&Number(e.pvpWarriorComboUntil)>now;
    e.historyServerComboSerial=Math.max(previous,serial);
-   if(authoritativeNew&&!matchingPreview){
+   if(e.controlled)return true;
+   if(authoritativeNew){
+     const duration=pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs);
      e.pvpWarriorComboSerial=Math.max((Number(e.pvpWarriorComboSerial)||0)+1,serial);e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
-     if(remaining>0){
-       e.pvpWarriorComboStartedAt=now;
-       e.pvpWarriorComboUntil=now+remaining;
-       e.pvpWarriorComboRequestUntil=now+historyServerRemaining(data.comboRequestUntil,data.at);
-       e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;e.pvpActionUntil=e.pvpWarriorComboUntil;
-       e.attackAnim=Math.min(.45,remaining/1000);
-     }
+     e.pvpWarriorComboStartedAt=now;
+     e.pvpWarriorComboUntil=now+duration;
+     e.pvpWarriorComboRequestUntil=now+Math.max(0,historyServerRemaining(data.comboRequestUntil,data.at));
+     e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;e.pvpActionUntil=e.pvpWarriorComboUntil;
+     e.attackAnim=Math.min(.45,duration/1000);
    }
    return true;
  }
  if(kind==='combo-continue'){
+   if(e.controlled)return true;
    const requestRemaining=historyServerRemaining(data.comboRequestUntil,data.at);
    if(requestRemaining>0)e.pvpWarriorComboRequestUntil=Math.max(Number(e.pvpWarriorComboRequestUntil)||0,now+requestRemaining);
    return true;
  }
- const serial=Number(data.singleSerial)||0,remaining=historyServerRemaining(data.singleUntil,data.at);
+ const serial=Number(data.singleSerial)||0;
  const previous=Number(e.historyServerSingleSerial)||0,authoritativeNew=serial>previous;
- const matchingPreview=serial===Number(e.pvpWarriorSingleSerial)&&Number(e.pvpWarriorSingleUntil)>now;
  e.historyServerSingleSerial=Math.max(previous,serial);
+ if(e.controlled)return true;
  if(Number(e.pvpWarriorComboUntil)>now&&Number(data.comboSerial||0)<Number(e.pvpWarriorComboSerial||0))pvpCancelWarriorCombo(e,now);
- if(authoritativeNew&&!matchingPreview){
+ if(authoritativeNew){
+   const duration=pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs);
    e.pvpWarriorSingleSerial=Math.max((Number(e.pvpWarriorSingleSerial)||0)+1,serial);e.pvpWarriorLastBasicAt=now;
-   if(remaining>0){
-     e.pvpWarriorSingleUntil=now+remaining;e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
-     e.attackAnim=Math.min(.31,remaining/1000);
-   }
- }else if(authoritativeNew&&matchingPreview)e.pvpWarriorLastBasicAt=now;
+   e.pvpWarriorSingleUntil=now+duration;e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
+   e.attackAnim=Math.min(.31,duration/1000);
+ }
  e.attackCooldown=Math.max(Number(e.attackCooldown)||0,PVP_BASE.meleeCooldown);
  return true;
 }
@@ -6969,28 +6973,29 @@ function historyPreviewLocalAction(e,action,targetId){
  return pvpPreviewGuestAction(e,action,targetId);
 }
 function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
+ const controlled=!!e.controlled;
  const attackSerial=Number(sp.attackSerial)||0;
  if(attackSerial>0)e.attackSerial=Math.max(Number(e.attackSerial)||0,attackSerial);
  if(Number(sp.comboStep)>0)e.comboStep=Number(sp.comboStep);
  e.regenSerial=Math.max(Number(e.regenSerial)||0,Number(sp.regenSerial)||0);
- e.attackCooldown=Math.max(0,((Number(sp.attackCooldownUntil)||0)-serverTime)/1000);
+ if(!controlled)e.attackCooldown=Math.max(0,((Number(sp.attackCooldownUntil)||0)-serverTime)/1000);
 
  const singleSerial=Number(sp.singleSerial)||0,singleRemaining=Math.max(0,(Number(sp.singleUntil)||0)-serverTime);
  const previousSingle=Number(e.historyServerSingleSerial)||0,authoritativeSingleNew=singleSerial>previousSingle;
  const matchingSinglePreview=singleSerial===Number(e.pvpWarriorSingleSerial)&&Number(e.pvpWarriorSingleUntil)>arrival;
  e.historyServerSingleSerial=Math.max(previousSingle,singleSerial);
- if(authoritativeSingleNew&&!matchingSinglePreview){
+ if(!controlled&&authoritativeSingleNew&&!matchingSinglePreview){
    e.pvpWarriorSingleSerial=Math.max((Number(e.pvpWarriorSingleSerial)||0)+1,singleSerial);
    if(singleRemaining>0){e.pvpWarriorSingleUntil=arrival+singleRemaining;e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil}
  }
- if(singleRemaining<=0&&singleSerial===Number(e.historyServerSingleSerial)&&Number(e.pvpWarriorComboUntil)<=arrival)
+ if(!controlled&&singleRemaining<=0&&singleSerial===Number(e.historyServerSingleSerial)&&Number(e.pvpWarriorComboUntil)<=arrival)
    e.pvpWarriorSingleUntil=0;
 
  const comboSerial=Number(sp.comboSerial)||0,comboRemaining=Math.max(0,(Number(sp.comboUntil)||0)-serverTime);
  const previousCombo=Number(e.historyServerComboSerial)||0,authoritativeComboNew=comboSerial>previousCombo;
  const matchingComboPreview=comboSerial===Number(e.pvpWarriorComboSerial)&&Number(e.pvpWarriorComboUntil)>arrival;
  e.historyServerComboSerial=Math.max(previousCombo,comboSerial);
- if(authoritativeComboNew&&!matchingComboPreview){
+ if(!controlled&&authoritativeComboNew&&!matchingComboPreview){
    e.pvpWarriorComboSerial=Math.max((Number(e.pvpWarriorComboSerial)||0)+1,comboSerial);
    if(comboRemaining>0){
      e.pvpWarriorComboStartedAt=arrival-Math.max(0,PVP_WARRIOR.comboFallbackMs-comboRemaining);
@@ -6998,14 +7003,14 @@ function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
    }
  }
  const comboRequestRemaining=Math.max(0,(Number(sp.comboRequestUntil)||0)-serverTime);
- if(comboRemaining>0)e.pvpWarriorComboRequestUntil=arrival+comboRequestRemaining;
- else if(comboSerial===Number(e.historyServerComboSerial)){
+ if(!controlled&&comboRemaining>0)e.pvpWarriorComboRequestUntil=arrival+comboRequestRemaining;
+ else if(!controlled&&comboSerial===Number(e.historyServerComboSerial)){
    e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboRequestUntil=0;
  }
 
  const lastBasicAt=Number(sp.lastBasicAt)||0;
- if(lastBasicAt>0&&serverTime-lastBasicAt<2000)e.pvpWarriorLastBasicAt=arrival-Math.max(0,serverTime-lastBasicAt);
- else if(comboRemaining<=0)e.pvpWarriorLastBasicAt=0;
+ if(!controlled&&lastBasicAt>0&&serverTime-lastBasicAt<2000)e.pvpWarriorLastBasicAt=arrival-Math.max(0,serverTime-lastBasicAt);
+ else if(!controlled&&comboRemaining<=0)e.pvpWarriorLastBasicAt=0;
 
  const specialSerial=Number(sp.specialSerial)||0,chargeRemaining=Math.max(0,(Number(sp.specialActiveUntil)||0)-serverTime);
  const previousSpecial=Number(e.historyServerSpecialSerial)||0,authoritativeSpecialNew=specialSerial>previousSpecial;
@@ -7319,6 +7324,10 @@ const HistoryAdapter={
  sendAction(action){
    const me=pvpLocalHero();
    return this.send({type:'action',action,targetId:pvpControls.targetId||null,angle:Number(me?.pvpWarriorChargeAngle??me?.heading)||0});
+ },
+ sendComboCancel(){
+   const me=pvpLocalHero();
+   return this.send({type:'action',action:'combo_cancel',angle:Number(me?.heading)||0});
  },
  tick(dt,now){
    if(!this.active||!state.running)return;
@@ -8289,7 +8298,8 @@ function stopPVPAttackHold(e=null){
    if(pvpIsWarriorHero(hero)&&Number(hero.pvpWarriorComboUntil)>now){
      pvpWarriorComboCancelSeq++;
      pvpCancelWarriorCombo(hero,now);
-     if(NetworkAdapter.online&&!NetworkAdapter.isHost)sendLocalPVEInput(true);
+     if(state.historyActive)HistoryAdapter.sendComboCancel();
+     else if(NetworkAdapter.online&&!NetworkAdapter.isHost)sendLocalPVEInput(true);
    }
  }
 }
