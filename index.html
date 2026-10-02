@@ -3176,6 +3176,7 @@ const NetworkAdapter = {
   enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
   inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
+  pvpInputSeq:0,pvpRenderDelayMs:90,pvpSnapshotGapEwma:0,pvpSnapshotJitterEwma:0,pvpLastSampleAt:0,
   regionSending:false,regionPending:null,regionSendPromise:null,
   hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
   hostDisconnectVersion:0,hostDisconnectRefreshPromise:null,
@@ -3369,7 +3370,7 @@ const NetworkAdapter = {
     this.cancelPVPHostDisconnect().catch(()=>{});
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=90;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;
     this.regionPending=null;this.regionSending=false;this.regionSendPromise=null;resetPVPRegionalAuthority();
     try{state.running=false}catch(_){}
     try{navigateScreen('menuScreen')}catch(_){}
@@ -3471,7 +3472,7 @@ const NetworkAdapter = {
     await this.cancelPVPHostDisconnect();
     this.roomUnsubscribes.forEach(fn=>{try{fn()}catch(_){}});this.roomUnsubscribes=[];
     this.roomCache={};this.roomId=null;this.hostUid=null;this.roomStatus='idle';
-    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;
+    this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=90;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;
     this.regionPending=null;this.regionSending=false;this.regionSendPromise=null;this.leaving=false;
     resetPVPRegionalAuthority();
   },
@@ -3521,6 +3522,16 @@ const NetworkAdapter = {
     if(!this.roomId||!this.localPlayerId)return;
     const roomId=this.roomId,uid=this.localPlayerId;
     const packet={...input};
+    if(state.mode==='pvp'){
+      // PvP input is a latest-state stream. Waiting for a Firebase ACK here
+      // turns network RTT into an artificial input queue. The RTDB SDK keeps
+      // one ordered realtime connection; sequence numbers handle stale state.
+      const F=await this.waitFirebase();
+      F.set(F.ref(F.firebaseDb,`rooms/${roomId}/inputs/${uid}`),{...packet,t:F.serverTimestamp()})
+        .catch(err=>pvpReportError('input Firebase',err));
+      return;
+    }
+    // PvE keeps the previous conservative queue unchanged.
     const tail=this.inputQueue[this.inputQueue.length-1];
     const sameDiscrete=tail&&Number(tail.attackSeq||0)===Number(packet.attackSeq||0)&&
       Number(tail.pvpComboCancelSeq||0)===Number(packet.pvpComboCancelSeq||0);
@@ -3545,31 +3556,17 @@ const NetworkAdapter = {
   async sendCommand(type,payload={}){if(!this.roomId||!this.localPlayerId)return;const F=await this.waitFirebase(),id=`${Date.now().toString(36)}_${++this.commandSeq}`;await F.set(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${this.localPlayerId}/${id}`),{type,payload,uid:this.localPlayerId,createdAt:F.serverTimestamp()})},
   async pushPVPRegion(snapshot){
     if(!snapshot||!this.roomId||!this.localPlayerId||this.isHost||state.mode!=='pvp')return;
-    const roomId=this.roomId,uid=this.localPlayerId;
-    this.regionPending=snapshot;
-    if(this.regionSending)return this.regionSendPromise;
-    this.regionSending=true;
-    this.regionSendPromise=(async()=>{
-      try{
-        const F=await this.waitFirebase();
-        while(this.regionPending&&this.roomId===roomId&&this.localPlayerId===uid&&!this.isHost){
-          const next=this.regionPending;this.regionPending=null;
-          await F.set(F.ref(F.firebaseDb,`rooms/${roomId}/regions/${uid}`),{...next,uid,at:F.serverTimestamp()});
-        }
-      }finally{
-        this.regionSending=false;this.regionSendPromise=null;
-        if(this.regionPending&&this.roomId===roomId&&this.localPlayerId===uid&&!this.isHost){
-          const next=this.regionPending;this.regionPending=null;this.pushPVPRegion(next).catch(console.error);
-        }
-      }
-    })();
-    return this.regionSendPromise;
+    const roomId=this.roomId,uid=this.localPlayerId,F=await this.waitFirebase();
+    // Region packets carry epoch+seq and stale packets are rejected by the host,
+    // so don't throttle this stream to one acknowledged write per RTT.
+    F.set(F.ref(F.firebaseDb,`rooms/${roomId}/regions/${uid}`),{...snapshot,uid,at:F.serverTimestamp()})
+      .catch(err=>pvpReportError('região Firebase',err));
   },
   async pushState(snapshot){
     if(!this.roomId||!this.isHost||state.phase==='finished')return;
     const roomId=this.roomId,uid=this.localPlayerId,F=await this.waitFirebase();
     if(this.roomId!==roomId||!this.isHost||this.localPlayerId!==uid||state.phase==='finished')return;
-    await F.update(F.ref(F.firebaseDb,`rooms/${roomId}`),{status:'playing',game:{...snapshot,authorityUid:uid}});
+    await F.update(F.ref(F.firebaseDb,`rooms/${roomId}`),{status:'playing',game:{...snapshot,authorityUid:uid,...(state.mode==='pvp'?{serverAt:F.serverTimestamp()}: {})}});
   },
   async removeCommand(uid,id){const F=await this.waitFirebase();await F.remove(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${uid}/${id}`))}
 };
@@ -5274,11 +5271,14 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 // PvP guests need a much smaller visual buffer than War. Local movement is
 // predicted immediately; these constants only smooth the rest of the world.
-const PVP_REMOTE_RENDER_DELAY_MS=60;
-const PVP_REMOTE_MAX_EXTRAP_MS=130;
+const PVP_REMOTE_RENDER_DELAY_MS=90;
+const PVP_REMOTE_RENDER_DELAY_MIN_MS=72;
+const PVP_REMOTE_RENDER_DELAY_MAX_MS=135;
+const PVP_REMOTE_MAX_EXTRAP_MS=110;
 const PVP_INPUT_INTERVAL_MS=33;
-const PVP_SNAPSHOT_INTERVAL_MS=80;
-const PVP_INPUT_KEEPALIVE_MS=160;
+const PVP_SNAPSHOT_INTERVAL_MS=60;
+const PVP_INPUT_KEEPALIVE_MS=150;
+const PVP_INPUT_STALE_MS=420;
 const PVP_LOCAL_SOFT_ERROR_PX=58;
 const PVP_LOCAL_SNAP_ERROR_PX=260;
 
@@ -5292,7 +5292,7 @@ const PVP_REGION_ENTER_MARGIN_PX=140;
 const PVP_REGION_HOST_PRIORITY_MARGIN_PX=90;
 const PVP_REGION_SIM_MARGIN_PX=380;
 const PVP_REGION_PACKET_MAX_AGE_MS=900;
-const PVP_REGION_SNAPSHOT_INTERVAL_MS=70;
+const PVP_REGION_SNAPSHOT_INTERVAL_MS=60;
 const PVP_REGION_HANDOFF_LINGER_MS=220;
 const PVP_REGION_MAX_POSE_STEP_MS=240;
 const PVP_REGION_MAX_SPEED_FACTOR=1.9;
@@ -5754,7 +5754,10 @@ function sampleRemotePosition(obj,now,allowExtrapolation=false){
  const history=obj?.netHistory;
  if(!Array.isArray(history)||!history.length)return null;
  const pvp=state.mode==='pvp';
- const renderAt=now-(pvp?PVP_REMOTE_RENDER_DELAY_MS:REMOTE_WAR_RENDER_DELAY_MS);
+ const renderDelay=pvp
+   ?clamp(Number(NetworkAdapter.pvpRenderDelayMs)||PVP_REMOTE_RENDER_DELAY_MS,PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS)
+   :REMOTE_WAR_RENDER_DELAY_MS;
+ const renderAt=now-renderDelay;
  if(history.length===1)return {x:Number(history[0].x)||0,y:Number(history[0].y)||0};
  const first=history[0];
  if(renderAt<=Number(first.t))return {x:Number(first.x)||0,y:Number(first.y)||0};
@@ -5785,13 +5788,30 @@ function applyRemoteGame(game){
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
  const remoteNow=performance.now();
  const pvpRemote=game.mode==='pvp'||state.mode==='pvp';
- const remoteGapMs=NetworkAdapter.lastSnapshotReceivedAt
-   ?clamp(remoteNow-NetworkAdapter.lastSnapshotReceivedAt,pvpRemote?45:70,pvpRemote?180:220)
+ const previousArrival=Number(NetworkAdapter.lastSnapshotReceivedAt)||0;
+ const remoteGapMs=previousArrival
+   ?clamp(remoteNow-previousArrival,pvpRemote?35:70,pvpRemote?220:220)
    :(pvpRemote?PVP_SNAPSHOT_INTERVAL_MS:120);
+ if(pvpRemote&&previousArrival){
+   const previousMean=Number(NetworkAdapter.pvpSnapshotGapEwma)||remoteGapMs;
+   const mean=previousMean+(remoteGapMs-previousMean)*.18;
+   const jitterSample=Math.abs(remoteGapMs-mean);
+   const previousJitter=Number(NetworkAdapter.pvpSnapshotJitterEwma)||jitterSample;
+   const jitter=previousJitter+(jitterSample-previousJitter)*.22;
+   NetworkAdapter.pvpSnapshotGapEwma=mean;NetworkAdapter.pvpSnapshotJitterEwma=jitter;
+   NetworkAdapter.pvpRenderDelayMs=clamp(mean+Math.max(12,jitter*2.2),PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS);
+ }
  NetworkAdapter.lastSnapshotReceivedAt=remoteNow;
- // PvP uses a shorter visual window. War keeps the larger buffer that protects
- // its dense army movement from packet jitter.
- const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.02,52,108):clamp(remoteGapMs*1.18,105,190);
+ const serverStamp=pvpRemote?Number(game.serverAt)||0:0;
+ const serverAgeMs=serverStamp?clamp(NetworkAdapter.serverNow()-serverStamp,0,500):0;
+ let remoteSampleAt=pvpRemote?remoteNow-serverAgeMs:remoteNow;
+ if(pvpRemote){
+   remoteSampleAt=Math.max((Number(NetworkAdapter.pvpLastSampleAt)||0)+.01,remoteSampleAt);
+   NetworkAdapter.pvpLastSampleAt=remoteSampleAt;
+ }
+ // PvP interpolates authoritative samples by host time instead of arrival time,
+ // so jitter changes buffering rather than the apparent movement speed.
+ const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.04,55,118):clamp(remoteGapMs*1.18,105,190);
  const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
  if(pvpRemote&&(!game.running||game.phase!=='combat'||
@@ -5857,7 +5877,8 @@ function applyRemoteGame(game){
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=remoteNow;
      if(pvpRemote&&pvpRetainRegionalEntityOnSnapshot(old,e)){
-       old.netAuthX=Number(e.x)||0;old.netAuthY=Number(e.y)||0;old.netAuthAt=remoteNow;
+       old.netAuthX=Number(e.x)||0;old.netAuthY=Number(e.y)||0;old.netAuthAt=remoteSampleAt;old.netAuthArrivalAt=remoteNow;
+       old.netAuthInputSeq=Number(e.pvpLastInputSeq)||0;
        old.controlled=!old.pvpMinion&&old.ownerId===NetworkAdapter.localPlayerId;
        return old;
      }
@@ -5865,9 +5886,10 @@ function applyRemoteGame(game){
      const fromX=old&&Number.isFinite(Number(old.x))?Number(old.x):(Number(e.x)||0);
      const fromY=old&&Number.isFinite(Number(old.y))?Number(old.y):(Number(e.y)||0);
      const toX=Number(e.x)||0,toY=Number(e.y)||0;
-     const netHistory=localPredicted?(Array.isArray(old?.netHistory)?old.netHistory:[]):appendRemotePositionSample(old,toX,toY,remoteNow);
+     const netHistory=localPredicted?(Array.isArray(old?.netHistory)?old.netHistory:[]):appendRemotePositionSample(old,toX,toY,remoteSampleAt);
      const out={...e,x:fromX,y:fromY,netFromX:fromX,netFromY:fromY,netToX:toX,netToY:toY,
-       netAuthX:toX,netAuthY:toY,netAuthAt:remoteNow,netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,
+       netAuthX:toX,netAuthY:toY,netAuthAt:remoteSampleAt,netAuthArrivalAt:remoteNow,netAuthInputSeq:Number(e.pvpLastInputSeq)||0,
+       netInterpStartedAt:remoteNow,netInterpDuration:remoteInterpMs,
        netHistory,target:null,controlled:!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId};
      if(state.mode==='pvp'){
        out.pvpSpecialReadyAt=out.pvpSpecialLocked?1e14:localNow+Math.max(0,Number(out.pvpSpecialRemainingMs)||0);
@@ -9391,6 +9413,15 @@ function getLocalMovement(){
  }
  return input;
 }
+function pvpRemoteInputFor(ownerId){
+ if(ownerId===NetworkAdapter.localPlayerId)return getLocalMovement();
+ const input=NetworkAdapter.remoteInputs[ownerId]||{};
+ const packetAt=Number(input.t)||0;
+ if(!packetAt||Math.abs(NetworkAdapter.serverNow()-packetAt)<=PVP_INPUT_STALE_MS)return input;
+ // A lost keepalive must stop motion, not let the host keep integrating an
+ // old direction indefinitely. Discrete sequence numbers stay untouched.
+ return {...input,dx:0,dy:0};
+}
 function sendLocalPVEInput(force=false){
  if(!NetworkAdapter.online||(state.mode!=='pve'&&state.mode!=='pvp')||!state.running)return;
  const now=performance.now(),pvp=state.mode==='pvp',interval=pvp?PVP_INPUT_INTERVAL_MS:65;
@@ -9413,6 +9444,11 @@ function sendLocalPVEInput(force=false){
    ].join('|');
    if(signature===NetworkAdapter.lastInputSignature&&now-NetworkAdapter.lastInputSentAt<PVP_INPUT_KEEPALIVE_MS)return;
    NetworkAdapter.lastInputSignature=signature;
+ }
+ if(pvp&&!NetworkAdapter.isHost){
+   input.pvpInputSeq=++NetworkAdapter.pvpInputSeq;
+   const hero=pvpLocalHero();
+   if(hero)hero.pvpLastInputSeq=input.pvpInputSeq;
  }
  NetworkAdapter.lastInputSentAt=now;
  NetworkAdapter.sendInput(input).catch(console.error);
@@ -9438,6 +9474,10 @@ function pvpPredictGuestLocal(dt){
  if(!Number.isFinite(ax)||!Number.isFinite(ay))return;
  const ex=ax-e.x,ey=ay-e.y,error=Math.hypot(ex,ey);
  if(!Number.isFinite(error)||error<.01)return;
+ const latestInputSeq=Number(NetworkAdapter.pvpInputSeq)||0;
+ const acknowledgedInputSeq=Math.max(0,Number(e.netAuthInputSeq??e.pvpLastInputSeq)||0);
+ const hasUnacknowledgedInput=acknowledgedInputSeq<latestInputSeq;
+ const authArrivalAge=Math.max(0,now-Number(e.netAuthArrivalAt||now));
  if(regional){
    // The host snapshot is necessarily older than the locally-owned pose.
    // Do not drag the remote player backwards. Only a catastrophic divergence
@@ -9445,7 +9485,12 @@ function pvpPredictGuestLocal(dt){
    if(error>PVP_REGION_HARD_SNAP_ERROR_PX){e.x=ax;e.y=ay;pvpClampEntity(e)}
    return;
  }
- // Huge divergence means teleport/knockback/respawn: authority wins immediately.
+ // If the snapshot has not acknowledged our latest input, it describes the
+ // local player's past. Do not pull the guest backwards to that old pose.
+ // Once the host catches up, normal soft reconciliation resumes.
+ if(hasUnacknowledgedInput&&!locked&&authArrivalAge<800)return;
+ // Huge divergence after acknowledged input means teleport/knockback/respawn:
+ // authority wins immediately.
  if(error>PVP_LOCAL_SNAP_ERROR_PX||(locked&&error>90)){
    e.x=ax;e.y=ay;pvpClampEntity(e);return;
  }
