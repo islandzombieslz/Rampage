@@ -6952,6 +6952,18 @@ function historyApplyCombatSfx(data){
  e.pvpWarriorSingleSerial=Math.max(Number(e.pvpWarriorSingleSerial)||0,serial);
  return pvpPlayEntitySfxNow(e,'warrior-single',serial,'pvpWarriorSingle',Number(data.volume)||1);
 }
+function historyTickLocalWarriorComboVisual(e,now=performance.now()){
+ if(!pvpIsWarriorHero(e)||!e?.alive||!(Number(e.pvpWarriorComboUntil)>0))return false;
+ if(Number(e.pvpWarriorComboRequestUntil)>0&&now>Number(e.pvpWarriorComboRequestUntil))
+   return pvpCancelWarriorCombo(e,now);
+ if(now<Number(e.pvpWarriorComboUntil))return true;
+ const repeat=Number(e.pvpWarriorComboRequestUntil)>=now;
+ e.pvpWarriorComboUntil=0;e.pvpWarriorComboStartedAt=0;e.pvpWarriorComboHitIndex=0;e.pvpWarriorComboSfxIndex=0;
+ e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);
+ if(repeat)return pvpStartWarriorCombo(e,now);
+ e.pvpWarriorComboRequestUntil=0;e.pvpWarriorLastBasicAt=0;
+ return false;
+}
 function historyPreviewLocalAction(e,action,targetId){
  if(!e?.alive)return false;
  const now=performance.now();
@@ -7337,6 +7349,7 @@ const HistoryAdapter={
    }
    const me=pvpLocalHero();
    if(me?.alive){
+     historyTickLocalWarriorComboVisual(me,now);
      const input=getLocalMovement();
      let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
      if(len>1){dx/=len;dy/=len}
