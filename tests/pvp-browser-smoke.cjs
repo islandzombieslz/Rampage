@@ -401,6 +401,36 @@ const pvpTestHook=`window.__pvpBrowserTest={
    return {player:[hero?.maxHp,hero?.maxShield],allies:allies.map(e=>[e.maxHp,e.maxShield]),humans};
  },
  basicSerial(){return pvpLocalHero()?.attackSerial||0},
+ historyAttackVisualIsolation(){
+   const own=pvpLocalHero();if(!own)return null;
+   const now=performance.now(),serverTime=Date.now();
+   const keys=['controlled','attackCooldown','attackSerial','comboStep','regenSerial',
+     'pvpWarriorSingleSerial','pvpWarriorSingleUntil','pvpWarriorLastBasicAt',
+     'pvpWarriorComboSerial','pvpWarriorComboStartedAt','pvpWarriorComboUntil','pvpWarriorComboRequestUntil',
+     'pvpMeleeVisualUntil','pvpActionUntil','historyServerSingleSerial','historyServerComboSerial',
+     'historyServerSpecialSerial','pvpSpecialSerial','pvpWarriorChargeUntil','pvpWarriorChargeStartedAt','pvpWarriorChargeAngle'];
+   const saved=Object.fromEntries(keys.map(k=>[k,own[k]]));
+   own.controlled=true;own.attackCooldown=.12;own.pvpWarriorLastBasicAt=now-180;
+   own.pvpWarriorSingleSerial=7;own.pvpWarriorSingleUntil=now+760;
+   own.historyServerSingleSerial=6;own.historyServerComboSerial=3;
+   const singleUntil=own.pvpWarriorSingleUntil,lastBasic=own.pvpWarriorLastBasicAt,cooldown=own.attackCooldown;
+   historySyncWarriorCombatSnapshot(own,{
+     attackSerial:Math.max(1,Number(own.attackSerial)||0),comboStep:1,regenSerial:Number(own.regenSerial)||0,
+     attackCooldownUntil:serverTime+900,singleSerial:7,singleUntil:serverTime-1,lastBasicAt:serverTime-900,
+     comboSerial:3,comboUntil:0,comboRequestUntil:0,
+     specialSerial:Number(own.historyServerSpecialSerial)||0,specialActiveUntil:0,specialAngle:Number(own.heading)||0
+   },now,serverTime);
+   const snapshotPreserved=own.pvpWarriorSingleUntil===singleUntil&&
+     own.pvpWarriorLastBasicAt===lastBasic&&Math.abs(own.attackCooldown-cooldown)<.001;
+   own.pvpWarriorComboUntil=now+800;own.pvpWarriorComboStartedAt=now-100;own.pvpWarriorComboRequestUntil=now+350;
+   own.attackSerial=20;own.historyServerComboSerial=4;
+   historyApplyAuthoritativeAction(own,{action:'attack',kind:'combo-cancel',attackSerial:19,comboSerial:4,at:serverTime});
+   const stalePreserved=own.pvpWarriorComboUntil>now;
+   historyApplyAuthoritativeAction(own,{action:'attack',kind:'combo-cancel',attackSerial:20,comboSerial:4,at:serverTime});
+   const currentCancelled=Number(own.pvpWarriorComboUntil)===0;
+   Object.assign(own,saved);
+   return {snapshotPreserved,stalePreserved,currentCancelled};
+ },
  warriorMechanics(){
    const own=pvpLocalHero();if(!own)return null;
    const warrior=pvpBaseEntity(PVP_HERO_BY_ID.warrior,700,700,own.team,'#fff',null,false);
@@ -583,9 +613,12 @@ async function main(){
    await attackButton.hover();await page.mouse.down();
    const immediateBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
    assert(immediateBasic>beforeBasic,'normal attack reacts immediately on press');
-   await page.waitForTimeout(720);await page.mouse.up();
+   await page.waitForTimeout(900);await page.mouse.up();
    const heldBasic=await page.evaluate(()=>window.__pvpBrowserTest.basicSerial());
    assert(heldBasic>=beforeBasic+3,'holding attack must produce repeated basic attacks');
+   const historyVisual=await page.evaluate(()=>window.__pvpBrowserTest.historyAttackVisualIsolation());
+   assert.deepEqual(historyVisual,{snapshotPreserved:true,stalePreserved:true,currentCancelled:true},
+     'History local attack GIF clocks must survive snapshots and ignore stale combo cancels');
    const touchAim=await page.evaluate(()=>window.__pvpBrowserTest.touchAimIsolation());
    assert.deepEqual(touchAim,{blocked:false,accepted:true,aimPointer:42,dx:.62,dy:-.31,manual:true,angle:true},
      'joystick pointer cannot steer flame; a second touch aims while movement stays active');
