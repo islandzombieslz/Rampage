@@ -6885,12 +6885,13 @@ function historyApplyAuthoritativeAction(e,data){
 
  if(action==='special'){
    const serial=Number(data.specialSerial)||0,previous=Number(e.historyServerSpecialSerial)||0;
-   const remaining=historyServerRemaining(data.specialActiveUntil,data.at);
+   const remaining=historyServerRemaining(data.specialActiveUntil,data.at),authoritativeNew=serial>previous;
+   const matchingPreview=serial===Number(e.pvpSpecialSerial)&&Number(e.pvpWarriorChargeUntil)>now;
    e.historyServerSpecialSerial=Math.max(previous,serial);
    e.pvpWarriorChargeAngle=Number.isFinite(Number(data.angle))?Number(data.angle):(Number(e.heading)||0);
-   if(serial>Number(e.pvpSpecialSerial)||0){
+   if(authoritativeNew&&!matchingPreview){
      pvpCancelWarriorCombo(e,now);e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
-     e.pvpSpecialSerial=serial;
+     e.pvpSpecialSerial=Math.max((Number(e.pvpSpecialSerial)||0)+1,serial);
      if(remaining>0){
        e.pvpWarriorChargeStartedAt=now;
        e.pvpWarriorChargeUntil=now+remaining;
@@ -6905,9 +6906,11 @@ function historyApplyAuthoritativeAction(e,data){
  if(action!=='attack')return false;
  if(kind==='combo'){
    const serial=Number(data.comboSerial)||0,remaining=historyServerRemaining(data.comboUntil,data.at);
-   e.historyServerComboSerial=Math.max(Number(e.historyServerComboSerial)||0,serial);
-   if(serial>Number(e.pvpWarriorComboSerial)||0){
-     e.pvpWarriorComboSerial=serial;e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
+   const previous=Number(e.historyServerComboSerial)||0,authoritativeNew=serial>previous;
+   const matchingPreview=serial===Number(e.pvpWarriorComboSerial)&&Number(e.pvpWarriorComboUntil)>now;
+   e.historyServerComboSerial=Math.max(previous,serial);
+   if(authoritativeNew&&!matchingPreview){
+     e.pvpWarriorComboSerial=Math.max((Number(e.pvpWarriorComboSerial)||0)+1,serial);e.pvpWarriorSingleUntil=0;e.pvpWarriorLastBasicAt=0;
      if(remaining>0){
        e.pvpWarriorComboStartedAt=now;
        e.pvpWarriorComboUntil=now+remaining;
@@ -6924,14 +6927,17 @@ function historyApplyAuthoritativeAction(e,data){
    return true;
  }
  const serial=Number(data.singleSerial)||0,remaining=historyServerRemaining(data.singleUntil,data.at);
- e.historyServerSingleSerial=Math.max(Number(e.historyServerSingleSerial)||0,serial);
- if(serial>Number(e.pvpWarriorSingleSerial)||0){
-   e.pvpWarriorSingleSerial=serial;e.pvpWarriorLastBasicAt=now;
+ const previous=Number(e.historyServerSingleSerial)||0,authoritativeNew=serial>previous;
+ const matchingPreview=serial===Number(e.pvpWarriorSingleSerial)&&Number(e.pvpWarriorSingleUntil)>now;
+ e.historyServerSingleSerial=Math.max(previous,serial);
+ if(Number(e.pvpWarriorComboUntil)>now&&Number(data.comboSerial||0)<Number(e.pvpWarriorComboSerial||0))pvpCancelWarriorCombo(e,now);
+ if(authoritativeNew&&!matchingPreview){
+   e.pvpWarriorSingleSerial=Math.max((Number(e.pvpWarriorSingleSerial)||0)+1,serial);e.pvpWarriorLastBasicAt=now;
    if(remaining>0){
      e.pvpWarriorSingleUntil=now+remaining;e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
      e.attackAnim=Math.min(.31,remaining/1000);
    }
- }
+ }else if(authoritativeNew&&matchingPreview)e.pvpWarriorLastBasicAt=now;
  e.attackCooldown=Math.max(Number(e.attackCooldown)||0,PVP_BASE.meleeCooldown);
  return true;
 }
@@ -6970,20 +6976,22 @@ function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
  e.attackCooldown=Math.max(0,((Number(sp.attackCooldownUntil)||0)-serverTime)/1000);
 
  const singleSerial=Number(sp.singleSerial)||0,singleRemaining=Math.max(0,(Number(sp.singleUntil)||0)-serverTime);
- const previousSingle=Number(e.historyServerSingleSerial)||0;
+ const previousSingle=Number(e.historyServerSingleSerial)||0,authoritativeSingleNew=singleSerial>previousSingle;
+ const matchingSinglePreview=singleSerial===Number(e.pvpWarriorSingleSerial)&&Number(e.pvpWarriorSingleUntil)>arrival;
  e.historyServerSingleSerial=Math.max(previousSingle,singleSerial);
- if(singleSerial>Number(e.pvpWarriorSingleSerial)||0){
-   e.pvpWarriorSingleSerial=singleSerial;
+ if(authoritativeSingleNew&&!matchingSinglePreview){
+   e.pvpWarriorSingleSerial=Math.max((Number(e.pvpWarriorSingleSerial)||0)+1,singleSerial);
    if(singleRemaining>0){e.pvpWarriorSingleUntil=arrival+singleRemaining;e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil}
  }
  if(singleRemaining<=0&&singleSerial===Number(e.historyServerSingleSerial)&&Number(e.pvpWarriorComboUntil)<=arrival)
    e.pvpWarriorSingleUntil=0;
 
  const comboSerial=Number(sp.comboSerial)||0,comboRemaining=Math.max(0,(Number(sp.comboUntil)||0)-serverTime);
- const previousCombo=Number(e.historyServerComboSerial)||0;
+ const previousCombo=Number(e.historyServerComboSerial)||0,authoritativeComboNew=comboSerial>previousCombo;
+ const matchingComboPreview=comboSerial===Number(e.pvpWarriorComboSerial)&&Number(e.pvpWarriorComboUntil)>arrival;
  e.historyServerComboSerial=Math.max(previousCombo,comboSerial);
- if(comboSerial>Number(e.pvpWarriorComboSerial)||0){
-   e.pvpWarriorComboSerial=comboSerial;
+ if(authoritativeComboNew&&!matchingComboPreview){
+   e.pvpWarriorComboSerial=Math.max((Number(e.pvpWarriorComboSerial)||0)+1,comboSerial);
    if(comboRemaining>0){
      e.pvpWarriorComboStartedAt=arrival-Math.max(0,PVP_WARRIOR.comboFallbackMs-comboRemaining);
      e.pvpWarriorComboUntil=arrival+comboRemaining;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;e.pvpActionUntil=e.pvpWarriorComboUntil;
@@ -7000,10 +7008,11 @@ function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
  else if(comboRemaining<=0)e.pvpWarriorLastBasicAt=0;
 
  const specialSerial=Number(sp.specialSerial)||0,chargeRemaining=Math.max(0,(Number(sp.specialActiveUntil)||0)-serverTime);
- const previousSpecial=Number(e.historyServerSpecialSerial)||0;
+ const previousSpecial=Number(e.historyServerSpecialSerial)||0,authoritativeSpecialNew=specialSerial>previousSpecial;
+ const matchingSpecialPreview=specialSerial===Number(e.pvpSpecialSerial)&&Number(e.pvpWarriorChargeUntil)>arrival;
  e.historyServerSpecialSerial=Math.max(previousSpecial,specialSerial);
- if(specialSerial>Number(e.pvpSpecialSerial)||0){
-   e.pvpSpecialSerial=specialSerial;
+ if(authoritativeSpecialNew&&!matchingSpecialPreview){
+   e.pvpSpecialSerial=Math.max((Number(e.pvpSpecialSerial)||0)+1,specialSerial);
    if(chargeRemaining>0){
      e.pvpWarriorChargeStartedAt=arrival-Math.max(0,PVP_WARRIOR.specialFallbackMs-chargeRemaining);
      e.pvpWarriorChargeUntil=arrival+chargeRemaining;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;e.pvpActionUntil=e.pvpWarriorChargeUntil;
