@@ -82,7 +82,7 @@ assert(html.includes('function historyApplyAuthoritativeAction')&&html.includes(
   html.includes('historyServerSpecialSerial')&&html.includes('historyServerComboSerial')&&html.includes('historyServerSingleSerial'),
   'History client must use authoritative Cloudflare action serials instead of reconstructing actions from jitter');
 assert(html.includes("if(data.type==='combat_sfx'){historyApplyCombatSfx(data);return}")&&
-  html.includes("pvpPlayEntitySfxNow(e,'warrior-single',serial,'pvpWarriorSingle'")&&
+  html.includes("pvpPlayEntitySfxNow(e,'history-warrior-combo',serial,'pvpWarriorSingle'")&&
   html.includes('function pvpEntitySfxMix(e)')&&html.includes('updatePvpCombatSfx(now)'),
   'History combat sounds must reuse PvP spatial audio and serial de-duplication');
 assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+1000')&&
@@ -95,7 +95,7 @@ assert(worker.includes('action === "combo_cancel"')&&worker.includes('"combo-can
   html.includes('const staleForLocal=e.controlled&&Number(e.attackSerial||0)>Number(data.attackSerial||0)'),
   'History must cancel held Warrior combos on Cloudflare immediately without letting a stale cancel overwrite a newer local attack');
 assert(html.includes('function historyTickLocalWarriorComboVisual')&&
-  html.includes('historyTickLocalWarriorComboVisual(me,now)')&&html.includes('if(repeat)return pvpStartWarriorCombo(e,now)'),
+  html.includes('historyTickLocalWarriorComboVisual(me,now)')&&html.includes('if(repeat)return historyStartLocalWarriorCombo(e,now)'),
   'History must keep held local combo GIF cycles continuous without running local damage simulation');
 assert(html.includes('if(!controlled)e.attackCooldown=')&&
   html.includes('if(!controlled&&authoritativeSingleNew&&!matchingSinglePreview)')&&
@@ -117,3 +117,5 @@ assert(worker.includes('burnSourceX')&&worker.includes('burnSourceY')&&
   'History burn ticks must use PvP-style light hit feedback without knockback');
 
 console.log('History smoke checks passed.');
+
+require('./history-combat-regression.cjs');
