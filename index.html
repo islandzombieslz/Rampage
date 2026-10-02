@@ -6900,7 +6900,7 @@ $('#historyServerConfirm').onclick=()=>{
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$('.mode-card').forEach(c=>c.onclick=()=>{$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}if(state.mode==='history')openHistoryServerBrowser().catch(console.error)});
+$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}if(state.mode==='history')openHistoryServerBrowser().catch(console.error)});
 $('#configureBtn').onclick=async()=>{
   if(state.mode==='history'){await openHistoryServerBrowser();return}
   if(state.mode==='war'){
