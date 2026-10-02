@@ -110,6 +110,7 @@ assert(html.includes("showXpInPvp"),'XP HUD visibility must distinguish PvP from
 assert(html.includes('id="warGoalToasts"'),'goal toast container');
 assert(!/<section id="gameScreen" class="screen active"/.test(html),'hidden game must not be marked active on boot');
 assert(/<div id="accountXpHud" aria-label="Nível da conta">/.test(html),'XP HUD must start visible');
+assert(html.includes('id="accountXpLevelStar"')&&html.includes('assets/ui/estrela-hud-nivel.png'),'level HUD uses the local star sprite');
 assert(html.includes("authStateReady()"),'restore existing account before anonymous sign-in');
 assert(html.includes('firebaseAccountUIStarted=true'),'register authentication listener only once');
 const screens=['menuScreen','modeScreen','joinScreen','gameScreen'].map(id=>({
@@ -185,14 +186,14 @@ async function testCloudOnlyAccountProgress(){
  assert.equal(ap().totalXp,null,'no local XP fallback');
  assert.match(mockNodes['#accountXpSync'].textContent,/regras do Firebase/i);
  assert.equal(mockNodes['#accountXpHud'].hidden,false,'HUD visible on initial menu');
- assert.equal(mockNodes['#accountXpLevel'].textContent,'Nível —');
+ assert.equal(mockNodes['#accountXpLevel'].textContent,'—');
 
  permitted=true;connected=false;connectionCallback({val:()=>false});
  connected=true;connectionCallback({val:()=>true});
  await tick();await tick();
  assert.equal(ap().status,'ready','profile read+write verification succeeds');
  assert.equal(profile.totalXp,0);
- assert.equal(mockNodes['#accountXpLevel'].textContent,'Nível 1');
+ assert.equal(mockNodes['#accountXpLevel'].textContent,'1');
 
  const first={id:'m_abcdefghijklmnop',mode:'war',winnerId:uid,awards:{[uid]:150}};
  ctx.mockResult=first;
