@@ -1,0 +1,49 @@
+name: One-time boot fix validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-boot-fix-validation.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Run regression tests
+        run: |
+          node tests/history-smoke.cjs
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Reproduce boot in Chromium
+        shell: bash
+        run: |
+          python3 -m http.server 8080 >/tmp/http.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage             --enable-logging=stderr --v=1 --virtual-time-budget=9000             --dump-dom http://127.0.0.1:8080/ >/tmp/dom.html 2>/tmp/chrome.log || true
+          kill "$SERVER_PID" 2>/dev/null || true
+          echo "=== CONSOLE ==="
+          grep -E -i 'Uncaught|ReferenceError|TypeError|SyntaxError|INFO:CONSOLE' /tmp/chrome.log | tail -100 || true
+          if grep -E -q 'Uncaught (TypeError|ReferenceError|SyntaxError)' /tmp/chrome.log; then
+            echo "Browser JavaScript error detected"
+            exit 1
+          fi
+          if grep -q "\$('\.mode-card').forEach" index.html; then
+            echo "Broken single-selector forEach still present"
+            exit 1
+          fi
+      - name: Remove temporary workflows
+        run: |
+          rm -f .github/workflows/one-time-boot-diagnostic.yml
+          rm -f .github/workflows/one-time-localize-history-art.yml
+          rm -f .github/workflows/one-time-boot-fix-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/
+          git commit -m "Clean temporary boot diagnostics"
+          git push origin HEAD:main
