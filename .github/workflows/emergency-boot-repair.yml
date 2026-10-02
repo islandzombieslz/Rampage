@@ -1,0 +1,62 @@
+name: Emergency boot repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-boot-repair.yml'
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Repair broken mode selector
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          bad="$('.mode-card').forEach(c=>c.onclick=()=>{$('.mode-card').forEach(x=>x.classList.remove('selected'));"
+          good="$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));"
+          count=s.count(bad)
+          if count != 1:
+              raise SystemExit(f'broken selector count={count}')
+          s=s.replace(bad,good,1)
+          if "$('.mode-card').forEach" in s:
+              raise SystemExit('broken selector still present after repair')
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Run regression tests
+        run: |
+          node tests/history-smoke.cjs
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Verify boot in Chromium before commit
+        shell: bash
+        run: |
+          python3 -m http.server 8080 >/tmp/http.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage             --enable-logging=stderr --v=1 --virtual-time-budget=9000             --dump-dom http://127.0.0.1:8080/ >/tmp/dom.html 2>/tmp/chrome.log || true
+          kill "$SERVER_PID" 2>/dev/null || true
+          echo "=== BROWSER CONSOLE ==="
+          grep -E -i 'Uncaught|ReferenceError|TypeError|SyntaxError|INFO:CONSOLE' /tmp/chrome.log | tail -120 || true
+          if grep -E -q 'Uncaught (TypeError|ReferenceError|SyntaxError)' /tmp/chrome.log; then
+            echo "JavaScript boot error still present"
+            exit 1
+          fi
+      - name: Commit repaired boot and clean temporary workflows
+        run: |
+          rm -f .github/workflows/one-time-boot-diagnostic.yml
+          rm -f .github/workflows/one-time-localize-history-art.yml
+          rm -f .github/workflows/one-time-boot-fix-validation.yml
+          rm -f .github/workflows/emergency-boot-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/
+          git commit -m "Repair game boot after History menu change"
+          git push origin HEAD:main
