@@ -93,5 +93,9 @@ assert(worker.includes('retaliatePending')&&worker.includes('retaliateImmediate'
   worker.includes('dragon.nextShotAt = 0')&&worker.includes('dragon.closeShotAt = 0')&&
   worker.includes('dragon.flightState === "flying"'),
   'History dragons must preserve the PvP first-hit retaliation behavior even while staggered');
+assert(worker.includes('projectile.pvpHit = true')&&worker.includes('projectile.hitUntil = now + 400')&&
+  worker.includes('105, 60')&&worker.includes('impact.tilt = 6')&&
+  html.includes("if(data.type==='projectile_hit')")&&html.includes('p.pvpHit=true'),
+  'History fireballs must preserve PvP impact knockback and the 400 ms collision linger');
 
 console.log('History smoke checks passed.');
