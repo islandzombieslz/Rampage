@@ -52,7 +52,11 @@ const firebaseStub=String.raw`
   }
  };
  window.FirebaseBridge=F;
+ // The Firebase module slot appears before the game's main inline script.
+ // Dispatch once after parsing as well so the production listener cannot miss
+ // the test-only readiness event at a microtask checkpoint.
  queueMicrotask(()=>window.dispatchEvent(new Event('firebase-ready')));
+ setTimeout(()=>window.dispatchEvent(new Event('firebase-ready')),0);
 })();
 `;
 // Inject a test-only hook inside the game's closure; nothing is exported by
