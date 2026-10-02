@@ -25,8 +25,8 @@ jobs:
           if count != 1:
               raise SystemExit(f'broken selector count={count}')
           s=s.replace(bad,good,1)
-          if "$('.mode-card').forEach" in s:
-              raise SystemExit('broken selector still present after repair')
+          if s.count(good) != 1:
+              raise SystemExit('correct selector was not written exactly once')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Run regression tests
