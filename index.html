@@ -1302,18 +1302,39 @@ html,body{
 #pvpCombatHud{position:absolute;left:calc(var(--safe-left) + 6px);bottom:calc(var(--safe-bottom) + 5px);z-index:42;
  display:flex;align-items:flex-end;gap:5px;pointer-events:auto}
 #pvpCombatHud[hidden]{display:none!important}
-#pvpCombatHud button{width:clamp(54px,8vw,78px);height:clamp(54px,9vh,73px);min-height:0;border-radius:10px;
- padding:3px;position:relative;overflow:hidden;border:2px solid #544c3a;background:#171d23e8;color:#fff;
- display:flex;align-items:center;flex-direction:column;justify-content:space-around;font-weight:900;text-shadow:0 1px 2px #000}
-#pvpCombatHud button b{font-size:clamp(7px,.9vw,10px);z-index:2}
-#pvpCombatHud .pvp-hud-symbol{font-size:clamp(18px,2.4vw,25px);z-index:2}
-#pvpCombatHud button.active{border-color:#ffe16b;box-shadow:0 0 9px #ffb64f8c}
-#pvpCombatHud .pvp-lock{position:absolute;inset:0;background:#020406ec;transform:translateY(100%);z-index:1;pointer-events:none}
-#pvpCombatHud button.cooling .pvp-lock{transform:translateY(0);transition:transform .14s linear}
-#pvpCombatHud .pvp-cooldown{position:absolute;bottom:1px;z-index:3;color:#fff;font-size:11px}
-#pvpCombatHud button.unavailable{opacity:.45;filter:grayscale(1)}
-#pvpCombatHud button.unavailable .pvp-hud-symbol{font-size:22px}
-#gameScreen.pvp-mode #attackBtn{right:calc(var(--safe-right) + 5px);bottom:calc(var(--safe-bottom) + 7px)}
+#pvpCombatHud [data-pvp-action]{appearance:none;-webkit-appearance:none;touch-action:manipulation}
+#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(78px,10vw,104px);height:clamp(48px,8vh,62px);
+ display:flex;align-items:flex-end;justify-content:flex-start}
+#pvpCombatHud .pvp-special-button{position:relative;width:clamp(66px,8vw,84px);height:16px;min-height:16px;margin:0 20px 4px 0;
+ padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:999px;background:#17191c;box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007}
+#pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
+ border-radius:999px;background:linear-gradient(90deg,#a9461d,#ed8d26 62%,#ffd75a);transition:width .12s linear}
+#pvpCombatHud .pvp-special-button.ready{border-color:#e6bd55;box-shadow:inset 0 1px 4px #0008,0 0 8px #e6a83d8a}
+#pvpCombatHud .pvp-special-button.ready .pvp-special-fill{filter:brightness(1.12)}
+#pvpCombatHud .pvp-special-button.unavailable{opacity:.42;filter:grayscale(1)}
+#pvpCombatHud .pvp-special-button .pvp-cooldown{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
+ color:#fff;font-size:9px;font-weight:900;line-height:1;text-shadow:0 1px 2px #000}
+#pvpCombatHud .pvp-special-icon{position:absolute;right:0;bottom:-1px;width:clamp(40px,5.2vw,54px);height:clamp(40px,5.2vw,54px);
+ object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 4px #0008)}
+#pvpCombatHud .pvp-special-icon[hidden]{display:none!important}
+#pvpCombatHud .pvp-frame-slot{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px);min-height:0;padding:7px;
+ overflow:hidden;border:0;border-radius:0;background:transparent url('assets/ui/pvp/moldura-armas.png') center/contain no-repeat;
+ display:flex;align-items:center;justify-content:center;box-shadow:none}
+#pvpCombatHud .pvp-frame-slot.active{filter:brightness(1.12);transform:scale(1.035)}
+#pvpCombatHud .pvp-frame-slot.unavailable{opacity:.42;filter:grayscale(1)}
+#pvpCombatHud .pvp-slot-icon{position:relative;z-index:2;width:72%;height:72%;object-fit:contain;pointer-events:none;user-select:none;
+ filter:drop-shadow(0 2px 2px #0008)}
+#pvpCombatHud .pvp-slot-icon[hidden]{display:none!important}
+#pvpCombatHud .pvp-frame-slot .pvp-lock{position:absolute;inset:12%;z-index:1;border-radius:22%;background:#020406d9;
+ transform:translateY(100%);pointer-events:none}
+#pvpCombatHud .pvp-frame-slot .pvp-cooldown{position:absolute;left:3px;right:3px;bottom:4px;z-index:3;color:#fff;
+ font-size:9px;font-weight:900;line-height:1;text-align:center;text-shadow:0 1px 2px #000}
+#gameScreen.pvp-mode #attackBtn{right:calc(var(--safe-right) + 5px);bottom:calc(var(--safe-bottom) + 5px);
+ width:clamp(96px,13vw,126px);height:clamp(96px,13vw,126px);padding:0;border:0;border-radius:0;box-shadow:none;
+ background:transparent url('assets/ui/pvp/botao-ataque.png') center/contain no-repeat;color:transparent;font-size:0;text-shadow:none;
+ transform-origin:center;filter:drop-shadow(0 4px 5px #0007)}
+#gameScreen.pvp-mode #attackBtn.pvp-attack-pulse{animation:pvpAttackPulse .18s ease-out}
+@keyframes pvpAttackPulse{0%{transform:scale(1)}45%{transform:scale(.88)}78%{transform:scale(1.07)}100%{transform:scale(1)}}
 #gameScreen.pvp-mode #touchControls{bottom:calc(var(--safe-bottom) + 80px)}
 #gameScreen.pvp-mode .mage-staff.pvp-staff-strike{animation:pvpStaffStrike .31s ease-out}
 @keyframes pvpStaffStrike{0%{transform:rotate(-35deg)}55%{transform:rotate(46deg)}100%{transform:rotate(0deg)}}
@@ -1339,10 +1360,13 @@ html,body{
 #accountStatus{font-size:12px;color:var(--muted);margin-top:8px}#accountName{max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #firebaseStatus{position:absolute;left:12px;bottom:10px;z-index:30;font-size:10px;color:#8b949e}
 #accountXpHud{position:absolute;top:calc(var(--safe-top) + 6px);left:calc(var(--safe-left) + 8px);z-index:55;
- display:flex;align-items:center;gap:9px;pointer-events:none;font-family:inherit}
+ display:flex;align-items:center;gap:7px;pointer-events:none;font-family:inherit}
 #accountXpHud[hidden]{display:none!important}
-#accountXpLevel{color:#fff;font-weight:900;font-size:clamp(12px,1.4vw,17px);white-space:nowrap;
- -webkit-text-stroke:.65px #080807;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000}
+#accountXpLevelBadge{position:relative;width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center}
+#accountXpLevelStar{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}
+#accountXpLevel{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
+ color:#fff;font-weight:950;font-size:clamp(13px,1.6vw,18px);line-height:1;white-space:nowrap;
+ -webkit-text-stroke:.7px #080807;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000}
 #accountXpTrack{position:relative;width:clamp(105px,15vw,174px);height:18px;border-radius:999px;
  overflow:hidden;background:#25231b;border:2px solid #120c07;box-shadow:0 1px 5px #0009}
 #accountXpFill{height:100%;width:0%;border-radius:999px;
@@ -1350,10 +1374,10 @@ html,body{
  transition:width .65s cubic-bezier(.16,.7,.25,1)}
 #accountXpText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
  color:#fff;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px #000,0 -1px 2px #000}
-#accountXpSync{position:absolute;left:0;top:24px;font-size:9px;color:#d4d9dd;white-space:nowrap;text-shadow:0 1px 2px #000}
+#accountXpSync{position:absolute;left:53px;top:24px;font-size:9px;color:#d4d9dd;white-space:nowrap;text-shadow:0 1px 2px #000}
 #accountXpSync[data-state="pending"]{color:#ffd67c}
 #accountXpSync[data-state="error"]{color:#ff7d7d;max-width:270px;white-space:normal;line-height:1.25}
-#accountXpReward{position:absolute;left:0;top:40px;background:#151a1ede;color:#ffdd63;font-size:11px;font-weight:800;
+#accountXpReward{position:absolute;left:53px;top:40px;background:#151a1ede;color:#ffdd63;font-size:11px;font-weight:800;
  padding:5px 8px;border:1px solid #ffe16c88;border-radius:8px;white-space:nowrap;text-shadow:0 1px 3px #000}
 #accountXpReward[hidden]{display:none!important}
 #accountXpHud.xp-level-up #accountXpTrack{animation:xpTrackPulse .7s ease-out}
@@ -2885,7 +2909,10 @@ window.dispatchEvent(new Event('firebase-ready'));
 <div id="assetWarning">Não foi possível carregar um ou mais assets locais do jogo.</div>
 <div id="mobileStartHint"><span>Toque para manter o jogo em tela cheia</span></div>
 <div id="accountXpHud" aria-label="Nível da conta">
- <strong id="accountXpLevel">Nível —</strong>
+ <div id="accountXpLevelBadge">
+   <img id="accountXpLevelStar" src="assets/ui/estrela-hud-nivel.png" alt="" draggable="false" decoding="async">
+   <strong id="accountXpLevel">—</strong>
+ </div>
  <div id="accountXpTrack"><div id="accountXpFill"></div><span id="accountXpText">XP da conta</span></div>
  <div id="accountXpSync" data-state="pending">Conectando à sua conta…</div>
  <div id="accountXpReward" hidden></div>
@@ -3156,11 +3183,20 @@ window.dispatchEvent(new Event('firebase-ready'));
       <div id="joystickBase"></div>
       <div id="joystickKnob"></div>
     </div>
-    <button id="attackBtn">ATACAR</button>
+    <button id="attackBtn" aria-label="Atacar">ATACAR</button>
      <div id="pvpCombatHud" hidden aria-label="Controles de combate PvP">
-       <button type="button" data-pvp-action="special"><b>ESPECIAL</b><span class="pvp-hud-symbol">✦</span><span class="pvp-lock"></span><small class="pvp-cooldown"></small></button>
-       <button type="button" data-pvp-action="power"><b>PODER</b><span class="pvp-hud-symbol">✧</span><span class="pvp-lock"></span><small class="pvp-cooldown"></small></button>
-       <button type="button" data-pvp-action="attack" class="active"><b>ATAQUE</b><span class="pvp-hud-symbol">⚔</span><span class="pvp-lock"></span><small class="pvp-cooldown"></small></button>
+       <div class="pvp-special-wrap">
+         <button type="button" data-pvp-action="special" class="pvp-special-button" aria-label="Especial">
+           <span class="pvp-special-fill"></span><small class="pvp-cooldown"></small>
+         </button>
+         <img class="pvp-special-icon" src="assets/ui/pvp/punho-especial-inativo.png" alt="" draggable="false" decoding="async">
+       </div>
+       <button type="button" data-pvp-action="power" class="pvp-frame-slot" aria-label="Poder">
+         <img class="pvp-slot-icon" alt="" draggable="false" decoding="async" hidden><span class="pvp-lock"></span><small class="pvp-cooldown"></small>
+       </button>
+       <button type="button" data-pvp-action="attack" class="pvp-frame-slot active" aria-label="Arma">
+         <img class="pvp-slot-icon" alt="" draggable="false" decoding="async" hidden><span class="pvp-lock"></span><small class="pvp-cooldown"></small>
+       </button>
      </div>
   </div>
 </section>
@@ -3679,8 +3715,16 @@ const ASSETS = {
   dragonFireball:'assets/dragon/bola-de-fogo.gif'
 };
 
+const PVP_UI_ASSETS=Object.freeze({
+ specialInactive:'assets/ui/pvp/punho-especial-inativo.png',
+ specialActive:'assets/ui/pvp/punho-especial-ativo.gif',
+ slotFrame:'assets/ui/pvp/moldura-armas.png',
+ attackButton:'assets/ui/pvp/botao-ataque.png',
+ levelStar:'assets/ui/estrela-hud-nivel.png'
+});
+
 /* PERSISTENT ASSET CACHE 2026-09-12 */
-const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/pvp/dragon-wings.ogg":"0d26ce33674d04de7b3f","assets/audio/sfx/pvp/warrior-special.ogg":"08f2e4d9bed287b6a998","assets/audio/sfx/pvp/warrior-walk.ogg":"05f20f3bac93ca521a6a","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/sword.png":"8105d9f3509070ea78e2","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/runtime/anubisIdle.gif":"d2c4dd390235bd593506","assets/runtime/anubisMeleeAttack.gif":"a6964099dba8fbe53e91","assets/runtime/anubisProjectile.gif":"16bf7779fadac01adaf5","assets/runtime/anubisRangedAttack.gif":"ac773984b5a4affceaaf","assets/runtime/anubisWalk.gif":"86233f85e461061af411","assets/runtime/brownAttack.gif":"7b8fd7dc30dfcb2c18b3","assets/runtime/brownIdle.gif":"14fd298519c4160f4312","assets/runtime/brownPower.gif":"f346b170457336825b38","assets/runtime/brownSpecial.gif":"ffa96a37521542d13e24","assets/runtime/brownWalk.gif":"1c2f94850831e5b4e5ed","assets/runtime/dragonAttack.gif":"9676ea524cac92259482","assets/runtime/dragonFireball.gif":"4085f3d153d414cffd98","assets/runtime/dragonFly.gif":"1bf4162ee27227a7d46a","assets/runtime/dragonGround.gif":"be7d795a1dbd9f9f1d6c","assets/runtime/dragonTakeoff.gif":"f787ba39a1158bf19112","assets/runtime/egyptFemaleMageIdle.gif":"bde77f0dc1bc0ec42718","assets/runtime/egyptFemaleMageSpecial.gif":"b97b168c13281a92202d","assets/runtime/egyptFemaleMageWalk.gif":"71e61bb9b7330dec5081","assets/runtime/egyptFemaleWarriorIdle.gif":"e508f526eea1f0871eb3","assets/runtime/egyptFemaleWarriorWalk.gif":"6cf0b9c441aaaafecb2f","assets/runtime/egyptMageIdle.gif":"6621d88b1489dfafec62","assets/runtime/egyptMagePower.gif":"02103b2073392caa2c07","assets/runtime/egyptMagePowerSpecial.gif":"bdbd89604459cc4b9fa8","assets/runtime/egyptMageSpecial.gif":"f470d2865da5c42b13aa","assets/runtime/egyptMageStaff.gif":"99ce483560a712cd5ec6","assets/runtime/egyptMageWalk.gif":"154f4bf71ee7469ca09e","assets/runtime/egyptWarriorIdle.gif":"4495a6280350a4132869","assets/runtime/egyptWarriorWalk.gif":"367ab11f83a7583acb18","assets/runtime/femaleIdle.gif":"2d13a2634c4f235a75e0","assets/runtime/femaleMageIdle.gif":"9a3b01ff2520d6cbed40","assets/runtime/femaleMageSpecial.gif":"e1b3a9423bfcf6b8e9a6","assets/runtime/femaleMageWalk.gif":"a71a5347e564ff831152","assets/runtime/femaleWalk.gif":"ee6bd307516a65236f86","assets/runtime/golemAttack.gif":"bb894a91e8585f2e3e62","assets/runtime/golemIdle.gif":"87f14204a62a1654ce7f","assets/runtime/golemSpecial.gif":"dec15b64c0a7574d4c4d","assets/runtime/golemWalk.gif":"477fb93ee8cfc8b69d08","assets/runtime/idle.gif":"79c24ba2cde5f9e504d3","assets/runtime/isisAttack.gif":"bca16377352d63b97db0","assets/runtime/isisIdle.gif":"d0d005a75c8323fa25b5","assets/runtime/isisPower.gif":"8c718e84e1a06fbbb88a","assets/runtime/isisSpecial.gif":"e52a7b177fe7d46590c9","assets/runtime/isisWalk.gif":"21cdff431f4e07d544f8","assets/runtime/kingIdle.gif":"76585d55c84fc3cc999f","assets/runtime/kingPower.gif":"500a76aed40864d69379","assets/runtime/kingSpecial.gif":"18e2cfcf2d40649414d6","assets/runtime/kingWalk.gif":"75a13bb75ad56488b333","assets/runtime/mageIdle.gif":"d37d7d7fe01bce21d629","assets/runtime/magePower.gif":"ebf3a91a9911e4e88366","assets/runtime/magePowerSpecial.gif":"6986e393081b8a830539","assets/runtime/mageSpecial.gif":"9f335f07256663456199","assets/runtime/mageStaff.gif":"f674fab649b4cf605ee5","assets/runtime/mageWalk.gif":"886cd556571e51e33b69","assets/runtime/najaAttack.gif":"e13edf02d58ad2393179","assets/runtime/najaIdle.gif":"dfe8e36fa7a5f977d6ba","assets/runtime/najaSpecial.gif":"867551f116d2a1f46b0a","assets/runtime/najaSpecialFinal.gif":"dca4420b2deacf8144b5","assets/runtime/najaWalk.gif":"44674e2952aec7b646e3","assets/runtime/poseidonIdle.gif":"04a28ec08ceb38ed9a73","assets/runtime/poseidonNormal.gif":"8b7df0bd63407417abd4","assets/runtime/poseidonSummonCast.gif":"9d5ba2722fe9265a1241","assets/runtime/poseidonWalk.gif":"af71144767e73ef5c729","assets/runtime/poseidonWaveCast.gif":"3531242ccc353800946f","assets/runtime/poseidonWavePower.gif":"42cb0df376a77f5f84d9","assets/runtime/pvpWarriorAttack.gif":"6334b6613ee9e6398ad7","assets/runtime/pvpWarriorCombo.gif":"86eb8f9aab5241bfab0b","assets/runtime/pvpWarriorDeath.gif":"281fdc908adab1f99691","assets/runtime/pvpWarriorSpecial.gif":"f3c6cffbdbed467af73c","assets/runtime/seahorseAttack.gif":"583226fd53b11fde11b4","assets/runtime/seahorseIdle.gif":"30def817e2b4d5d95253","assets/runtime/seahorseWalk.gif":"78f22447b93f2e416549","assets/runtime/walk.gif":"796400c5b2024a42dc7d","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/seahorse/card.png":"fb07fee512437b85d6ca"});
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/pvp/dragon-wings.ogg":"0d26ce33674d04de7b3f","assets/audio/sfx/pvp/warrior-special.ogg":"08f2e4d9bed287b6a998","assets/audio/sfx/pvp/warrior-walk.ogg":"05f20f3bac93ca521a6a","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/sword.png":"8105d9f3509070ea78e2","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/runtime/anubisIdle.gif":"d2c4dd390235bd593506","assets/runtime/anubisMeleeAttack.gif":"a6964099dba8fbe53e91","assets/runtime/anubisProjectile.gif":"16bf7779fadac01adaf5","assets/runtime/anubisRangedAttack.gif":"ac773984b5a4affceaaf","assets/runtime/anubisWalk.gif":"86233f85e461061af411","assets/runtime/brownAttack.gif":"7b8fd7dc30dfcb2c18b3","assets/runtime/brownIdle.gif":"14fd298519c4160f4312","assets/runtime/brownPower.gif":"f346b170457336825b38","assets/runtime/brownSpecial.gif":"ffa96a37521542d13e24","assets/runtime/brownWalk.gif":"1c2f94850831e5b4e5ed","assets/runtime/dragonAttack.gif":"9676ea524cac92259482","assets/runtime/dragonFireball.gif":"4085f3d153d414cffd98","assets/runtime/dragonFly.gif":"1bf4162ee27227a7d46a","assets/runtime/dragonGround.gif":"be7d795a1dbd9f9f1d6c","assets/runtime/dragonTakeoff.gif":"f787ba39a1158bf19112","assets/runtime/egyptFemaleMageIdle.gif":"bde77f0dc1bc0ec42718","assets/runtime/egyptFemaleMageSpecial.gif":"b97b168c13281a92202d","assets/runtime/egyptFemaleMageWalk.gif":"71e61bb9b7330dec5081","assets/runtime/egyptFemaleWarriorIdle.gif":"e508f526eea1f0871eb3","assets/runtime/egyptFemaleWarriorWalk.gif":"6cf0b9c441aaaafecb2f","assets/runtime/egyptMageIdle.gif":"6621d88b1489dfafec62","assets/runtime/egyptMagePower.gif":"02103b2073392caa2c07","assets/runtime/egyptMagePowerSpecial.gif":"bdbd89604459cc4b9fa8","assets/runtime/egyptMageSpecial.gif":"f470d2865da5c42b13aa","assets/runtime/egyptMageStaff.gif":"99ce483560a712cd5ec6","assets/runtime/egyptMageWalk.gif":"154f4bf71ee7469ca09e","assets/runtime/egyptWarriorIdle.gif":"4495a6280350a4132869","assets/runtime/egyptWarriorWalk.gif":"367ab11f83a7583acb18","assets/runtime/femaleIdle.gif":"2d13a2634c4f235a75e0","assets/runtime/femaleMageIdle.gif":"9a3b01ff2520d6cbed40","assets/runtime/femaleMageSpecial.gif":"e1b3a9423bfcf6b8e9a6","assets/runtime/femaleMageWalk.gif":"a71a5347e564ff831152","assets/runtime/femaleWalk.gif":"ee6bd307516a65236f86","assets/runtime/golemAttack.gif":"bb894a91e8585f2e3e62","assets/runtime/golemIdle.gif":"87f14204a62a1654ce7f","assets/runtime/golemSpecial.gif":"dec15b64c0a7574d4c4d","assets/runtime/golemWalk.gif":"477fb93ee8cfc8b69d08","assets/runtime/idle.gif":"79c24ba2cde5f9e504d3","assets/runtime/isisAttack.gif":"bca16377352d63b97db0","assets/runtime/isisIdle.gif":"d0d005a75c8323fa25b5","assets/runtime/isisPower.gif":"8c718e84e1a06fbbb88a","assets/runtime/isisSpecial.gif":"e52a7b177fe7d46590c9","assets/runtime/isisWalk.gif":"21cdff431f4e07d544f8","assets/runtime/kingIdle.gif":"76585d55c84fc3cc999f","assets/runtime/kingPower.gif":"500a76aed40864d69379","assets/runtime/kingSpecial.gif":"18e2cfcf2d40649414d6","assets/runtime/kingWalk.gif":"75a13bb75ad56488b333","assets/runtime/mageIdle.gif":"d37d7d7fe01bce21d629","assets/runtime/magePower.gif":"ebf3a91a9911e4e88366","assets/runtime/magePowerSpecial.gif":"6986e393081b8a830539","assets/runtime/mageSpecial.gif":"9f335f07256663456199","assets/runtime/mageStaff.gif":"f674fab649b4cf605ee5","assets/runtime/mageWalk.gif":"886cd556571e51e33b69","assets/runtime/najaAttack.gif":"e13edf02d58ad2393179","assets/runtime/najaIdle.gif":"dfe8e36fa7a5f977d6ba","assets/runtime/najaSpecial.gif":"867551f116d2a1f46b0a","assets/runtime/najaSpecialFinal.gif":"dca4420b2deacf8144b5","assets/runtime/najaWalk.gif":"44674e2952aec7b646e3","assets/runtime/poseidonIdle.gif":"04a28ec08ceb38ed9a73","assets/runtime/poseidonNormal.gif":"8b7df0bd63407417abd4","assets/runtime/poseidonSummonCast.gif":"9d5ba2722fe9265a1241","assets/runtime/poseidonWalk.gif":"af71144767e73ef5c729","assets/runtime/poseidonWaveCast.gif":"3531242ccc353800946f","assets/runtime/poseidonWavePower.gif":"42cb0df376a77f5f84d9","assets/runtime/pvpWarriorAttack.gif":"6334b6613ee9e6398ad7","assets/runtime/pvpWarriorCombo.gif":"86eb8f9aab5241bfab0b","assets/runtime/pvpWarriorDeath.gif":"281fdc908adab1f99691","assets/runtime/pvpWarriorSpecial.gif":"f3c6cffbdbed467af73c","assets/runtime/seahorseAttack.gif":"583226fd53b11fde11b4","assets/runtime/seahorseIdle.gif":"30def817e2b4d5d95253","assets/runtime/seahorseWalk.gif":"78f22447b93f2e416549","assets/runtime/walk.gif":"796400c5b2024a42dc7d","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/estrela-hud-nivel.png":"57107ead6f9469b56f00","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/pvp/botao-ataque.png":"d762d77d6ae58cb53d30","assets/ui/pvp/moldura-armas.png":"ba95ffb158b310b7b4e3","assets/ui/pvp/punho-especial-ativo.gif":"7a865133eb40f7d0ebe6","assets/ui/pvp/punho-especial-inativo.png":"dc0cb98473f8deea5f87","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/seahorse/card.png":"fb07fee512437b85d6ca"});
 // BEGIN GENERATED DISPLAY SPRITES
 const ORIGINAL_ASSETS=Object.freeze({...ASSETS});
 Object.assign(ASSETS,{"idle":"assets/runtime/idle.gif","walk":"assets/runtime/walk.gif","pvpWarriorDeath":"assets/runtime/pvpWarriorDeath.gif","pvpWarriorAttack":"assets/runtime/pvpWarriorAttack.gif","pvpWarriorCombo":"assets/runtime/pvpWarriorCombo.gif","pvpWarriorSpecial":"assets/runtime/pvpWarriorSpecial.gif","femaleIdle":"assets/runtime/femaleIdle.gif","femaleWalk":"assets/runtime/femaleWalk.gif","brownIdle":"assets/runtime/brownIdle.gif","brownWalk":"assets/runtime/brownWalk.gif","brownAttack":"assets/runtime/brownAttack.gif","brownSpecial":"assets/runtime/brownSpecial.gif","brownPower":"assets/runtime/brownPower.gif","kingIdle":"assets/runtime/kingIdle.gif","kingWalk":"assets/runtime/kingWalk.gif","kingSpecial":"assets/runtime/kingSpecial.gif","kingPower":"assets/runtime/kingPower.gif","golemIdle":"assets/runtime/golemIdle.gif","golemWalk":"assets/runtime/golemWalk.gif","golemAttack":"assets/runtime/golemAttack.gif","golemSpecial":"assets/runtime/golemSpecial.gif","mageIdle":"assets/runtime/mageIdle.gif","mageWalk":"assets/runtime/mageWalk.gif","mageSpecial":"assets/runtime/mageSpecial.gif","magePower":"assets/runtime/magePower.gif","magePowerSpecial":"assets/runtime/magePowerSpecial.gif","mageStaff":"assets/runtime/mageStaff.gif","femaleMageIdle":"assets/runtime/femaleMageIdle.gif","femaleMageWalk":"assets/runtime/femaleMageWalk.gif","femaleMageSpecial":"assets/runtime/femaleMageSpecial.gif","egyptWarriorIdle":"assets/runtime/egyptWarriorIdle.gif","egyptWarriorWalk":"assets/runtime/egyptWarriorWalk.gif","egyptFemaleWarriorIdle":"assets/runtime/egyptFemaleWarriorIdle.gif","egyptFemaleWarriorWalk":"assets/runtime/egyptFemaleWarriorWalk.gif","egyptMageStaff":"assets/runtime/egyptMageStaff.gif","egyptMagePower":"assets/runtime/egyptMagePower.gif","egyptMagePowerSpecial":"assets/runtime/egyptMagePowerSpecial.gif","egyptMageIdle":"assets/runtime/egyptMageIdle.gif","egyptMageWalk":"assets/runtime/egyptMageWalk.gif","egyptMageSpecial":"assets/runtime/egyptMageSpecial.gif","egyptFemaleMageIdle":"assets/runtime/egyptFemaleMageIdle.gif","egyptFemaleMageWalk":"assets/runtime/egyptFemaleMageWalk.gif","egyptFemaleMageSpecial":"assets/runtime/egyptFemaleMageSpecial.gif","najaIdle":"assets/runtime/najaIdle.gif","najaWalk":"assets/runtime/najaWalk.gif","najaAttack":"assets/runtime/najaAttack.gif","najaSpecial":"assets/runtime/najaSpecial.gif","najaSpecialFinal":"assets/runtime/najaSpecialFinal.gif","anubisIdle":"assets/runtime/anubisIdle.gif","anubisWalk":"assets/runtime/anubisWalk.gif","anubisMeleeAttack":"assets/runtime/anubisMeleeAttack.gif","anubisRangedAttack":"assets/runtime/anubisRangedAttack.gif","anubisProjectile":"assets/runtime/anubisProjectile.gif","isisIdle":"assets/runtime/isisIdle.gif","isisWalk":"assets/runtime/isisWalk.gif","isisAttack":"assets/runtime/isisAttack.gif","isisSpecial":"assets/runtime/isisSpecial.gif","isisPower":"assets/runtime/isisPower.gif","poseidonIdle":"assets/runtime/poseidonIdle.gif","poseidonWalk":"assets/runtime/poseidonWalk.gif","poseidonNormal":"assets/runtime/poseidonNormal.gif","poseidonWaveCast":"assets/runtime/poseidonWaveCast.gif","poseidonSummonCast":"assets/runtime/poseidonSummonCast.gif","poseidonWavePower":"assets/runtime/poseidonWavePower.gif","seahorseIdle":"assets/runtime/seahorseIdle.gif","seahorseWalk":"assets/runtime/seahorseWalk.gif","seahorseAttack":"assets/runtime/seahorseAttack.gif","dragonGround":"assets/runtime/dragonGround.gif","dragonTakeoff":"assets/runtime/dragonTakeoff.gif","dragonFly":"assets/runtime/dragonFly.gif","dragonAttack":"assets/runtime/dragonAttack.gif","dragonFireball":"assets/runtime/dragonFireball.gif"});
@@ -4700,20 +4744,20 @@ function renderAccountXP(totalXp=accountProgress.totalXp,immediate=false){
  updateAccountXPSyncStatus();
  if(totalXp===null||!accountProgress.verified){
    accountProgress.animation++;
-   label.textContent='Nível —';counter.textContent='XP da conta';bar.style.width='0%';
+   label.textContent='—';counter.textContent='XP da conta';bar.style.width='0%';
    return;
  }
  const next=xpLevelProgress(totalXp);
  const previous=accountProgress.displayedXp===undefined?null:xpLevelProgress(accountProgress.displayedXp);
  accountProgress.displayedXp=next.totalXp;
- const draw=()=>{label.textContent='Nível '+next.level;counter.textContent=next.xp+' / '+next.needed+' XP';bar.style.width=(next.xp/next.needed*100)+'%'};
+ const draw=()=>{label.textContent=String(next.level);counter.textContent=next.xp+' / '+next.needed+' XP';bar.style.width=(next.xp/next.needed*100)+'%'};
  if(immediate||!previous||next.totalXp<=previous.totalXp){accountProgress.animation++;draw();return}
  const serial=++accountProgress.animation;
  if(next.level>previous.level){
    bar.style.width='100%';hud.classList.add('xp-level-up');
    setTimeout(()=>{
      if(serial!==accountProgress.animation)return;
-     label.textContent='Nível '+next.level;counter.textContent=next.xp+' / '+next.needed+' XP';
+     label.textContent=String(next.level);counter.textContent=next.xp+' / '+next.needed+' XP';
      bar.style.transition='none';bar.style.width='0%';
      requestAnimationFrame(()=>requestAnimationFrame(()=>{
        if(serial===accountProgress.animation){bar.style.transition='';bar.style.width=(next.xp/next.needed*100)+'%'}
@@ -7424,6 +7468,11 @@ function pvpHeldBasicAttack(){
 attackBtn.onclick=null;
 attackBtn.addEventListener('pointerdown',e=>{
   e.preventDefault();e.stopPropagation();
+  if(state.mode==='pvp'){
+    attackBtn.classList.remove('pvp-attack-pulse');
+    void attackBtn.offsetWidth;
+    attackBtn.classList.add('pvp-attack-pulse');
+  }
   // PvP: basic attack fires immediately and repeats while held.
   // Powers remain single-cast actions.
   if(state.mode==='pvp'&&pvpControls.selected==='attack'){
@@ -7446,6 +7495,7 @@ attackBtn.addEventListener('pointerup',stopPVPAttackHold);
 attackBtn.addEventListener('pointercancel',stopPVPAttackHold);
 attackBtn.addEventListener('lostpointercapture',stopPVPAttackHold);
 attackBtn.addEventListener('contextmenu',e=>e.preventDefault());
+attackBtn.addEventListener('animationend',e=>{if(e.animationName==='pvpAttackPulse')attackBtn.classList.remove('pvp-attack-pulse')});
 
 function entityBase(type,x,y,team,color){
  const entityId=(state.mode==='pvp'&&pvpRegionalSimulationUid)?pvpNextRegionalEntityId():state.nextId++;
@@ -10843,6 +10893,23 @@ function updatePVPRegional(dt){
    state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
  }finally{pvpRegionalSimulationUid=null}
 }
+function pvpHudWeaponIcon(e){
+ if(!e)return '';
+ if(e.type==='warrior')return e.clan==='egypt'?ASSETS.egyptSword:ASSETS.sword;
+ if(e.type==='mage')return e.clan==='egypt'?ASSETS.egyptMageStaff:ASSETS.mageStaff;
+ if(e.type==='king')return ASSETS.kingSword;
+ return '';
+}
+function pvpHudPowerIcon(e){
+ if(!e)return '';
+ if(e.type==='mage')return e.clan==='egypt'?ASSETS.egyptMagePower:ASSETS.magePower;
+ return '';
+}
+function pvpSetHudImage(img,src){
+ if(!img)return;
+ img.hidden=!src;
+ if(src&&img.dataset.src!==src){img.src=src;img.dataset.src=src}
+}
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
  const localPlayer=state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||null;
@@ -10867,9 +10934,34 @@ function updatePVPHUD(){
    button.classList.toggle('unavailable',!available);
    button.classList.toggle('active',pvpControls.selected===action);
    button.classList.toggle('cooling',available&&remaining>0&&remaining<1e10);
-   const symbol=button.querySelector('.pvp-hud-symbol'),cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
-   if(symbol)symbol.textContent=loading?'…':available?(action==='attack'?'⚔':action==='power'?'✧':'✦'):'⊘';
-   if(cooldown)cooldown.textContent=loading?'CARREGANDO':!available?'':warriorUnlock?
+   button.classList.toggle('ready',action==='special'&&available&&!warriorUnlock&&remaining<=0);
+   const cooldown=button.querySelector('.pvp-cooldown'),shade=button.querySelector('.pvp-lock');
+
+   if(action==='special'){
+     let progress=0;
+     if(warriorUnlock)progress=clamp((Number(me?.pvpWarriorSpecialHits)||0)/PVP_WARRIOR.specialUnlockHits,0,1);
+     else if(available&&remaining<1e10)progress=remaining>0?1-clamp(remaining/Math.max(1,duration),0,1):1;
+     button.style.setProperty('--pvp-special-progress',(progress*100).toFixed(1)+'%');
+     const specialIcon=button.closest('.pvp-special-wrap')?.querySelector('.pvp-special-icon');
+     const warriorIcon=pvpIsWarriorHero(me);
+     if(specialIcon){
+       specialIcon.hidden=!warriorIcon;
+       if(warriorIcon){
+         const specialRunning=Number(me?.pvpSpecialVisualUntil)>now;
+         const specialReady=!warriorUnlock&&remaining<=0;
+         const iconActive=specialReady||specialRunning;
+         const iconState=iconActive?'active':'inactive';
+         if(specialIcon.dataset.state!==iconState){
+           specialIcon.src=iconActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive;
+           specialIcon.dataset.state=iconState;
+         }
+       }
+     }
+   }else{
+     pvpSetHudImage(button.querySelector('.pvp-slot-icon'),action==='attack'?pvpHudWeaponIcon(me):pvpHudPowerIcon(me));
+   }
+
+   if(cooldown)cooldown.textContent=loading?'…':!available?'':warriorUnlock?
      Math.min(PVP_WARRIOR.specialUnlockHits,Number(me?.pvpWarriorSpecialHits)||0)+'/'+PVP_WARRIOR.specialUnlockHits:
      remaining>=1e10?'🔒':remaining>0?Math.ceil(remaining/1000)+'s':'';
    if(shade)shade.style.transform=remaining>0&&remaining<1e10?'translateY('+(100*(1-clamp(remaining/duration,0,1)))+'%)':'translateY(100%)';
