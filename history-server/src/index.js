@@ -440,6 +440,7 @@ export class HistoryRoom extends DurableObject {
     const start = Number(player.comboStartedAt) || now;
     if (Number(player.comboRequestUntil) > 0 && now > Number(player.comboRequestUntil)) {
       this.cancelWarriorCombo(player);
+      this.broadcast(this.actionPayload(player, "attack", "combo-cancel", {}, now));
       return false;
     }
     const duration = Math.max(1, end - start);
@@ -477,7 +478,12 @@ export class HistoryRoom extends DurableObject {
     if (now < end) return true;
     const repeat = Number(player.comboRequestUntil) >= now;
     this.cancelWarriorCombo(player);
-    if (repeat) this.startWarriorCombo(player, now);
+    if (repeat) {
+      this.startWarriorCombo(player, now);
+      this.broadcast(this.actionPayload(player, "attack", "combo", {}, now));
+    } else {
+      this.broadcast(this.actionPayload(player, "attack", "combo-cancel", {}, now));
+    }
     return false;
   }
 
