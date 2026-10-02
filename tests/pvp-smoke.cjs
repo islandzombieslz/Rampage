@@ -222,6 +222,23 @@ assert.equal(power.pvpAimAngle,Math.PI/2,'manual direction does not oscillate');
 assert.equal(run('pvpCanPower(state.entities.find(e=>e.id==='+hero.id+'))'),false);
 
 assert(html.includes('id="pvpCombatHud"')&&html.includes('id="pvpPicker"'));
+assert(html.includes("specialInactive:'assets/ui/pvp/punho-especial-inativo.png'")&&
+ html.includes("specialActive:'assets/ui/pvp/punho-especial-ativo.gif'")&&
+ html.includes("slotFrame:'assets/ui/pvp/moldura-armas.png'")&&
+ html.includes("attackButton:'assets/ui/pvp/botao-ataque.png'"),
+ 'PvP HUD artwork must stay local instead of depending on Postimg at runtime');
+assert(html.includes('class="pvp-special-fill"')&&
+ html.includes("button.style.setProperty('--pvp-special-progress'"),
+ 'special HUD must use the existing cooldown/unlock state to fill its progress bar');
+assert(html.includes("const iconActive=specialReady||specialRunning")&&
+ html.includes("specialIcon.src=iconActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive"),
+ 'Warrior special icon must switch between inactive sprite and active GIF from the existing special state');
+assert(html.includes("background:transparent url('assets/ui/pvp/moldura-armas.png')")&&
+ html.includes('class="pvp-slot-icon"'),
+ 'power and weapon slots must use the requested local frame with their existing icons');
+assert(html.includes("background:transparent url('assets/ui/pvp/botao-ataque.png')")&&
+ html.includes("attackBtn.classList.add('pvp-attack-pulse')"),
+ 'PvP attack control must use the local attack sprite and pulse on touch/click');
 assert(html.includes('PVP_BASIC_HOLD_REPEAT_MS=300'),'holding attack must keep PvP combo continuity');
 assert(html.includes("?220\n      :PVP_BASIC_HOLD_REPEAT_MS"),'holding Warrior attack must enter combo without repeated taps');
 assert(html.includes('comboRange:148'),'Warrior combo has the slightly larger requested hitbox');
