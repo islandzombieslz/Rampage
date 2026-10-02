@@ -230,6 +230,8 @@ assert(html.includes("specialInactive:'assets/ui/pvp/punho-especial-inativo.png'
 assert(html.includes('class="pvp-special-fill"')&&
  html.includes("button.style.setProperty('--pvp-special-progress'"),
  'special HUD must use the existing cooldown/unlock state to fill its progress bar');
+assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px)"),
+ 'special control must match the stone power/weapon slot size');
 assert(html.includes("const iconActive=specialReady||specialRunning")&&
  html.includes("specialIcon.src=iconActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive"),
  'Warrior special icon must switch between inactive sprite and active GIF from the existing special state');

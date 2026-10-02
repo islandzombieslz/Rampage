@@ -184,7 +184,9 @@ async function testCloudOnlyAccountProgress(){
  await tick();await tick();
  assert.equal(ap().status,'error','denied Firebase is shown, not masked as local XP');
  assert.equal(ap().totalXp,null,'no local XP fallback');
- assert.match(mockNodes['#accountXpSync'].textContent,/regras do Firebase/i);
+ assert.equal(mockNodes['#accountXpSync'].textContent,'','XP sync status text stays out of the level HUD');
+ assert.equal(mockNodes['#accountXpSync'].hidden,true,'XP sync status node stays hidden');
+ assert.match(mockNodes['#accountStatus'].textContent,/regras do Firebase/i,'Firebase errors remain available in the account menu');
  assert.equal(mockNodes['#accountXpHud'].hidden,false,'HUD visible on initial menu');
  assert.equal(mockNodes['#accountXpLevel'].textContent,'—');
 

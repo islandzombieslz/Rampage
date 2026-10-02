@@ -1303,10 +1303,10 @@ html,body{
  display:flex;align-items:flex-end;gap:5px;pointer-events:auto}
 #pvpCombatHud[hidden]{display:none!important}
 #pvpCombatHud [data-pvp-action]{appearance:none;-webkit-appearance:none;touch-action:manipulation}
-#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(78px,10vw,104px);height:clamp(48px,8vh,62px);
+#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(72px,9.5vw,92px);height:clamp(48px,7vw,64px);
  display:flex;align-items:flex-end;justify-content:flex-start}
-#pvpCombatHud .pvp-special-button{position:relative;width:clamp(66px,8vw,84px);height:16px;min-height:16px;margin:0 20px 4px 0;
- padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:999px;background:#17191c;box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007}
+#pvpCombatHud .pvp-special-button{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px);min-height:0;margin:0;
+ padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:12px;background:#17191c;box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007}
 #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
  border-radius:999px;background:linear-gradient(90deg,#a9461d,#ed8d26 62%,#ffd75a);transition:width .12s linear}
 #pvpCombatHud .pvp-special-button.ready{border-color:#e6bd55;box-shadow:inset 0 1px 4px #0008,0 0 8px #e6a83d8a}
@@ -1314,7 +1314,7 @@ html,body{
 #pvpCombatHud .pvp-special-button.unavailable{opacity:.42;filter:grayscale(1)}
 #pvpCombatHud .pvp-special-button .pvp-cooldown{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
  color:#fff;font-size:9px;font-weight:900;line-height:1;text-shadow:0 1px 2px #000}
-#pvpCombatHud .pvp-special-icon{position:absolute;right:0;bottom:-1px;width:clamp(40px,5.2vw,54px);height:clamp(40px,5.2vw,54px);
+#pvpCombatHud .pvp-special-icon{position:absolute;right:0;bottom:-2px;width:clamp(42px,5.8vw,56px);height:clamp(42px,5.8vw,56px);
  object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 4px #0008)}
 #pvpCombatHud .pvp-special-icon[hidden]{display:none!important}
 #pvpCombatHud .pvp-frame-slot{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px);min-height:0;padding:7px;
@@ -1360,26 +1360,21 @@ html,body{
 #accountStatus{font-size:12px;color:var(--muted);margin-top:8px}#accountName{max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #firebaseStatus{position:absolute;left:12px;bottom:10px;z-index:30;font-size:10px;color:#8b949e}
 #accountXpHud{position:absolute;top:calc(var(--safe-top) + 6px);left:calc(var(--safe-left) + 8px);z-index:55;
- display:flex;align-items:center;gap:7px;pointer-events:none;font-family:inherit}
+ display:flex;align-items:center;gap:0;pointer-events:none;font-family:inherit}
 #accountXpHud[hidden]{display:none!important}
-#accountXpLevelBadge{position:relative;width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center}
+#accountXpLevelBadge{position:relative;width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;z-index:2}
 #accountXpLevelStar{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}
 #accountXpLevel{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
  color:#fff;font-weight:950;font-size:clamp(13px,1.6vw,18px);line-height:1;white-space:nowrap;
  -webkit-text-stroke:.7px #080807;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000}
-#accountXpTrack{position:relative;width:clamp(105px,15vw,174px);height:18px;border-radius:999px;
+#accountXpTrack{position:relative;width:clamp(105px,15vw,174px);height:18px;border-radius:999px;margin-left:-14px;z-index:1;
  overflow:hidden;background:#25231b;border:2px solid #120c07;box-shadow:0 1px 5px #0009}
 #accountXpFill{height:100%;width:0%;border-radius:999px;
  background:repeating-linear-gradient(110deg,#f49714 0px,#f49714 12px,#ffdc39 12px,#ffdc39 24px,#ea8713 24px,#ea8713 36px,#ffe14b 36px,#ffe14b 48px);
  transition:width .65s cubic-bezier(.16,.7,.25,1)}
 #accountXpText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
  color:#fff;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px #000,0 -1px 2px #000}
-#accountXpSync{position:absolute;left:53px;top:24px;font-size:9px;color:#d4d9dd;white-space:nowrap;text-shadow:0 1px 2px #000}
-#accountXpSync[data-state="pending"]{color:#ffd67c}
-#accountXpSync[data-state="error"]{color:#ff7d7d;max-width:270px;white-space:normal;line-height:1.25}
-#accountXpReward{position:absolute;left:53px;top:40px;background:#151a1ede;color:#ffdd63;font-size:11px;font-weight:800;
- padding:5px 8px;border:1px solid #ffe16c88;border-radius:8px;white-space:nowrap;text-shadow:0 1px 3px #000}
-#accountXpReward[hidden]{display:none!important}
+#accountXpSync,#accountXpReward{display:none!important}
 #accountXpHud.xp-level-up #accountXpTrack{animation:xpTrackPulse .7s ease-out}
 @keyframes xpTrackPulse{45%{box-shadow:0 0 13px 3px #ffce42}100%{box-shadow:0 1px 5px #0009}}
 
@@ -4718,24 +4713,16 @@ function accountXPErrorMessage(error){
  return 'Falha ao acessar XP da conta';
 }
 function updateAccountXPSyncStatus(){
- const tag=$('#accountXpSync');if(!tag)return;
- const ap=accountProgress;
- const message=ap.status==='ready'?'XP salvo na conta':
-  ap.status==='saving'?'Salvando XP na conta…':
-  ap.status==='error'?(ap.error||'Erro ao acessar XP da conta'):
-  ap.status==='auth'?'Conectando à sua conta…':
-  ap.connected?'Carregando XP da conta…':'Aguardando conexão com Firebase…';
- tag.textContent=message;tag.dataset.state=ap.status==='error'?'error':ap.status==='ready'?'saved':'pending';
+ const tag=$('#accountXpSync'),ap=accountProgress;
+ const message=ap.status==='error'?(ap.error||'Erro ao acessar XP da conta'):'';
+ if(tag){tag.textContent='';tag.hidden=true;tag.dataset.state=ap.status==='error'?'error':ap.status==='ready'?'saved':'pending'}
  const accountStatus=$('#accountStatus');
  if(accountStatus&&ap.status==='error')accountStatus.textContent=message;
 }
 function showAccountXPReward(){
- const notice=$('#accountXpReward'),award=accountProgress.lastAward;
- if(!notice||!award||isGameScreenVisible())return;
- notice.textContent=(award.won?'Vitória':'Partida concluída')+' • +'+award.xp+' XP salvo na conta';
- notice.hidden=false;accountProgress.lastAward=null;
- const serial=Date.now();notice.dataset.serial=String(serial);
- setTimeout(()=>{if(notice.dataset.serial===String(serial))notice.hidden=true},5500);
+ const notice=$('#accountXpReward');
+ if(notice){notice.textContent='';notice.hidden=true}
+ accountProgress.lastAward=null;
 }
 function renderAccountXP(totalXp=accountProgress.totalXp,immediate=false){
  const hud=$('#accountXpHud'),bar=$('#accountXpFill'),label=$('#accountXpLevel'),counter=$('#accountXpText');
