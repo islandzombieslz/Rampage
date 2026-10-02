@@ -39,7 +39,7 @@ assert(wrangler.includes('"HISTORY_ROOMS"')&&wrangler.includes('"new_sqlite_clas
   'Wrangler must bind and migrate the History Durable Object');
 
 
-assert(html.includes('HISTORY_RENDER_DELAY_MIN_MS=45')&&html.includes('HISTORY_RENDER_DELAY_MAX_MS=95'),
+assert(html.includes('HISTORY_RENDER_DELAY_MIN_MS=35')&&html.includes('HISTORY_RENDER_DELAY_MAX_MS=80'),
   'History must use a lower adaptive interpolation buffer than Firebase PvP');
 assert(html.includes("data.type==='damage'")&&html.includes('recordPVPDamage(e,Number(data.amount)||0)'),
   'History server damage events must update damage text immediately');
