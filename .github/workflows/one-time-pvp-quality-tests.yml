@@ -1,0 +1,27 @@
+name: One-time PvP quality tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-pvp-quality-tests.yml'
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Run focused regression tests
+        run: |
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Remove temporary workflow
+        run: |
+          rm -f .github/workflows/one-time-pvp-quality-tests.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/one-time-pvp-quality-tests.yml
+          git commit -m "Remove temporary PvP quality test workflow"
+          git push origin HEAD:main
