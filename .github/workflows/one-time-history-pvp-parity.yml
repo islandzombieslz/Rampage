@@ -1,0 +1,467 @@
+name: One-time History PvP parity and latency
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-history-pvp-parity.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch History client
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          start=s.index("const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.workers.dev';")
+          end=s.index("$('#createBtn').onclick",start)
+          block=r"""const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.workers.dev';
+          let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
+          let historySelectedServerId=null;
+          const HISTORY_SERVER_FALLBACK=Object.freeze([
+           {id:'history-1',name:'Servidor História 1',map:'arena-pvp',maxPlayers:8,players:0,online:false}
+          ]);
+          const HISTORY_RENDER_DELAY_MIN_MS=45;
+          const HISTORY_RENDER_DELAY_MAX_MS=95;
+          const HISTORY_REMOTE_MAX_EXTRAP_MS=120;
+          const HISTORY_INPUT_KEEPALIVE_MS=95;
+          function historyServerEndpoint(path=''){return historyServerBase?historyServerBase+path:''}
+          function historyEscape(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
+          function historyFallbackUid(){
+           let uid=localStorage.getItem('rampageHistoryUid');
+           if(!uid){
+             uid='history-'+(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)+Date.now().toString(36));
+             localStorage.setItem('rampageHistoryUid',uid);
+           }
+           return uid;
+          }
+          function historyCreatePvpEntity(hero,x,y,team,color,ownerId,minion){
+           const current=state.entities;state.entities=[];
+           const e=pvpBaseEntity(hero,x,y,team,color,ownerId,minion);
+           state.entities=current;return e;
+          }
+          function historyFindEntity(kind,id){
+           return state.entities.find(e=>e.historyServerId===(kind==='dragon'?'dragon:':'player:')+String(id))||null;
+          }
+          function historyPushRemoteSample(e,x,y,t){
+           const history=Array.isArray(e.netHistory)?e.netHistory:[];
+           const last=history[history.length-1];
+           if(!last||Math.abs(Number(last.x)-x)>.01||Math.abs(Number(last.y)-y)>.01||t-Number(last.t)>120){
+             history.push({x,y,t});
+             if(history.length>8)history.splice(0,history.length-8);
+           }
+           e.netHistory=history;
+          }
+          function historySampleRemotePosition(obj,now){
+           const history=obj?.netHistory;if(!Array.isArray(history)||!history.length)return null;
+           const delay=clamp(Number(HistoryAdapter.renderDelayMs)||60,HISTORY_RENDER_DELAY_MIN_MS,HISTORY_RENDER_DELAY_MAX_MS);
+           const renderAt=now-delay;
+           if(history.length===1)return {x:Number(history[0].x)||0,y:Number(history[0].y)||0};
+           const first=history[0];
+           if(renderAt<=Number(first.t))return {x:Number(first.x)||0,y:Number(first.y)||0};
+           for(let i=0;i<history.length-1;i++){
+             const a=history[i],b=history[i+1],at=Number(a.t)||0,bt=Number(b.t)||at+1;
+             if(renderAt<=bt){
+               const alpha=clamp((renderAt-at)/Math.max(1,bt-at),0,1);
+               return {x:(Number(a.x)||0)+((Number(b.x)||0)-(Number(a.x)||0))*alpha,y:(Number(a.y)||0)+((Number(b.y)||0)-(Number(a.y)||0))*alpha};
+             }
+           }
+           const last=history[history.length-1],prev=history[history.length-2];
+           const gap=Math.max(16,(Number(last.t)||0)-(Number(prev.t)||0));
+           const extra=Math.min(HISTORY_REMOTE_MAX_EXTRAP_MS,Math.max(0,renderAt-(Number(last.t)||0)));
+           let vx=((Number(last.x)||0)-(Number(prev.x)||0))/(gap/1000);
+           let vy=((Number(last.y)||0)-(Number(prev.y)||0))/(gap/1000);
+           const speed=Math.hypot(vx,vy),maxSpeed=360;
+           if(speed>maxSpeed&&speed>0){const scale=maxSpeed/speed;vx*=scale;vy*=scale}
+           return {x:(Number(last.x)||0)+vx*(extra/1000),y:(Number(last.y)||0)+vy*(extra/1000)};
+          }
+          function historyUpsertProjectile(raw,serverTime=Date.now()){
+           if(!raw?.id)return null;
+           let p=(state.dragonProjectiles||[]).find(x=>String(x.id)===String(raw.id));
+           if(!p){
+             p={id:raw.id,kind:'dragon',serial:Number(raw.serial)||0,x:Number(raw.x)||0,y:Number(raw.y)||0,
+               vx:Number(raw.vx)||0,vy:Number(raw.vy)||0,speed:Number(raw.speed)||DRAGON_FIREBALL_SPEED,damage:Number(raw.damage)||10,
+               burn:raw.burn!==false,targetId:raw.targetId,team:raw.team||'pvp-enemy',sourceId:raw.sourceId,
+               historyAuthX:Number(raw.x)||0,historyAuthY:Number(raw.y)||0};
+             state.dragonProjectiles.push(p);
+           }else{
+             p.vx=Number(raw.vx)||0;p.vy=Number(raw.vy)||0;p.speed=Number(raw.speed)||DRAGON_FIREBALL_SPEED;
+             p.targetId=raw.targetId;p.sourceId=raw.sourceId;p.serial=Number(raw.serial)||p.serial||0;
+             p.historyAuthX=Number(raw.x)||0;p.historyAuthY=Number(raw.y)||0;
+             const err=Math.hypot(p.historyAuthX-p.x,p.historyAuthY-p.y);
+             if(err>100){p.x=p.historyAuthX;p.y=p.historyAuthY}
+           }
+           const expireMs=Math.max(0,(Number(raw.expireAt)||serverTime)-serverTime);
+           p.expireAt=performance.now()+expireMs;
+           return p;
+          }
+          function historySyncProjectiles(rawList,serverTime){
+           const keep=new Set();
+           for(const raw of rawList||[]){const p=historyUpsertProjectile(raw,serverTime);if(p)keep.add(String(p.id))}
+           state.dragonProjectiles=(state.dragonProjectiles||[]).filter(p=>keep.has(String(p.id)));
+          }
+          const HistoryAdapter={
+           active:false,connecting:false,ws:null,serverId:null,uid:null,inputSeq:0,lastInputAt:0,lastInputSignature:'',
+           lastSnapshotSeq:0,lastServerTime:0,lastSnapshotAt:0,manualClose:false,
+           rttMs:0,jitterMs:0,renderDelayMs:60,lastPingAt:0,lastPongAt:0,
+           async connect(serverId){
+             if(this.connecting)return false;
+             this.connecting=true;this.manualClose=false;
+             const message=$('#historyServerMessage'),button=$('#historyServerConfirm');
+             if(button)button.disabled=true;if(message)message.textContent='Conectando ao servidor...';
+             try{
+               try{await NetworkAdapter.ensureAuth()}catch(_){}
+               this.uid=NetworkAdapter.localPlayerId||historyFallbackUid();
+               if(!NetworkAdapter.localPlayerId)NetworkAdapter.localPlayerId=this.uid;
+               this.serverId=serverId||historySelectedServerId||'history-1';
+               const nick=getCurrentNick(),hero='warrior';
+               const wsBase=historyServerBase.replace(/^http:/,'ws:').replace(/^https:/,'wss:');
+               const url=wsBase+'/ws?server='+encodeURIComponent(this.serverId)+'&uid='+encodeURIComponent(this.uid)+'&name='+encodeURIComponent(nick)+'&hero='+encodeURIComponent(hero);
+               if(this.ws){try{this.ws.close()}catch(_){}}
+               const ws=new WebSocket(url);this.ws=ws;
+               return await new Promise((resolve,reject)=>{
+                 const timer=setTimeout(()=>reject(Error('Tempo limite ao conectar ao History.')),9000);
+                 ws.onmessage=event=>{
+                   let data=null;try{data=JSON.parse(event.data)}catch(_){return}
+                   if(data?.type==='hello'){clearTimeout(timer);this.handleMessage(data);resolve(true);return}
+                   this.handleMessage(data);
+                 };
+                 ws.onerror=()=>{clearTimeout(timer);reject(Error('Falha no WebSocket do History.'))};
+                 ws.onclose=()=>{clearTimeout(timer);this.handleClose()};
+               });
+             }catch(err){
+               console.error('History connect:',err);if(message)message.textContent='Não foi possível conectar ao servidor History.';
+               try{this.ws?.close()}catch(_){}this.ws=null;return false;
+             }finally{
+               this.connecting=false;if(button)button.disabled=false;
+             }
+           },
+           begin(snapshot){
+             this.active=true;state.historyActive=true;state.historyServerId=this.serverId;
+             state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
+             state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.entities=[];
+             warBurningEntities.clear();warFrameEnemiesByTeam.clear();clearEntityVisuals();pvpResetLocalSpectatorAfterRevive();
+             pvpControls.selected='attack';pvpControls.action='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null;
+             preloadExtraPVPGifDurations();preloadPVPWarriorVisuals();preloadPVPExactGifDurations();pvpLoadFlameFrames();
+             this.applySnapshot(snapshot,true);
+             navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
+             flash('HISTORY • '+(this.serverId||'SERVIDOR'),1.2);
+           },
+           handleMessage(data){
+             if(!data||typeof data!=='object')return;
+             if(data.type==='hello'){this.lastSnapshotSeq=0;this.begin(data.snapshot);return}
+             if(data.type==='snapshot'){this.applySnapshot(data.snapshot,false);return}
+             if(data.type==='pong'){
+               const now=performance.now(),sample=Math.max(0,now-(Number(data.t)||now));
+               const prev=this.rttMs||sample;this.rttMs=prev+(sample-prev)*.22;
+               const jitterSample=Math.abs(sample-this.rttMs),pj=this.jitterMs||jitterSample;
+               this.jitterMs=pj+(jitterSample-pj)*.25;
+               this.renderDelayMs=clamp(38+this.rttMs*.12+this.jitterMs*1.35,HISTORY_RENDER_DELAY_MIN_MS,HISTORY_RENDER_DELAY_MAX_MS);
+               this.lastPongAt=now;return;
+             }
+             if(data.type==='action'){
+               const e=historyFindEntity('player',data.uid);
+               if(e&&String(data.uid)!==String(this.uid))pvpPreviewGuestAction(e,data.action||'attack',data.targetId||null);
+               return;
+             }
+             if(data.type==='damage'){
+               const e=historyFindEntity(data.targetKind,data.targetId);
+               if(e){
+                 if(Number.isFinite(Number(data.hp)))e.hp=Math.max(0,Number(data.hp));
+                 if(Number.isFinite(Number(data.shield)))e.shield=Math.max(0,Number(data.shield));
+                 recordPVPDamage(e,Number(data.amount)||0);
+               }
+               return;
+             }
+             if(data.type==='burn'){
+               const e=historyFindEntity('player',data.targetId),now=performance.now();
+               if(e){
+                 const remain=Math.max(0,(Number(data.burnUntil)||0)-(Number(data.at)||Date.now()));
+                 e.dragonBurnSerial=Number(data.serial)||((Number(e.dragonBurnSerial)||0)+1);
+                 e.dragonBurnStartedAt=now;e.dragonBurnUntil=now+remain;e.dragonBurnFlameCount=2+(e.dragonBurnSerial%2);
+               }
+               return;
+             }
+             if(data.type==='dragon_attack'){
+               const dragon=historyFindEntity('dragon',data.dragonId),now=performance.now();
+               if(dragon){
+                 dragon.dragonAttackSerial=Math.max(Number(dragon.dragonAttackSerial)||0,Number(data.serial)||0);
+                 dragon.pendingDragonAttack={serial:dragon.dragonAttackSerial,startedAt:now,soundAt:now+950,endAt:now+DRAGON_ATTACK_VISUAL_MS};
+               }
+               if(data.projectile)historyUpsertProjectile(data.projectile,Number(data.at)||Date.now());
+               return;
+             }
+             if(data.type==='dragons_defeated'){flash('OS DOIS DRAGÕES FORAM DERROTADOS • RETORNO EM 2s',1.8);return}
+             if(data.type==='dragons_respawned'){flash('OS DRAGÕES RETORNARAM',1.1);return}
+             if(data.type==='player_defeated'){
+               const e=historyFindEntity('player',data.uid);
+               if(e){e.alive=false;e.hp=0;e.moving=false}
+               const p=state.players.find(x=>String(x.id)===String(data.uid));
+               if(p)p.pvpReviveAt=performance.now()+Math.max(0,(Number(data.respawnAt)||0)-(Number(data.at)||Date.now()));
+               if(String(data.uid)===String(this.uid))flash('DERROTADO • REVIVENDO...',1.4);
+               return;
+             }
+             if(data.type==='player_respawned'){
+               if(String(data.uid)===String(this.uid))flash('VOCÊ REVIVEU',.9);
+               return;
+             }
+           },
+           applySnapshot(snapshot,first=false){
+             if(!snapshot||snapshot.mode!=='history')return;
+             const seq=Number(snapshot.seq)||0;if(!first&&seq<=this.lastSnapshotSeq)return;
+             const arrival=performance.now(),previousArrival=this.lastSnapshotAt;
+             if(previousArrival){
+               const gap=clamp(arrival-previousArrival,25,180);
+               const expected=50,jitterSample=Math.abs(gap-expected),pj=this.jitterMs||jitterSample;
+               this.jitterMs=pj+(jitterSample-pj)*.14;
+               this.renderDelayMs=clamp(38+this.rttMs*.12+this.jitterMs*1.35,HISTORY_RENDER_DELAY_MIN_MS,HISTORY_RENDER_DELAY_MAX_MS);
+             }
+             this.lastSnapshotAt=arrival;this.lastSnapshotSeq=seq;this.lastServerTime=Number(snapshot.serverTime)||Date.now();
+             const world=snapshot.world||{};state.world.w=Number(world.width)||PVP_ARENA.w;state.world.h=Number(world.height)||PVP_ARENA.h;
+             const rawPlayers=Array.isArray(snapshot.players)?snapshot.players:[];
+             const oldPlayers=new Map(state.players.map(p=>[String(p.id),p]));
+             state.players=rawPlayers.map((sp,i)=>{
+               const old=oldPlayers.get(String(sp.id));
+               return {
+                 ...(old||{}),id:String(sp.id),uid:String(sp.id),name:sp.name||('Player '+(i+1)),human:true,local:String(sp.id)===String(this.uid),
+                 color:old?.color||COLORS[i%COLORS.length],clan:sp.clan||'warriors',pvpHero:PVP_SELECTABLE_BY_ID[sp.hero]?sp.hero:'warrior',pvpConfirmed:true,
+                 pvpRoundDeaths:0,pvpReviveAt:Number(sp.respawnAt)>this.lastServerTime?arrival+(Number(sp.respawnAt)-this.lastServerTime):0,pvpEliminated:false
+               };
+             });
+             const oldByServerId=new Map(state.entities.map(e=>[String(e.historyServerId||''),e]).filter(x=>x[0]));
+             const next=[];
+             for(let i=0;i<rawPlayers.length;i++){
+               const sp=rawPlayers[i],sid='player:'+String(sp.id),player=state.players[i];
+               const hero=PVP_SELECTABLE_BY_ID[player.pvpHero]||PVP_SELECTABLE_HEROES[0];
+               let e=oldByServerId.get(sid),wasAlive=e?.alive;
+               if(!e)e=historyCreatePvpEntity(hero,Number(sp.x)||state.world.w/2,Number(sp.y)||state.world.h/2,'history-players',player.color,String(sp.id),false);
+               e.historyServerId=sid;e.ownerId=String(sp.id);e.team='history-players';e.controlled=String(sp.id)===String(this.uid);
+               e.alive=sp.alive!==false;e.hp=Math.max(0,Number(sp.hp)||0);e.maxHp=Math.max(1,Number(sp.maxHp)||350);
+               e.shield=Math.max(0,Number(sp.shield)||0);e.maxShield=Math.max(0,Number(sp.maxShield)||250);
+               e.heading=Number(sp.heading)||0;e.facing=Number(sp.facing)<0?-1:1;e.moving=!!sp.moving;
+               e.pvpWarriorSpecialHits=clamp(Number(sp.specialHits)||0,0,PVP_WARRIOR.specialUnlockHits);
+               e.pvpWarriorSpecialUnlocked=!!sp.specialUnlocked;
+               const specialRemaining=Math.max(0,(Number(sp.specialCooldownUntil)||0)-this.lastServerTime);
+               e.pvpSpecialReadyAt=e.pvpWarriorSpecialUnlocked?arrival+specialRemaining:1e14;
+               e.pvpSpecialDuration=PVP_WARRIOR.specialCooldownMs;e.pvpSpecialWindowMs=PVP_WARRIOR.specialCooldownMs;
+               const chargeRemaining=Math.max(0,(Number(sp.specialActiveUntil)||0)-this.lastServerTime);
+               if(chargeRemaining>0){
+                 if(Number(e.pvpWarriorChargeUntil)<=arrival){e.pvpWarriorChargeStartedAt=arrival;e.pvpSpecialSerial=(Number(e.pvpSpecialSerial)||0)+1}
+                 e.pvpWarriorChargeUntil=arrival+chargeRemaining;e.pvpWarriorChargeAngle=Number(sp.specialAngle)||Number(sp.heading)||0;e.pvpSpecialVisualUntil=e.pvpWarriorChargeUntil;
+               }
+               const burnRemaining=Math.max(0,(Number(sp.burnUntil)||0)-this.lastServerTime);
+               if(burnRemaining>0){
+                 e.dragonBurnSerial=Number(sp.burnSerial)||1;e.dragonBurnUntil=arrival+burnRemaining;
+                 e.dragonBurnStartedAt=arrival-Math.max(0,DRAGON_BURN_DURATION_MS-burnRemaining);e.dragonBurnFlameCount=2+(e.dragonBurnSerial%2);
+               }else{e.dragonBurnUntil=0;e.dragonBurnStartedAt=0}
+               if(e.controlled){
+                 e.historyAuthX=Number(sp.x)||0;e.historyAuthY=Number(sp.y)||0;e.historyAuthInputSeq=Number(sp.lastInputSeq)||0;e.historyAuthArrivalAt=arrival;
+                 if(first||wasAlive===false&&e.alive||!Number.isFinite(Number(e.x))){e.x=e.historyAuthX;e.y=e.historyAuthY}
+               }else historyPushRemoteSample(e,Number(sp.x)||0,Number(sp.y)||0,arrival);
+               next.push(e);
+             }
+             const rawDragons=Array.isArray(snapshot.dragons)?snapshot.dragons:[];
+             for(const sd of rawDragons){
+               const sid='dragon:'+String(sd.id);let e=oldByServerId.get(sid);
+               if(!e)e=historyCreatePvpEntity(PVP_ENEMY_HEROES.dragon,Number(sd.x)||state.world.w/2,Number(sd.y)||state.world.h/2,'pvp-enemy','#d86543',null,true);
+               e.historyServerId=sid;e.team='pvp-enemy';e.ownerId=null;e.pvpMinion=true;e.pvpWarAI=true;e.pvpEnemy=true;
+               e.alive=sd.alive!==false;e.hp=Math.max(0,Number(sd.hp)||0);e.maxHp=Math.max(1,Number(sd.maxHp)||100);
+               e.shield=Math.max(0,Number(sd.shield)||0);e.maxShield=Math.max(0,Number(sd.maxShield)||50);
+               e.heading=Number(sd.heading)||0;e.facing=Number(sd.facing)<0?-1:1;e.moving=!!sd.moving;
+               const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
+               if(e.dragonTakeoffSerial!==takeoffSerial&&flight==='takeoff'){
+                 const remaining=Math.max(0,(Number(sd.takeoffUntil)||0)-this.lastServerTime);
+                 e.dragonTakeoffStartedAt=arrival-Math.max(0,DRAGON_TAKEOFF_DURATION-remaining);e.dragonTakeoffEndAt=arrival+remaining;
+               }
+               e.dragonTakeoffSerial=takeoffSerial;e.dragonFlightState=flight;
+               if(flight==='flying'){e.dragonTakeoffEndAt=0;e.dragonTakeoffStartedAt=0}
+               const attackSerial=Number(sd.attackSerial)||0,attackRemaining=Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime);
+               e.dragonAttackSerial=Math.max(Number(e.dragonAttackSerial)||0,attackSerial);
+               if(attackRemaining>0)e.pendingDragonAttack={serial:attackSerial,startedAt:arrival,soundAt:arrival+Math.min(950,attackRemaining*.55),endAt:arrival+attackRemaining};
+               else e.pendingDragonAttack=null;
+               historyPushRemoteSample(e,Number(sd.x)||0,Number(sd.y)||0,arrival);next.push(e);
+             }
+             state.entities=next;
+             historySyncProjectiles(snapshot.projectiles||[],this.lastServerTime);
+           },
+           send(payload){
+             if(!this.active||!this.ws||this.ws.readyState!==WebSocket.OPEN)return false;
+             try{this.ws.send(JSON.stringify(payload));return true}catch(_){return false}
+           },
+           sendAction(action){
+             const me=pvpLocalHero();
+             return this.send({type:'action',action,targetId:pvpControls.targetId||null,angle:Number(me?.pvpWarriorChargeAngle??me?.heading)||0});
+           },
+           tick(dt,now){
+             if(!this.active||!state.running)return;
+             for(const e of state.entities){
+               e.attackAnim=Math.max(0,(Number(e.attackAnim)||0)-dt);e.attackCooldown=Math.max(0,(Number(e.attackCooldown)||0)-dt);
+               if(e.type==='dragon')updateDragonState(e,now);
+             }
+             const me=pvpLocalHero();
+             if(me?.alive){
+               const input=getLocalMovement();
+               let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
+               if(len>1){dx/=len;dy/=len}
+               const charging=pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now,locked=Number(me.knockTime)>0;
+               if(charging&&!locked){
+                 if(len>.12)me.pvpWarriorChargeAngle=Math.atan2(dy,dx);
+                 const angle=Number(me.pvpWarriorChargeAngle)||0,b=pvpArenaBounds(me.r||30),speed=me.speed*PVP_WARRIOR.specialSpeedMultiplier;
+                 me.x=clamp(me.x+Math.cos(angle)*speed*dt,b.left,b.right);me.y=clamp(me.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+                 me.heading=angle;me.facing=Math.cos(angle)<0?-1:1;me.moving=true;
+               }else if(!locked&&(dx||dy)){
+                 const b=pvpArenaBounds(me.r||30);
+                 me.x=clamp(me.x+dx*me.speed*dt,b.left,b.right);me.y=clamp(me.y+dy*me.speed*dt,b.top,b.bottom);
+                 me.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)me.facing=dx<0?-1:1;me.moving=true;
+               }else if(!locked)me.moving=false;
+
+               const ax=Number(me.historyAuthX),ay=Number(me.historyAuthY);
+               if(Number.isFinite(ax)&&Number.isFinite(ay)){
+                 const ex=ax-me.x,ey=ay-me.y,error=Math.hypot(ex,ey);
+                 const ack=Number(me.historyAuthInputSeq)||0,unacked=ack<(Number(this.inputSeq)||0);
+                 const authAge=Math.max(0,now-Number(me.historyAuthArrivalAt||now));
+                 if(!(unacked&&authAge<650)){
+                   if(error>760){me.x=ax;me.y=ay}
+                   else if(!me.moving&&error>3){const a=1-Math.exp(-7*dt);me.x+=ex*a;me.y+=ey*a}
+                   else if(me.moving&&error>320){const a=1-Math.exp(-.45*dt),excess=(error-320)/Math.max(1,error);me.x+=ex*a*excess;me.y+=ey*a*excess}
+                   pvpClampEntity(me);
+                 }
+               }
+
+               const signature=Number(dx).toFixed(3)+'|'+Number(dy).toFixed(3);
+               if(signature!==this.lastInputSignature||now-this.lastInputAt>=HISTORY_INPUT_KEEPALIVE_MS){
+                 this.lastInputSignature=signature;this.lastInputAt=now;this.send({type:'input',dx,dy,seq:++this.inputSeq});
+               }
+             }
+
+             for(const e of state.entities){
+               if(e===me||!e.alive)continue;
+               const sampled=historySampleRemotePosition(e,now);if(sampled){e.x=sampled.x;e.y=sampled.y}
+             }
+             for(const p of state.dragonProjectiles||[]){
+               p.x+=(Number(p.vx)||0)*dt;p.y+=(Number(p.vy)||0)*dt;
+               const ax=Number(p.historyAuthX),ay=Number(p.historyAuthY);
+               if(Number.isFinite(ax)&&Number.isFinite(ay)){
+                 const ex=ax-p.x,ey=ay-p.y,error=Math.hypot(ex,ey);
+                 if(error>95){p.x=ax;p.y=ay}
+                 else if(error>10){const a=1-Math.exp(-5*dt);p.x+=ex*a;p.y+=ey*a}
+               }
+             }
+             state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
+             if(now-this.lastPingAt>=2000){this.lastPingAt=now;this.send({type:'ping',t:now})}
+           },
+           handleClose(){
+             const wasActive=this.active;this.ws=null;this.active=false;
+             if(this.manualClose)return;
+             if(wasActive){
+               state.running=false;flash('CONEXÃO COM O HISTORY PERDIDA',1.8);
+               setTimeout(()=>{if(!this.active){state.historyActive=false;state.mode='history';navigateScreen('historyServerScreen');refreshHistoryServers()}},1400);
+             }
+           },
+           disconnect(showBrowser=false){
+             this.manualClose=true;this.active=false;try{this.ws?.close()}catch(_){}
+             this.ws=null;state.historyActive=false;state.historyServerId=null;state.running=false;
+             if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
+           }
+          };
+          function renderHistoryServers(servers){
+           const list=$('#historyServerList');if(!list)return;list.innerHTML='';
+           const rows=Array.isArray(servers)&&servers.length?servers:HISTORY_SERVER_FALLBACK;
+           if(!historySelectedServerId||!rows.some(server=>server.id===historySelectedServerId))historySelectedServerId=rows[0]?.id||null;
+           for(const server of rows){
+             const button=document.createElement('button');button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
+             const status=historyServerBase&&server.online!==false;
+             button.innerHTML='<span><div class="history-server-name">'+historyEscape(server.name||server.id)+'</div>'+
+               '<div class="history-server-meta">'+historyEscape(server.map||'arena-pvp')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores</div></span>'+
+               '<span class="history-server-status'+(status?'':' offline')+'">'+(status?'ONLINE':'OFFLINE')+'</span>';
+             button.onclick=()=>{historySelectedServerId=server.id;renderHistoryServers(rows);updateHistoryServerConfirm(rows)};list.appendChild(button);
+           }
+           updateHistoryServerConfirm(rows);
+          }
+          function updateHistoryServerConfirm(servers=HISTORY_SERVER_FALLBACK){
+           const button=$('#historyServerConfirm'),message=$('#historyServerMessage'),selected=(servers||[]).find(server=>server.id===historySelectedServerId);
+           if(!button||!message)return;const ready=!!historyServerBase&&!!selected&&selected.online!==false;
+           button.disabled=!ready||HistoryAdapter.connecting;message.textContent=ready?'Servidor Cloudflare disponível. Selecione e entre.':'Servidor History indisponível.';
+          }
+          async function refreshHistoryServers(){
+           const message=$('#historyServerMessage');if(message)message.textContent='Consultando servidores...';
+           try{
+             const response=await fetch(historyServerEndpoint('/servers'),{cache:'no-store'});if(!response.ok)throw Error('HTTP '+response.status);
+             const data=await response.json(),servers=Array.isArray(data?.servers)?data.servers:[];renderHistoryServers(servers);return servers;
+           }catch(err){
+             console.error('History servers:',err);renderHistoryServers(HISTORY_SERVER_FALLBACK);
+             if(message)message.textContent='Servidor History indisponível no momento.';return HISTORY_SERVER_FALLBACK;
+           }
+          }
+          async function openHistoryServerBrowser(){
+           if(HistoryAdapter.active)HistoryAdapter.disconnect(false);
+           state.historyActive=false;state.mode='history';preloadExtraPVPGifDurations();pvpLoadFlameFrames();
+           navigateScreen('historyServerScreen');await refreshHistoryServers();
+          }
+          $('#historyRefreshServers').onclick=()=>refreshHistoryServers();
+          $('#historyServerConfirm').onclick=async()=>{if(!historyServerBase||!historySelectedServerId||HistoryAdapter.connecting)return;await HistoryAdapter.connect(historySelectedServerId)};
+
+          """
+          s=s[:start]+block+s[end:]
+          p.write_text(s,encoding='utf-8')
+
+          t=Path('tests/history-smoke.cjs')
+          x=t.read_text(encoding='utf-8')
+          checks=r"""
+          assert(html.includes('HISTORY_RENDER_DELAY_MIN_MS=45')&&html.includes('HISTORY_RENDER_DELAY_MAX_MS=95'),
+            'History must use a lower adaptive interpolation buffer than Firebase PvP');
+          assert(html.includes("data.type==='damage'")&&html.includes('recordPVPDamage(e,Number(data.amount)||0)'),
+            'History server damage events must update damage text immediately');
+          assert(html.includes("e.dragonFlightState=flight")&&html.includes('historySyncProjectiles(snapshot.projectiles||[],this.lastServerTime)'),
+            'History must render authoritative dragon flight and fireballs');
+          assert(html.includes("unacked=ack<(Number(this.inputSeq)||0)")&&html.includes('error>760'),
+            'History local prediction must avoid reconciling against snapshots that have not acknowledged recent input');
+          assert(worker.includes('const DRAGON_MAX_HP = 100')&&worker.includes('const DRAGON_MAX_SHIELD = 50'),
+            'History dragons must have exactly 100 HP and 50 shield');
+          assert(worker.includes('const DRAGON_DAMAGE = 10')&&worker.includes('const DRAGON_BURN_DAMAGE = 2.5')&&worker.includes('const DRAGON_BURN_TICK_MS = 1000'),
+            'History dragon direct damage must be 10 and burn damage 2.5 per second');
+          assert(worker.includes('launchDragonFireball')&&worker.includes('flightState: "takeoff"')&&worker.includes('flightState = "flying"'),
+            'History dragons must take off, fly and launch server-authoritative fireballs');
+          assert(worker.includes('now - this.lastBroadcastAt >= 50')&&worker.includes('}, 33);'),
+            'History server must run a faster active simulation and snapshot cadence');
+          """
+          if "History must use a lower adaptive interpolation buffer" not in x:
+              x=x.replace("console.log('History smoke checks passed.');",checks+"\nconsole.log('History smoke checks passed.');")
+          t.write_text(x,encoding='utf-8')
+          PY
+      - name: Run regression tests
+        run: |
+          node tests/history-smoke.cjs
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Validate Worker
+        working-directory: history-server
+        run: |
+          npm install
+          npx wrangler deploy --dry-run
+      - name: Verify boot in Chromium
+        shell: bash
+        run: |
+          python3 -m http.server 8080 >/tmp/http.log 2>&1 &
+          PID=$!
+          sleep 2
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --enable-logging=stderr --v=1             --virtual-time-budget=9000 --dump-dom http://127.0.0.1:8080/ >/tmp/dom.html 2>/tmp/chrome.log || true
+          kill "$PID" 2>/dev/null || true
+          grep -E -i 'Uncaught|ReferenceError|TypeError|SyntaxError|INFO:CONSOLE' /tmp/chrome.log | tail -100 || true
+          if grep -E -q 'Uncaught (TypeError|ReferenceError|SyntaxError)' /tmp/chrome.log; then exit 1; fi
+      - name: Commit and clean workflow
+        run: |
+          rm -f .github/workflows/one-time-history-pvp-parity.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html tests/history-smoke.cjs .github/workflows/one-time-history-pvp-parity.yml
+          git commit -m "Match History dragon combat and smooth networking"
+          git push origin HEAD:main
