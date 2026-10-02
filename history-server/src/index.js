@@ -553,7 +553,7 @@ export class HistoryRoom extends DurableObject {
   damageDragon(dragon, amount, kind = "player", sourceId = null, impact = null) {
     if (!dragon?.alive) return 0;
     const dealt = this.applyDamage("dragon", dragon, amount, kind, sourceId, impact);
-    if (dealt > 0 && dragon.alive && sourceId) {
+    if (dealt > 0 && dragon.alive && dragon.hp > 0 && sourceId) {
       const first = !dragon.firstHitSeen;
       dragon.firstHitSeen = true;
       dragon.retaliatePending = true;
@@ -634,6 +634,10 @@ export class HistoryRoom extends DurableObject {
     const list = this.room.projectiles;
     for (let i = list.length - 1; i >= 0; i--) {
       const projectile = list[i];
+      if (projectile.pvpHit) {
+        if (now >= Number(projectile.hitUntil || 0)) list.splice(i, 1);
+        continue;
+      }
       if (now > Number(projectile.expireAt || 0)) { list.splice(i, 1); continue; }
 
       const sx = Number(projectile.x) || 0, sy = Number(projectile.y) || 0;
@@ -644,11 +648,18 @@ export class HistoryRoom extends DurableObject {
       projectile.x = nx; projectile.y = ny;
 
       if (hit) {
-        const impact = this.armKnockback(target, Number(projectile.vx) || 0, Number(projectile.vy) || 0);
+        projectile.x = nx; projectile.y = ny;
+        projectile.vx = 0; projectile.vy = 0;
+        projectile.pvpHit = true; projectile.hitUntil = now + 400;
+        this.broadcast({
+          type: "projectile_hit", projectileId: projectile.id, x: projectile.x, y: projectile.y,
+          hitUntil: projectile.hitUntil, targetId: target.id, at: now
+        });
+        const impact = this.armKnockback(target, Number(nx - sx) || 0, Number(ny - sy) || 0, 105, 60);
+        if (impact) impact.tilt = 6;
         this.applyDamage("player", target, DRAGON_DAMAGE, "fireball", projectile.sourceId, impact);
         if (target.hp <= 0) this.defeatPlayer(target, now);
         else this.igniteBurn(target, this.room.dragons.find(d => d.id === projectile.sourceId), now);
-        list.splice(i, 1);
         continue;
       }
 
