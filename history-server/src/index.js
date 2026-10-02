@@ -9,8 +9,22 @@ const CORS = {
 const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: "arena-pvp", maxPlayers: 8 }
 ]);
-const PVP_WORLD = Object.freeze({ width: 2200, height: 1400 });
-const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1900, top: 305, bottom: 1125 });
+const PVP_WORLD = Object.freeze({ width: 1850, height: 1542 });
+const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1550, top: 305, bottom: 1267 });
+const PLAYER_MAX_HP = 350;
+const PLAYER_MAX_SHIELD = 250;
+const PLAYER_SPEED = 195;
+const PLAYER_RESPAWN_MS = 3000;
+const WARRIOR_SPECIAL_UNLOCK_HITS = 5;
+const WARRIOR_SPECIAL_COOLDOWN_MS = 20000;
+const WARRIOR_SPECIAL_DURATION_MS = 1800;
+const WARRIOR_SPECIAL_SPEED_MULTIPLIER = 1.45;
+const DRAGON_ATTACK_COOLDOWN_MS = 1150;
+const HISTORY_HEROES = Object.freeze({
+  warrior: { id: "warrior", type: "warrior", clan: "warriors", variant: "male" },
+  mageFemale: { id: "mageFemale", type: "mage", clan: "warriors", variant: "female" }
+});
+function historyHero(id) { return HISTORY_HEROES[id] || HISTORY_HEROES.warrior; }
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -94,8 +108,8 @@ export class HistoryRoom extends DurableObject {
   spawnDragons(wave) {
     const hp = 1800;
     return [
-      { id: "history-dragon-a", type: "dragon", x: 780, y: 720, hp, maxHp: hp, alive: true, facing: 1, heading: 0, wave },
-      { id: "history-dragon-b", type: "dragon", x: 1620, y: 720, hp, maxHp: hp, alive: true, facing: -1, heading: Math.PI, wave }
+      { id: "history-dragon-a", type: "dragon", x: 670, y: 760, hp, maxHp: hp, alive: true, facing: 1, heading: 0, wave, attackCooldownUntil: 0, attackSerial: 0 },
+      { id: "history-dragon-b", type: "dragon", x: 1180, y: 760, hp, maxHp: hp, alive: true, facing: -1, heading: Math.PI, wave, attackCooldownUntil: 0, attackSerial: 0 }
     ];
   }
 
@@ -113,6 +127,8 @@ export class HistoryRoom extends DurableObject {
 
     const uid = String(url.searchParams.get("uid") || crypto.randomUUID()).slice(0, 80);
     const name = String(url.searchParams.get("name") || "Player").slice(0, 24);
+    const hero = historyHero(String(url.searchParams.get("hero") || "warrior"));
+    if (!this.clients.has(uid) && this.clients.size >= 8) return json({ error: "server_full" }, 503);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
@@ -120,11 +136,15 @@ export class HistoryRoom extends DurableObject {
     this.clients.set(uid, server);
     const previous = this.room.players[uid];
     this.room.players[uid] = previous || {
-      id: uid, name, x: 1200, y: 930, hp: 200, maxHp: 200,
-      facing: 1, heading: 0, moving: false, input: { dx: 0, dy: 0 },
-      attackCooldownUntil: 0, specialCooldownUntil: 0
+      id: uid, name, hero: hero.id, type: hero.type, clan: hero.clan, variant: hero.variant,
+      x: PVP_WORLD.width / 2, y: 1040,
+      hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, shield: PLAYER_MAX_SHIELD, maxShield: PLAYER_MAX_SHIELD,
+      alive: true, respawnAt: 0, facing: 1, heading: 0, moving: false, input: { dx: 0, dy: 0 },
+      lastInputSeq: 0, attackCooldownUntil: 0,
+      specialHits: 0, specialUnlocked: false, specialCooldownUntil: 0,
+      specialActiveUntil: 0, specialAngle: 0, specialHitIds: []
     };
-    this.room.players[uid].name = name;
+    Object.assign(this.room.players[uid], { name, hero: hero.id, type: hero.type, clan: hero.clan, variant: hero.variant });
 
     server.addEventListener("message", event => this.onMessage(uid, event.data));
     server.addEventListener("close", () => this.disconnect(uid));
@@ -139,10 +159,7 @@ export class HistoryRoom extends DurableObject {
 
   disconnect(uid) {
     this.clients.delete(uid);
-    if (this.room?.players?.[uid]) {
-      this.room.players[uid].moving = false;
-      this.room.players[uid].input = { dx: 0, dy: 0 };
-    }
+    if (this.room?.players?.[uid]) delete this.room.players[uid];
     this.broadcast({ type: "presence", uid, joined: false, players: this.publicPlayers() });
     if (!this.clients.size) this.stopLoop();
   }
@@ -156,12 +173,14 @@ export class HistoryRoom extends DurableObject {
     if (!player) return;
 
     if (message.type === "input") {
+      if (!player.alive) return;
       let dx = clamp(Number(message.dx) || 0, -1, 1);
       let dy = clamp(Number(message.dy) || 0, -1, 1);
       const len = Math.hypot(dx, dy);
       if (len > 1) { dx /= len; dy /= len; }
       player.input = { dx, dy };
-      if (len > 0.05) {
+      player.lastInputSeq = Math.max(Number(player.lastInputSeq) || 0, Number(message.seq) || 0);
+      if (len > 0.05 && Date.now() >= Number(player.specialActiveUntil || 0)) {
         player.heading = Math.atan2(dy, dx);
         player.facing = dx < 0 ? -1 : dx > 0 ? 1 : player.facing;
       }
@@ -169,7 +188,7 @@ export class HistoryRoom extends DurableObject {
     }
 
     if (message.type === "action") {
-      this.applyAction(player, String(message.action || "attack"));
+      this.applyAction(player, String(message.action || "attack"), message);
       return;
     }
 
@@ -179,26 +198,36 @@ export class HistoryRoom extends DurableObject {
     }
   }
 
-  applyAction(player, action) {
+  applyAction(player, action, message = {}) {
     const now = Date.now();
+    if (!player?.alive) return;
     const living = this.room.dragons.filter(d => d.alive);
     if (!living.length) return;
 
     if (action === "special") {
-      if (now < player.specialCooldownUntil) return;
-      player.specialCooldownUntil = now + 8000;
-      for (const dragon of living) {
-        if (distance(player, dragon) <= 260) this.damageDragon(dragon, 90);
-      }
-      this.broadcast({ type: "action", uid: player.id, action: "special", at: now });
+      if (!player.specialUnlocked || now < Number(player.specialCooldownUntil || 0) || now < Number(player.specialActiveUntil || 0)) return;
+      const requestedAngle = Number(message.angle);
+      player.specialAngle = Number.isFinite(requestedAngle) ? requestedAngle : Number(player.heading) || 0;
+      player.heading = player.specialAngle;
+      player.facing = Math.cos(player.specialAngle) < 0 ? -1 : 1;
+      player.specialCooldownUntil = now + WARRIOR_SPECIAL_COOLDOWN_MS;
+      player.specialActiveUntil = now + WARRIOR_SPECIAL_DURATION_MS;
+      player.specialHitIds = [];
+      this.broadcast({ type: "action", uid: player.id, action: "special", angle: player.specialAngle, at: now });
       return;
     }
 
-    if (now < player.attackCooldownUntil) return;
-    player.attackCooldownUntil = now + 430;
-    const target = living.sort((a, b) => distance(player, a) - distance(player, b))[0];
-    if (target && distance(player, target) <= 125) this.damageDragon(target, 32);
-    this.broadcast({ type: "action", uid: player.id, action: "attack", targetId: target?.id || null, at: now });
+    if (now < Number(player.attackCooldownUntil || 0)) return;
+    player.attackCooldownUntil = now + 300;
+    const target = living.slice().sort((a, b) => distance(player, a) - distance(player, b))[0];
+    let hit = false;
+    if (target && distance(player, target) <= 135) {
+      this.damageDragon(target, 32);
+      hit = true;
+      player.specialHits = Math.min(WARRIOR_SPECIAL_UNLOCK_HITS, (Number(player.specialHits) || 0) + 1);
+      if (player.specialHits >= WARRIOR_SPECIAL_UNLOCK_HITS) player.specialUnlocked = true;
+    }
+    this.broadcast({ type: "action", uid: player.id, action: "attack", targetId: target?.id || null, hit, at: now });
   }
 
   damageDragon(dragon, amount) {
@@ -217,19 +246,42 @@ export class HistoryRoom extends DurableObject {
     this.lastTickAt = now;
 
     for (const player of Object.values(this.room.players)) {
-      const dx = Number(player.input?.dx) || 0, dy = Number(player.input?.dy) || 0;
-      const moving = Math.hypot(dx, dy) > 0.05;
+      if (!player.alive) {
+        player.moving = false;
+        if (player.respawnAt && now >= player.respawnAt) {
+          player.alive = true; player.respawnAt = 0;
+          player.hp = player.maxHp; player.shield = player.maxShield;
+          player.x = PVP_WORLD.width / 2; player.y = 1040;
+          player.input = { dx: 0, dy: 0 };
+          this.broadcast({ type: "player_respawned", uid: player.id, at: now });
+        }
+        continue;
+      }
+      const specialActive = now < Number(player.specialActiveUntil || 0);
+      let dx = Number(player.input?.dx) || 0, dy = Number(player.input?.dy) || 0;
+      if (specialActive) {
+        const angle = Number(player.specialAngle) || 0;
+        dx = Math.cos(angle); dy = Math.sin(angle);
+      }
+      const moving = specialActive || Math.hypot(dx, dy) > 0.05;
       player.moving = moving;
       if (moving) {
-        const speed = 225;
+        const speed = PLAYER_SPEED * (specialActive ? WARRIOR_SPECIAL_SPEED_MULTIPLIER : 1);
         player.x = clamp(player.x + dx * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
         player.y = clamp(player.y + dy * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+      }
+      if (specialActive) {
+        const hitIds = Array.isArray(player.specialHitIds) ? player.specialHitIds : (player.specialHitIds = []);
+        for (const dragon of this.room.dragons) {
+          if (!dragon.alive || hitIds.includes(dragon.id) || distance(player, dragon) > 105) continue;
+          hitIds.push(dragon.id); this.damageDragon(dragon, 65);
+        }
       }
     }
 
     for (const dragon of this.room.dragons) {
       if (!dragon.alive) continue;
-      const players = Object.values(this.room.players);
+      const players = Object.values(this.room.players).filter(p => p.alive);
       if (!players.length) continue;
       const target = players.reduce((best, p) => !best || distance(dragon, p) < distance(dragon, best) ? p : best, null);
       if (!target) continue;
@@ -240,6 +292,21 @@ export class HistoryRoom extends DurableObject {
         const speed = 92;
         dragon.x = clamp(dragon.x + dx / len * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
         dragon.y = clamp(dragon.y + dy / len * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+      } else if (now >= Number(dragon.attackCooldownUntil || 0)) {
+        dragon.attackCooldownUntil = now + DRAGON_ATTACK_COOLDOWN_MS;
+        dragon.attackSerial = (Number(dragon.attackSerial) || 0) + 1;
+        let damage = 28;
+        if (target.shield > 0) {
+          const absorbed = Math.min(target.shield, damage);
+          target.shield -= absorbed; damage -= absorbed;
+        }
+        if (damage > 0) target.hp = Math.max(0, target.hp - damage);
+        if (target.hp <= 0 && target.alive) {
+          target.alive = false; target.moving = false; target.respawnAt = now + PLAYER_RESPAWN_MS;
+          target.input = { dx: 0, dy: 0 };
+          this.broadcast({ type: "player_defeated", uid: target.id, respawnAt: target.respawnAt, at: now });
+        }
+        this.broadcast({ type: "dragon_attack", dragonId: dragon.id, targetId: target.id, serial: dragon.attackSerial, at: now });
       }
     }
 
