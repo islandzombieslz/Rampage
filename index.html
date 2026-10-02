@@ -6906,7 +6906,8 @@ function historyApplyAuthoritativeAction(e,data){
  if(action!=='attack')return false;
  if(kind==='combo-cancel'){
    e.historyServerComboSerial=Math.max(Number(e.historyServerComboSerial)||0,Number(data.comboSerial)||0);
-   pvpCancelWarriorCombo(e,now);
+   const staleForLocal=e.controlled&&Number(e.attackSerial||0)>Number(data.attackSerial||0);
+   if(!staleForLocal)pvpCancelWarriorCombo(e,now);
    return true;
  }
  if(kind==='combo'){
