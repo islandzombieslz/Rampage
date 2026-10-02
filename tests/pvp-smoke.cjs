@@ -271,24 +271,29 @@ assert(!section('async function reservePVPStart(){','async function launchPVP(){
  'PvP start must never transact the entire room because guest player nodes can be write-protected');
 assert(html.includes("state.players=pvpRosterFromFirebaseRoom(room)"),
  'match start must rebuild players from the authoritative Firebase roster');
-assert(html.includes("const PVP_INPUT_INTERVAL_MS=33")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=60")&&
- html.includes("const PVP_REMOTE_RENDER_DELAY_MS=90")&&html.includes("const PVP_REMOTE_RENDER_DELAY_MIN_MS=72"),
- 'PvP uses a faster authoritative cadence plus a jitter-safe interpolation buffer without changing War constants');
+assert(html.includes("const PVP_INPUT_INTERVAL_MS=50")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=100")&&
+ html.includes("const PVP_REMOTE_RENDER_DELAY_MS=120")&&html.includes("const PVP_REMOTE_RENDER_DELAY_MIN_MS=95"),
+ 'PvP uses a lighter authoritative snapshot cadence plus a larger jitter-safe interpolation buffer without changing War constants');
 assert(html.includes("if(state.mode==='pvp'){")&&html.includes("F.set(F.ref(F.firebaseDb,`rooms/${roomId}/inputs/${uid}`)")&&
  html.includes("const tail=this.inputQueue[this.inputQueue.length-1]"),
  'PvP inputs bypass ACK backpressure while PvE retains the previous queued transport');
 assert(html.includes("const roomId=this.roomId,uid=this.localPlayerId")&&html.includes("this.roomId===roomId&&this.localPlayerId===uid"),
  'the legacy queued transport stays scoped to the room and player that created it');
-assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=150")&&html.includes("signature===NetworkAdapter.lastInputSignature"),
+assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=120")&&html.includes("signature===NetworkAdapter.lastInputSignature"),
  'unchanged PvP inputs are deduplicated with a bounded keepalive instead of flooding Firebase');
 assert(html.includes("input.pvpInputSeq=++NetworkAdapter.pvpInputSeq")&&html.includes("e.pvpLastInputSeq=inputSeq"),
  'PvP uses monotonic input sequence numbers and host acknowledgements for reconciliation');
+assert(html.includes("input.pvpClientPose={")&&html.includes("function pvpApplyGuestClientPose(entity,input")&&
+ html.includes("PVP_CLIENT_POSE_SPEED_FACTOR=2.4"),
+ 'PvP guests publish a validated local pose anchor so the host mirrors movement without RTT-sized drift');
+assert(html.includes("Object.assign(old,out);return old")&&html.includes("out.heading=Number(old.heading)||0"),
+ 'host snapshots preserve the local guest hero object and immediate movement presentation');
 assert(html.includes("hasUnacknowledgedInput")&&html.includes("authArrivalAge<800")&&html.includes("netAuthInputSeq"),
  'a guest never snaps back to an authoritative pose that predates its latest unacknowledged input');
 assert(html.includes("serverAt:F.serverTimestamp()")&&html.includes("remoteSampleAt")&&html.includes("pvpSnapshotJitterEwma"),
  'PvP snapshots carry host time and use an adaptive jitter buffer instead of packet arrival time');
-assert(html.includes("function pvpRemoteInputFor(ownerId)")&&html.includes("const PVP_INPUT_STALE_MS=420"),
- 'the host stops stale guest movement if keepalives disappear instead of drifting indefinitely');
+assert(html.includes("function pvpRemoteInputFor(ownerId)")&&html.includes("const PVP_INPUT_STALE_MS=700"),
+ 'the host tolerates transient Firebase jitter but still stops genuinely stale guest movement');
 assert(html.includes("async handoffPVPHost(reason='hidden')")&&html.includes("pvpNextHostCandidate(room,this.localPlayerId,requireForeground)"),
  'a backgrounded PvP host must hand authority to another participant instead of pausing the match');
 assert(html.includes("const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?")&&
@@ -314,8 +319,9 @@ assert(html.includes("const patch={};for(const code of expired)patch[code]=null"
  'room cleanup must bulk-delete stale rooms with a per-room fallback for Firebase rules');
 assert(html.includes("const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?")&&html.includes("`rooms/${code}`"),
  'the final running PvP host must arm whole-room deletion on abrupt disconnect');
-assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
- 'non-host PvP movement must be predicted locally and softly reconciled');
+assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_MOVING_RECONCILE_PX=420")&&
+ html.includes("const alpha=1-Math.exp(-.75*Math.max(0,dt))"),
+ 'non-host PvP movement stays local-first and only reconciles large moving divergence');
 assert(html.includes("const PVP_REGION_ENTER_MARGIN_PX=140")&&html.includes("const PVP_REGION_SIM_MARGIN_PX=380")&&
  html.includes("function pvpRegionalAuthorityDecision"),
  'PvP must use stable expanded authority bubbles with hysteresis instead of changing the global room host');
