@@ -5239,11 +5239,14 @@ const REMOTE_WAR_MAX_EXTRAP_MS=85;
 const REMOTE_WAR_HISTORY_LIMIT=7;
 // PvP guests need a much smaller visual buffer than War. Local movement is
 // predicted immediately; these constants only smooth the rest of the world.
-const PVP_REMOTE_RENDER_DELAY_MS=60;
-const PVP_REMOTE_MAX_EXTRAP_MS=130;
+const PVP_REMOTE_RENDER_DELAY_MS=72;
+const PVP_REMOTE_MAX_EXTRAP_MS=125;
 const PVP_INPUT_INTERVAL_MS=33;
-const PVP_SNAPSHOT_INTERVAL_MS=80;
-const PVP_INPUT_KEEPALIVE_MS=160;
+// Full snapshots are expensive because they include every NPC and active timeline.
+// 100 ms is still smooth with interpolation/local prediction and cuts Firebase/GC
+// pressure substantially compared with the old 80 ms cadence.
+const PVP_SNAPSHOT_INTERVAL_MS=100;
+const PVP_INPUT_KEEPALIVE_MS=180;
 const PVP_LOCAL_SOFT_ERROR_PX=58;
 const PVP_LOCAL_SNAP_ERROR_PX=260;
 
@@ -5254,11 +5257,12 @@ const PVP_LOCAL_SNAP_ERROR_PX=260;
 // The host continuously ingests that bubble and resumes from its latest state when
 // the two camera regions meet, instead of rolling the area back.
 const PVP_REGION_ENTER_MARGIN_PX=140;
-const PVP_REGION_HOST_PRIORITY_MARGIN_PX=90;
-const PVP_REGION_SIM_MARGIN_PX=380;
-const PVP_REGION_PACKET_MAX_AGE_MS=900;
-const PVP_REGION_SNAPSHOT_INTERVAL_MS=70;
-const PVP_REGION_HANDOFF_LINGER_MS=220;
+const PVP_REGION_HOST_PRIORITY_MARGIN_PX=110;
+const PVP_REGION_SIM_MARGIN_PX=320;
+const PVP_REGION_CLUSTER_DISTANCE_PX=760;
+const PVP_REGION_PACKET_MAX_AGE_MS=1100;
+const PVP_REGION_SNAPSHOT_INTERVAL_MS=95;
+const PVP_REGION_HANDOFF_LINGER_MS=260;
 const PVP_REGION_MAX_POSE_STEP_MS=240;
 const PVP_REGION_MAX_SPEED_FACTOR=1.9;
 const PVP_REGION_FIRST_POSE_ALLOWANCE_PX=150;
@@ -5309,6 +5313,24 @@ function pvpRegionalAuthorityDecision(entity,view,wasDelegated=false){
  return wasDelegated?!pvpPointInAuthorityView(entity,view,PVP_REGION_HOST_PRIORITY_MARGIN_PX):
    !pvpPointInAuthorityView(entity,view,PVP_REGION_ENTER_MARGIN_PX);
 }
+function pvpRegionalClusterLeaderUid(entity,hostView=pvpLatestHostView){
+ if(!entity||!pvpValidAuthorityView(hostView))return NetworkAdapter.localPlayerId||null;
+ const localUid=String(NetworkAdapter.localPlayerId||'');
+ const candidates=[];
+ for(const p of state.players){
+   if(!p?.human||String(p.id)===String(NetworkAdapter.hostUid||''))continue;
+   const hero=state.entities.find(e=>e.alive&&!e.pvpMinion&&String(e.ownerId||'')===String(p.id));
+   if(!hero||pvpPointInAuthorityView(hero,hostView,PVP_REGION_ENTER_MARGIN_PX))continue;
+   if(Math.hypot(Number(hero.x)-Number(entity.x),Number(hero.y)-Number(entity.y))>PVP_REGION_CLUSTER_DISTANCE_PX)continue;
+   candidates.push({uid:String(p.id),slot:Number(p.slot)||999});
+ }
+ if(!candidates.some(x=>x.uid===localUid)){
+   const me=state.players.find(p=>String(p.id)===localUid);
+   candidates.push({uid:localUid,slot:Number(me?.slot)||999});
+ }
+ candidates.sort((a,b)=>a.slot-b.slot||a.uid.localeCompare(b.uid));
+ return candidates[0]?.uid||localUid||null;
+}
 function pvpSetLocalRegionalAuthority(next){
  next=!!next;
  if(next===pvpLocalRegionalAuthority)return next;
@@ -5328,12 +5350,15 @@ function pvpUpdateLocalRegionalAuthority(entity){
  const view=pvpLatestHostView;
  if(!pvpValidAuthorityView(view)||String(view.hostUid||'')!==String(NetworkAdapter.hostUid||''))
    return pvpSetLocalRegionalAuthority(false);
- return pvpSetLocalRegionalAuthority(pvpRegionalAuthorityDecision(entity,view,pvpLocalRegionalAuthority));
+ const wantsAuthority=pvpRegionalAuthorityDecision(entity,view,pvpLocalRegionalAuthority);
+ if(wantsAuthority&&String(pvpRegionalClusterLeaderUid(entity,view)||'')!==String(NetworkAdapter.localPlayerId||''))
+   return pvpSetLocalRegionalAuthority(false);
+ return pvpSetLocalRegionalAuthority(wantsAuthority);
 }
 function pvpRegionalPosePacket(entity){
  if(!pvpUpdateLocalRegionalAuthority(entity))return null;
  return {
-   seq:++pvpRegionalPoseSeq,x:Number(entity.x)||0,y:Number(entity.y)||0,
+   seq:++pvpRegionalPoseSeq,epoch:pvpLocalRegionalEpoch,x:Number(entity.x)||0,y:Number(entity.y)||0,
    heading:Number(entity.heading)||0,facing:Number(entity.facing)||1,moving:!!entity.moving
  };
 }
