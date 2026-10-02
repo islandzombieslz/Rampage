@@ -80,20 +80,22 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const saved={x:remote.x,y:remote.y,heading:remote.heading,facing:remote.facing,moving:remote.moving,
      knockTime:remote.knockTime,pvpWarriorChargeUntil:remote.pvpWarriorChargeUntil,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid};
    const uid=NetworkAdapter.localPlayerId,now=performance.now(),packetAt=NetworkAdapter.serverNow();
-   remote.x=1200;remote.y=900;remote.knockTime=0;remote.pvpWarriorChargeUntil=0;
+   const own=pvpLocalHero(),ownSaved={x:own.x,y:own.y};
+   own.x=300;own.y=300;remote.x=1400;remote.y=1150;remote.knockTime=0;remote.pvpWarriorChargeUntil=0;
+   pvpCoordinateNearbyHumans();
    pvpRemoteRegionalAuthority.delete('remote-user');
    const farView={hostUid:uid,left:250,top:250,right:800,bottom:700};
    const accepted=pvpApplyDelegatedRemotePose(remote,{
      t:packetAt,pvpRegionalAuthority:true,
-     pvpRegionalPose:{seq:1,x:1260,y:900,heading:0,facing:1,moving:true}
+     pvpRegionalPose:{seq:1,x:1460,y:1150,heading:0,facing:1,moving:true}
    },now,farView);
-   const moved=remote.x>1200;
-   const nearView={hostUid:uid,left:1000,top:700,right:1500,bottom:1100};
+   const moved=remote.x>1400;
+   const nearView={hostUid:uid,left:1200,top:900,right:1650,bottom:1300};
    const yielded=pvpApplyDelegatedRemotePose(remote,{
      t:packetAt+16,pvpRegionalAuthority:true,
-     pvpRegionalPose:{seq:2,x:1300,y:900,heading:0,facing:1,moving:true}
+     pvpRegionalPose:{seq:2,x:1500,y:1150,heading:0,facing:1,moving:true}
    },now+16,nearView);
-   Object.assign(remote,saved);pvpRemoteRegionalAuthority.delete('remote-user');
+   Object.assign(remote,saved);Object.assign(own,ownSaved);pvpCoordinateNearbyHumans();pvpRemoteRegionalAuthority.delete('remote-user');
    return {accepted,moved,yielded};
  },
  distributedRegionCycle(){
@@ -121,6 +123,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
      view,focus:{x:farX,y:farY,entityId:remote.id},
      entities:[pvpPackRegionalEntity(remotePacket,now),pvpPackRegionalEntity(regionalEnemy,now)],
      dragonProjectiles:[],players:[],matchStats:{},pvpDamageEvents:[]};
+   remote.x=farX;remote.y=farY;template.x=regionalEnemy.x;template.y=regionalEnemy.y;
    NetworkAdapter.roomCache.regions={'remote-user':packet};pvpHostRegionState.clear();
    pvpIntegrateRemoteRegions(now);
    const leased=state.entities.find(e=>String(e.id)===String(regionalId));
@@ -430,7 +433,7 @@ const server=http.createServer((req,res)=>{
  }
  if(name==='/sw.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.end('self.addEventListener("install",()=>self.skipWaiting());');return}
  // Exercise the one-time canonical fallback when a cache-busted GIF fails.
- if(name==='/assets/mage/poder-mago-especial.gif'&&new URL(req.url,'http://127.0.0.1').searchParams.has('gifStart')){
+ if((name==='/assets/mage/poder-mago-especial.gif'||name==='/assets/runtime/magePowerSpecial.gif')&&new URL(req.url,'http://127.0.0.1').searchParams.has('gifStart')){
    res.writeHead(404);res.end('test-only cache-buster failure');return;
  }
  if(name==='/assets/mage/poder-mago.gif'||name==='/assets/egypt/mage/power-normal.gif'){

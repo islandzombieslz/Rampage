@@ -31,6 +31,18 @@ scan_text = manifest_pattern.sub(
 local_urls = set(re.findall(r'''['"](assets/[^'"<>?\s]+)['"]''', scan_text))
 external_urls = set(re.findall(r'''['"](https://i\.postimg\.cc/[^'"<>\s]+)['"]''', scan_text))
 
+# Keep the boot cache aligned with the generated display sprites. Original art
+# remains in the repository as a fallback; eagerly downloading both versions
+# would erase the loading/memory benefit on every clean installation.
+display = re.search(r'// BEGIN GENERATED DISPLAY SPRITES[\s\S]*?Object\.assign\(ASSETS,(\{.*?\})\);', text)
+if display:
+    mapping = json.loads(display[1])
+    originals = dict(re.findall(r"\b(\w+):'(assets/[^']+\.gif)'", text[text.index('const ASSETS ='):display.start()]))
+    for key, runtime in mapping.items():
+        if key not in ('magePower', 'egyptMagePower'):
+            local_urls.discard(originals.get(key))
+        local_urls.add(runtime)
+
 manifest = {}
 for url in sorted(local_urls):
     path = Path(url)
