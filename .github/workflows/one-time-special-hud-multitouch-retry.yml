@@ -1,0 +1,192 @@
+name: One-time special HUD multitouch retry
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-special-hud-multitouch-retry.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply requested special HUD and simultaneous input
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path("index.html")
+          s=p.read_text(encoding="utf-8")
+
+          old="""#pvpCombatHud [data-pvp-action]{appearance:none;-webkit-appearance:none;touch-action:manipulation}
+          #pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(72px,9.5vw,92px);height:clamp(48px,7vw,64px);
+           display:flex;align-items:flex-end;justify-content:flex-start}
+          #pvpCombatHud .pvp-special-button{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px);min-height:0;margin:0;
+           padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:12px;background:#17191c;box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007}
+          #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
+           border-radius:999px;background:linear-gradient(90deg,#a9461d,#ed8d26 62%,#ffd75a);transition:width .12s linear}
+          #pvpCombatHud .pvp-special-button.ready{border-color:#e6bd55;box-shadow:inset 0 1px 4px #0008,0 0 8px #e6a83d8a}
+          #pvpCombatHud .pvp-special-button.ready .pvp-special-fill{filter:brightness(1.12)}
+          #pvpCombatHud .pvp-special-button.unavailable{opacity:.42;filter:grayscale(1)}
+          #pvpCombatHud .pvp-special-button .pvp-cooldown{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
+           color:#fff;font-size:9px;font-weight:900;line-height:1;text-shadow:0 1px 2px #000}
+          #pvpCombatHud .pvp-special-icon{position:absolute;right:0;bottom:-2px;width:clamp(42px,5.8vw,56px);height:clamp(42px,5.8vw,56px);
+           object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 4px #0008)}"""
+          new="""#pvpCombatHud [data-pvp-action]{appearance:none;-webkit-appearance:none;touch-action:none}
+          #pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(108px,14vw,136px);height:clamp(48px,7vw,64px);
+           display:flex;align-items:flex-end;justify-content:flex-start;isolation:isolate}
+          #pvpCombatHud .pvp-special-button{position:relative;width:clamp(82px,10.5vw,104px);height:clamp(48px,7vw,64px);min-height:0;margin:0;
+           padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:11px;background:#17191c;
+           box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007;transition:border-color .13s ease,box-shadow .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
+           border-radius:8px 0 0 8px;
+           background:repeating-linear-gradient(90deg,#963b1d 0 7px,#c95c20 7px 14px,#e89028 14px 21px,#f2b53b 21px 28px,#3b2418 28px 31px);
+           box-shadow:inset -2px 0 4px #0007;transition:width .12s linear,filter .13s ease}
+          #pvpCombatHud .pvp-special-button.ready{border-color:#f0c75d;box-shadow:inset 0 0 8px #ffe58d55,0 0 11px #e8aa398f}
+          #pvpCombatHud .pvp-special-button.ready .pvp-special-fill{filter:brightness(1.18) saturate(1.08)}
+          #pvpCombatHud .pvp-special-wrap.ready .pvp-special-button{border-color:#ffe27a;
+           box-shadow:inset 0 0 10px #ffe58d70,0 0 13px #f0b23eaa,0 0 0 2px #fff0a526;filter:brightness(1.10)}
+          #pvpCombatHud .pvp-special-wrap.ready .pvp-special-fill{filter:brightness(1.24) saturate(1.12)}
+          #pvpCombatHud .pvp-special-button.unavailable{opacity:.42;filter:grayscale(1)}
+          #pvpCombatHud .pvp-special-button .pvp-cooldown{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
+           color:#fff;font-size:9px;font-weight:900;line-height:1;text-shadow:0 1px 2px #000}
+          #pvpCombatHud .pvp-special-icon{position:absolute;right:-7px;bottom:-8px;width:clamp(64px,8.8vw,82px);height:clamp(64px,8.8vw,82px);
+           object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 5px #000a);transition:transform .13s ease,filter .13s ease}
+          #pvpCombatHud .pvp-special-wrap.ready .pvp-special-icon{transform:scale(1.06);
+           filter:drop-shadow(0 0 9px #ffd95fbb) drop-shadow(0 3px 5px #000a)}"""
+          if old not in s:
+              raise SystemExit("special HUD CSS anchor not found")
+          s=s.replace(old,new,1)
+
+          pattern=re.compile(r"""     const specialIcon=button\.closest\('\.pvp-special-wrap'\)\?\.querySelector\('\.pvp-special-icon'\);\n     const warriorIcon=pvpIsWarriorHero\(me\);\n     if\(specialIcon\)\{\n       specialIcon\.hidden=!warriorIcon;\n       if\(warriorIcon\)\{\n         const specialRunning=Number\(me\?\.pvpSpecialVisualUntil\)>now;\n         const specialReady=!warriorUnlock&&remaining<=0;\n         const iconActive=specialReady\|\|specialRunning;\n         const iconState=iconActive\?'active':'inactive';\n         if\(specialIcon\.dataset\.state!==iconState\)\{\n           specialIcon\.src=iconActive\?PVP_UI_ASSETS\.specialActive:PVP_UI_ASSETS\.specialInactive;\n           specialIcon\.dataset\.state=iconState;\n         \}\n       \}\n     \}""")
+          replacement="""     const specialWrap=button.closest('.pvp-special-wrap');
+               const specialIcon=specialWrap?.querySelector('.pvp-special-icon');
+               const warriorIcon=pvpIsWarriorHero(me);
+               const specialRunning=Number(me?.pvpSpecialVisualUntil)>now;
+               const specialReady=!warriorUnlock&&remaining<=0;
+               const specialHudActive=!!(available&&!warriorUnlock&&(specialReady||specialRunning));
+               if(specialWrap)specialWrap.classList.toggle('ready',specialHudActive);
+               if(specialIcon){
+                 specialIcon.hidden=!warriorIcon;
+                 if(warriorIcon){
+                   const iconState=specialHudActive?'active':'inactive';
+                   if(specialIcon.dataset.state!==iconState){
+                     specialIcon.src=specialHudActive?PVP_UI_ASSETS.specialActive:PVP_UI_ASSETS.specialInactive;
+                     specialIcon.dataset.state=iconState;
+                   }
+                 }
+               }"""
+          s,n=pattern.subn(replacement,s,count=1)
+          if n!=1:
+              raise SystemExit(f"special ready-state block: expected 1 match, found {n}")
+
+          old="""function pvpCanSpecial(e){return !!(e?.alive&&PVP_HERO_BY_ID[e.pvpHero]?.special&&e.attackCooldown<=0&&
+            performance.now()>=e.pvpSpecialReadyAt&&performance.now()>=e.pvpActionUntil&&performance.now()>=e.pvpPowerUntil)}"""
+          new="""function pvpCanSpecial(e){
+           if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special)return false;
+           const now=performance.now();
+           if(now<Number(e.pvpSpecialReadyAt)||Number(e.pvpPowerUntil)>now||Number(e.pvpWarriorChargeUntil)>now)return false;
+           // O especial pronto pode interromper ataque básico/single/combo. Movimento nunca bloqueia o especial.
+           if(Number(e.pvpActionUntil)>now&&!pvpIsWarriorHero(e))return false;
+           return true;
+          }"""
+          if old not in s:
+              raise SystemExit("pvpCanSpecial anchor not found")
+          s=s.replace(old,new,1)
+
+          old="""function pvpSpecialAttack(e){
+           if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||e.attackCooldown>0||
+              e.pvpPowerUntil>performance.now()||e.pvpActionUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
+           const now=performance.now();
+           if(pvpIsWarriorHero(e))return pvpStartWarriorSpecial(e,now);"""
+          new="""function pvpSpecialAttack(e){
+           if(!e?.alive||!PVP_HERO_BY_ID[e.pvpHero]?.special||e.knockTime>0||
+              e.pvpPowerUntil>performance.now()||performance.now()<e.pvpSpecialReadyAt)return false;
+           const now=performance.now();
+           if(pvpIsWarriorHero(e)){
+             // O especial tem prioridade sobre o ataque em andamento e assume o personagem imediatamente.
+             pvpCancelWarriorCombo(e,now);
+             e.pvpWarriorSingleUntil=0;e.pvpMeleeVisualUntil=Math.min(Number(e.pvpMeleeVisualUntil)||0,now);
+             e.pvpActionUntil=Math.min(Number(e.pvpActionUntil)||0,now);e.attackCooldown=0;e.attackAnim=0;
+             return pvpStartWarriorSpecial(e,now);
+           }
+           if(e.pvpActionUntil>now)return false;"""
+          if old not in s:
+              raise SystemExit("pvpSpecialAttack anchor not found")
+          s=s.replace(old,new,1)
+
+          old="""$$('#pvpCombatHud [data-pvp-action]').forEach(button=>button.onclick=()=>{
+           if(state.mode!=='pvp'||!state.running||button.disabled)return;
+           const action=button.dataset.pvpAction;
+           if(action==='special'){pvpControls.selected='special';pvpTriggerAttack('special');pvpControls.selected='attack'}
+           else{pvpControls.selected=action;if(action==='power')pvpControls.targetId=pvpNearestEnemy(pvpLocalHero())?.id??null}
+           updatePVPHUD();
+          });"""
+          new="""function pvpActivateHudAction(button,event=null){
+           if(state.mode!=='pvp'||!state.running||button.disabled)return false;
+           const action=button.dataset.pvpAction;
+           if(action==='special'){
+             event?.preventDefault?.();event?.stopPropagation?.();
+             const triggered=pvpTriggerAttack('special');
+             pvpControls.selected='attack';
+             updatePVPHUD();
+             return triggered;
+           }
+           pvpControls.selected=action;
+           if(action==='power')pvpControls.targetId=pvpNearestEnemy(pvpLocalHero())?.id??null;
+           updatePVPHUD();
+           return true;
+          }
+          $$('#pvpCombatHud [data-pvp-action]').forEach(button=>{
+           if(button.dataset.pvpAction==='special'){
+             // Primeiro contato: outro dedo pode continuar no joystick ou no botão de ataque.
+             button.addEventListener('pointerdown',event=>pvpActivateHudAction(button,event));
+             button.onclick=event=>{event.preventDefault();event.stopPropagation()};
+           }else button.onclick=event=>pvpActivateHudAction(button,event);
+          });"""
+          if old not in s:
+              raise SystemExit("PvP HUD action handler anchor not found")
+          s=s.replace(old,new,1)
+
+          p.write_text(s,encoding="utf-8")
+
+          p=Path("tests/pvp-smoke.cjs")
+          s=p.read_text(encoding="utf-8")
+          old="""assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(48px,7vw,64px);height:clamp(48px,7vw,64px)"),
+           'special control must match the stone power/weapon slot size');
+          """
+          new="""assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(82px,10.5vw,104px);height:clamp(48px,7vw,64px)"),
+           'special control keeps the current height but uses a rectangular HUD');
+          assert(html.includes('repeating-linear-gradient(90deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
+           'special HUD uses striped progress and lights up the whole control when ready');
+          assert(html.includes("width:clamp(64px,8.8vw,82px);height:clamp(64px,8.8vw,82px)"),
+           'Warrior special fist icon is deliberately larger');
+          assert(html.includes("button.addEventListener('pointerdown',event=>pvpActivateHudAction(button,event))"),
+           'special fires on pointerdown so multitouch does not wait for click release');
+          assert(html.includes('pvpCancelWarriorCombo(e,now)')&&html.includes('e.attackCooldown=0;e.attackAnim=0'),
+           'ready Warrior special can preempt a basic attack/combo');
+          """
+          if old not in s:
+              raise SystemExit("PvP smoke HUD assertion anchor not found")
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding="utf-8")
+          PY
+      - name: Run regression tests
+        run: |
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Commit final changes and remove temporary workflows
+        shell: bash
+        run: |
+          rm -f .github/workflows/one-time-special-hud-multitouch.yml
+          rm -f .github/workflows/one-time-special-hud-multitouch-retry.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html tests/pvp-smoke.cjs .github/workflows/one-time-special-hud-multitouch.yml .github/workflows/one-time-special-hud-multitouch-retry.yml
+          git commit -m "Refine special HUD and enable simultaneous PvP input"
+          git push origin HEAD:main
