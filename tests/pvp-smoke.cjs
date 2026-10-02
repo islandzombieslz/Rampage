@@ -288,6 +288,20 @@ assert(html.includes("input.pvpClientPose={")&&html.includes("function pvpApplyG
  'PvP guests publish a validated local pose anchor so the host mirrors movement without RTT-sized drift');
 assert(html.includes("Object.assign(old,out);return old")&&html.includes("out.heading=Number(old.heading)||0"),
  'host snapshots preserve the local guest hero object and immediate movement presentation');
+assert(html.includes("function pvpPreviewGuestAction(e,action,targetId)")&&
+ html.includes("if(me)pvpPreviewGuestAction(me,action,pvpControls.targetId)")&&
+ html.includes("pvpLocalPredictedWarriorChargeUntil"),
+ 'non-host PvP attacks, powers and specials must start locally without waiting for a host snapshot');
+assert(html.includes("previewPending=previewSeq>hostAttackSeq")&&html.includes("out.pvpSpecialFxUntil=Math.max")&&
+ html.includes("out.pvpPowerVisualUntil=Math.max"),
+ 'pending guest action visuals survive stale snapshots only until the host acknowledges the attack sequence');
+assert(html.includes("const PVP_QUALITY_PROBE_MS=5000")&&html.includes("async measurePVPConnectionQuality()")&&
+ html.includes("evaluatePVPHostQuality()"),
+ 'PvP participants continuously measure Firebase RTT/jitter and the host evaluates instability');
+assert(html.includes("function pvpHostQualityScore(player")&&html.includes("pvpHostQualityScore(a,now)-pvpHostQualityScore(b,now)"),
+ 'host successor selection prefers the measured best connection instead of only the player slot');
+assert(html.includes("this.handoffPVPHost('unstable')")&&html.includes("reason==='hidden'||reason==='unstable'"),
+ 'an unstable PvP host can hand authority to a better foreground connection');
 assert(html.includes("hasUnacknowledgedInput")&&html.includes("authArrivalAge<800")&&html.includes("netAuthInputSeq"),
  'a guest never snaps back to an authoritative pose that predates its latest unacknowledged input');
 assert(html.includes("serverAt:F.serverTimestamp()")&&html.includes("remoteSampleAt")&&html.includes("pvpSnapshotJitterEwma"),
