@@ -90,6 +90,19 @@ assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+1000')&
   'History dragon attack SFX and GIF must share the PvP 1000 ms cue without snapshot restarts');
 assert(html.includes('historyPreviewLocalAction(me,action,pvpControls.targetId)'),
   'History local previews must obey PvP attack activation gates');
+assert(worker.includes('action === "combo_cancel"')&&worker.includes('"combo-cancel"')&&
+  html.includes('sendComboCancel()')&&html.includes('if(state.historyActive)HistoryAdapter.sendComboCancel()'),
+  'History must cancel held Warrior combos on Cloudflare as soon as the local button is released');
+assert(html.includes('function historyTickLocalWarriorComboVisual')&&
+  html.includes('historyTickLocalWarriorComboVisual(me,now)')&&html.includes('if(repeat)return pvpStartWarriorCombo(e,now)'),
+  'History must keep held local combo GIF cycles continuous without running local damage simulation');
+assert(html.includes('if(!controlled)e.attackCooldown=')&&
+  html.includes('if(!controlled&&authoritativeSingleNew&&!matchingSinglePreview)')&&
+  html.includes('if(!controlled&&authoritativeComboNew&&!matchingComboPreview)'),
+  'History snapshots must not overwrite the controlled player local attack/combo visual clock');
+assert(html.includes("pvpFullGifDuration('pvpWarriorAttack',PVP_WARRIOR.singleFallbackMs)")&&
+  html.includes("pvpFullGifDuration('pvpWarriorCombo',PVP_WARRIOR.comboFallbackMs)"),
+  'Remote History Warrior attacks must render using the same full GIF duration logic as PvP');
 assert(worker.includes('retaliatePending')&&worker.includes('retaliateImmediate')&&
   worker.includes('dragon.nextShotAt = 0')&&worker.includes('dragon.closeShotAt = 0')&&
   worker.includes('dragon.flightState === "flying"'),
