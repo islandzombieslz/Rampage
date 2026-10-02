@@ -33,7 +33,7 @@ assert(worker.includes('const PVP_WORLD = Object.freeze({ width: 1850, height: 1
   'History must use the exact PvP arena dimensions');
 assert(worker.includes('WARRIOR_SPECIAL_UNLOCK_HITS = 5')&&worker.includes('specialActiveUntil'),
   'History server must own warrior special unlock, cooldown and movement');
-assert(worker.includes('DRAGON_ATTACK_COOLDOWN_MS')&&worker.includes('player_defeated'),
+assert(worker.includes('DRAGON_SHOT_COOLDOWN_MS')&&worker.includes('DRAGON_CLOSE_SHOT_COOLDOWN_MS')&&worker.includes('player_defeated'),
   'History dragons must attack players authoritatively');
 assert(wrangler.includes('"HISTORY_ROOMS"')&&wrangler.includes('"new_sqlite_classes": ["HistoryRoom"]'),
   'Wrangler must bind and migrate the History Durable Object');
