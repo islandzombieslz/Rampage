@@ -1,0 +1,49 @@
+name: Import PvP UI assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/import-pvp-ui-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download UI assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/ui/pvp
+          curl -fL --retry 4 --retry-delay 2 'https://i.postimg.cc/JzSXcgTL/Punho-Especial-inativo.png' -o assets/ui/pvp/punho-especial-inativo.png
+          curl -fL --retry 4 --retry-delay 2 'https://i.postimg.cc/8zxvB3Zx/Punho-Especial-ativo.gif' -o assets/ui/pvp/punho-especial-ativo.gif
+          curl -fL --retry 4 --retry-delay 2 'https://i.postimg.cc/9Qs9tSx2/Moldura-armas.png' -o assets/ui/pvp/moldura-armas.png
+          curl -fL --retry 4 --retry-delay 2 'https://i.postimg.cc/nhNmY5dZ/Botao-de-ataque.png' -o assets/ui/pvp/botao-ataque.png
+          curl -fL --retry 4 --retry-delay 2 'https://i.postimg.cc/Gm6DJNM1/Estrela-HUD-nivel.png' -o assets/ui/estrela-hud-nivel.png
+          test -s assets/ui/pvp/punho-especial-inativo.png
+          test -s assets/ui/pvp/punho-especial-ativo.gif
+          test -s assets/ui/pvp/moldura-armas.png
+          test -s assets/ui/pvp/botao-ataque.png
+          test -s assets/ui/estrela-hud-nivel.png
+
+      - name: Commit imported assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/ui/pvp assets/ui/estrela-hud-nivel.png
+          if git diff --cached --quiet; then
+            echo 'Assets already imported.'
+            exit 0
+          fi
+          git commit -m 'Import PvP HUD artwork locally'
+          git push origin main
