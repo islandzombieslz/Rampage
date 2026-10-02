@@ -9,6 +9,8 @@ const CORS = {
 const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: "arena-pvp", maxPlayers: 8 }
 ]);
+const PVP_WORLD = Object.freeze({ width: 2200, height: 1400 });
+const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1900, top: 305, bottom: 1125 });
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -220,8 +222,8 @@ export class HistoryRoom extends DurableObject {
       player.moving = moving;
       if (moving) {
         const speed = 225;
-        player.x = clamp(player.x + dx * speed * dt, 90, 2310);
-        player.y = clamp(player.y + dy * speed * dt, 90, 1510);
+        player.x = clamp(player.x + dx * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+        player.y = clamp(player.y + dy * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
       }
     }
 
@@ -236,8 +238,8 @@ export class HistoryRoom extends DurableObject {
       dragon.facing = dx < 0 ? -1 : 1;
       if (len > 155) {
         const speed = 92;
-        dragon.x = clamp(dragon.x + dx / len * speed * dt, 90, 2310);
-        dragon.y = clamp(dragon.y + dy / len * speed * dt, 90, 1510);
+        dragon.x = clamp(dragon.x + dx / len * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+        dragon.y = clamp(dragon.y + dy / len * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
       }
     }
 
@@ -283,6 +285,8 @@ export class HistoryRoom extends DurableObject {
       serverTime: Date.now(),
       mode: "history",
       map: "arena-pvp",
+      world: PVP_WORLD,
+      playBounds: PVP_PLAY_BOUNDS,
       rounds: null,
       players: this.publicPlayers(),
       dragons: this.room.dragons,
