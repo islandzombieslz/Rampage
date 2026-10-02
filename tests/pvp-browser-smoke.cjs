@@ -402,7 +402,9 @@ const pvpTestHook=`window.__pvpBrowserTest={
  },
  basicSerial(){return pvpLocalHero()?.attackSerial||0},
  historyAttackVisualIsolation(){
-   const own=pvpLocalHero();if(!own)return null;
+   const local=pvpLocalHero();if(!local)return null;
+   const own=pvpBaseEntity(PVP_HERO_BY_ID.warrior,700,700,local.team,'#fff','history-visual-test',false);
+   own.pvpHero='warrior';own.clan='warriors';own.variant='male';
    const now=performance.now(),serverTime=Date.now();
    const keys=['controlled','attackCooldown','attackSerial','comboStep','regenSerial',
      'pvpWarriorSingleSerial','pvpWarriorSingleUntil','pvpWarriorLastBasicAt',
@@ -429,6 +431,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
    historyApplyAuthoritativeAction(own,{action:'attack',kind:'combo-cancel',attackSerial:20,comboSerial:4,at:serverTime});
    const currentCancelled=Number(own.pvpWarriorComboUntil)===0;
    Object.assign(own,saved);
+   state.entities=state.entities.filter(e=>e!==own);
    return {snapshotPreserved,stalePreserved,currentCancelled};
  },
  warriorMechanics(){
