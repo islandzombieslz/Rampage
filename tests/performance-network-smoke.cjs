@@ -104,7 +104,7 @@ function clockTests(){
   let updates=0,renders=0,distance=0;
   const state={mode:'pvp',fpsFrames:0,fpsLast:0,hudLast:0};
   const noop=()=>{};
-  const ctx=vm.createContext({state,NetworkAdapter:{online:false},Math,clamp,last:0,messageUntil:0,performance,PVP_SNAPSHOT_INTERVAL_MS:80,
+  const ctx=vm.createContext({state,NetworkAdapter:{online:false},Math,clamp,last:0,messageUntil:0,performance,PVP_SNAPSHOT_INTERVAL_MS:60,
    gameScreenPerfEl:{style:{}},centerMessagePerfEl:{textContent:''},requestAnimationFrame:noop,
    updateGameSimulation:dt=>{updates++;distance+=210*dt},draw:()=>renders++,updateWarCameraIntro:noop,updateWarCameraInertia:noop,
    updateSpectatorTransition:noop,updateGolemRockEffects:noop,updateLayeredBattleSfx:noop,updatePvpCombatSfx:noop,
@@ -120,12 +120,13 @@ function clockTests(){
 async function adapterTests(){
  const calls=[],listeners=new Map();let generalSyncs=0,resolveArm;
  const F={ref:(_db,p)=>p,firebaseDb:{},update:async(p,v)=>calls.push(['update',p,v]),
+  set:(p,v)=>{calls.push(['set',p,v]);return new Promise(()=>{})},serverTimestamp:()=>123456,
   onValue:(p,cb)=>{listeners.set(p,cb);return()=>listeners.delete(p)},
   onDisconnect:p=>({set:async uid=>{calls.push(['arm',p,uid]);await new Promise(r=>{resolveArm=r})},
    remove:async()=>calls.push(['remove',p]),cancel:async()=>calls.push(['cancel',p])})};
  const state={mode:'pvp',phase:'combat',running:true};
  const ctx=vm.createContext({console,Math,Date,Map,Set,Promise,Object,Number,String,state,window:{FirebaseBridge:F},
-  syncFirebaseRoom:()=>generalSyncs++,handleHostCommands(){},applyRemoteGame(){},
+  syncFirebaseRoom:()=>generalSyncs++,handleHostCommands(){},applyRemoteGame(){},pvpReportError:(tag,e)=>{throw e},
   pvpNextHostCandidate:room=>Object.values(room.players||{}).find(p=>p.uid==='guest')});
  vm.runInContext(section('const NetworkAdapter = {','/* ==================== CONFIGURAÇÃO'),ctx);
  const net=vm.runInContext('NetworkAdapter',ctx);
@@ -133,6 +134,10 @@ async function adapterTests(){
  net.subscribeRoom('ROOM');await Promise.resolve();
  const input={host:{dx:1}};listeners.get('rooms/ROOM/inputs')({exists:()=>true,val:()=>input});
  assert.equal(net.remoteInputs,input);assert.equal(generalSyncs,0,'hot input path never runs lobby/presence reconciliation');
+ const firstSend=net.sendInput({dx:1,pvpInputSeq:1}),secondSend=net.sendInput({dx:0,pvpInputSeq:2});
+ await Promise.all([firstSend,secondSend]);
+ assert.equal(calls.filter(x=>x[0]==='set'&&x[1]==='rooms/ROOM/inputs/host').length,2,
+  'PvP input writes are not serialized behind Firebase acknowledgements');
  Object.assign(net.roomCache,{players:{host:{uid:'host'},guest:{uid:'guest'}},settings:{mode:'pvp'}});
  const a=net.refreshPVPHostDisconnect(),b=net.refreshPVPHostDisconnect();
  for(let i=0;i<8&&!resolveArm;i++)await Promise.resolve();assert(resolveArm);
@@ -142,6 +147,6 @@ async function adapterTests(){
  let releaseFirebase;net.hostUid='host';net.waitFirebase=()=>new Promise(r=>{releaseFirebase=r});
  const pending=net.pushState({seq:1});net.hostUid='guest';releaseFirebase(F);await pending;
  assert.equal(calls.filter(x=>x[0]==='update').length,0,'old host cannot publish after async handoff');
- console.log('ADAPTER PASS: hot-path input delivery, serialized disconnect registration and late host-write rejection');
+ console.log('ADAPTER PASS: nonblocking PvP input delivery, serialized disconnect registration and late host-write rejection');
 }
 regionalTests();loadTests();clockTests();adapterTests().catch(e=>{console.error(e);process.exitCode=1});
