@@ -89,5 +89,9 @@ assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+Math.ma
   'History dragon attack SFX timing must match the PvP 1000 ms cue');
 assert(html.includes('historyPreviewLocalAction(me,action,pvpControls.targetId)'),
   'History local previews must obey PvP attack activation gates');
+assert(worker.includes('retaliatePending')&&worker.includes('retaliateImmediate')&&
+  worker.includes('dragon.nextShotAt = 0')&&worker.includes('dragon.closeShotAt = 0')&&
+  worker.includes('dragon.flightState === "flying"'),
+  'History dragons must preserve the PvP first-hit retaliation behavior even while staggered');
 
 console.log('History smoke checks passed.');
