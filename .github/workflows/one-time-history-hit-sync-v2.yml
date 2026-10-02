@@ -122,8 +122,8 @@ jobs:
           'local knockback')
 
           once(
-          "     if(Number.isFinite(ax)&&Number.isFinite(ay)){",
-          "     if(!knocked&&Number.isFinite(ax)&&Number.isFinite(ay)){",
+          "     const ax=Number(me.historyAuthX),ay=Number(me.historyAuthY);\n     if(Number.isFinite(ax)&&Number.isFinite(ay)){",
+          "     const ax=Number(me.historyAuthX),ay=Number(me.historyAuthY);\n     if(!knocked&&Number.isFinite(ax)&&Number.isFinite(ay)){",
           'skip reconcile during knockback')
 
           once(
