@@ -56,6 +56,7 @@ ctx.warFrameEnemiesByTeam=new Map();
 ctx.rebuildWarEntityIdMap=()=>new Map(state.entities.map(e=>[e.id,e]));
 ctx.updateDragonProjectiles=()=>{};
 ctx.updateDragonBurns=()=>{};
+ctx.buildWarAIGrid=()=>new Map();
 const run=expr=>vm.runInContext(expr,ctx);
 // An image-data sub-block can contain 21 F9 04 without being a GIF frame.
 const syntheticGif=new Uint8Array([
@@ -252,9 +253,9 @@ assert(html.includes("const PVP_INPUT_KEEPALIVE_MS=160")&&html.includes("signatu
  'unchanged PvP inputs are deduplicated with the previously validated bounded keepalive instead of flooding Firebase');
 assert(html.includes("async handoffPVPHost(reason='hidden')")&&html.includes("pvpNextHostCandidate(room,this.localPlayerId,requireForeground)"),
  'a backgrounded PvP host must hand authority to another participant instead of pausing the match');
-assert(html.includes("const disconnectRef=successorUid")&&
- html.includes("?F.ref(F.firebaseDb,\`rooms/\${this.roomId}/hostUid\`)")&&
- html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)")&&
+assert(html.includes("const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?")&&
+ html.includes("`rooms/${code}/hostUid`")&&
+ html.includes("`rooms/${code}`")&&
  html.includes("await op.set(successorUid)")&&html.includes("await op.remove()"),
  'the current PvP host must transfer hostUid when a successor exists, or delete the whole room when it is the last player');
 assert(html.includes("function claimPVPHostIfOrphaned(room)")&&html.includes("function pvpSyncOnlineParticipants(room)"),
@@ -273,7 +274,7 @@ assert(!section("if(state.phase==='finished'&&!NetworkAdapter.remoteFinishSchedu
  'remote peers must remain in the room after the result screen');
 assert(html.includes("const patch={};for(const code of expired)patch[code]=null")&&html.includes("if(!bulkRemoved)await Promise.all"),
  'room cleanup must bulk-delete stale rooms with a per-room fallback for Firebase rules');
-assert(html.includes("const disconnectRef=successorUid")&&html.includes(":F.ref(F.firebaseDb,\`rooms/\${this.roomId}\`)"),
+assert(html.includes("const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?")&&html.includes("`rooms/${code}`"),
  'the final running PvP host must arm whole-room deletion on abrupt disconnect');
 assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
  'non-host PvP movement must be predicted locally and softly reconciled');
@@ -577,4 +578,3 @@ async function testPVPReadyLobby(){
  console.log('PvP four-ally cap, own-card hero confirmation and readiness: PASS');
 }
 testPVPReadyLobby().catch(e=>{console.error(e);process.exitCode=1});
-

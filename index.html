@@ -3178,6 +3178,7 @@ const NetworkAdapter = {
   inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
   regionSending:false,regionPending:null,regionSendPromise:null,
   hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
+  hostDisconnectVersion:0,hostDisconnectRefreshPromise:null,
   presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){
@@ -3273,29 +3274,37 @@ const NetworkAdapter = {
     }catch(_){return false}
   },
   async cancelPVPHostDisconnect(){
+    this.hostDisconnectVersion++;
     const op=this.hostDisconnectOp;this.hostDisconnectOp=null;this.hostDisconnectSuccessorUid=null;
     if(op?.cancel)try{await op.cancel()}catch(_){}
   },
   async refreshPVPHostDisconnect(room=this.roomCache){
-    const pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
-    if(!this.roomId||!this.localPlayerId||!this.isHost||!pvp||this.roomStatus!=='playing'){
-      if(this.hostDisconnectOp)await this.cancelPVPHostDisconnect();
-      return false;
-    }
-    const successor=pvpNextHostCandidate(room,this.localPlayerId,false);
-    const successorUid=successor?.uid||null;
-    if(this.hostDisconnectOp&&this.hostDisconnectSuccessorUid===successorUid)return true;
-    await this.cancelPVPHostDisconnect();
-    const F=await this.waitFirebase();
-    const disconnectRef=successorUid
-      ?F.ref(F.firebaseDb,`rooms/${this.roomId}/hostUid`)
-      :F.ref(F.firebaseDb,`rooms/${this.roomId}`);
-    const op=F.onDisconnect(disconnectRef);
-    try{
-      if(successorUid&&op?.set)await op.set(successorUid);
-      else if(!successorUid&&op?.remove)await op.remove();
-      this.hostDisconnectOp=op;this.hostDisconnectSuccessorUid=successorUid;return true;
-    }catch(_){this.hostDisconnectOp=null;this.hostDisconnectSuccessorUid=null;return false}
+    if(this.hostDisconnectRefreshPromise)return this.hostDisconnectRefreshPromise;
+    const run=async()=>{
+      const pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
+      if(!this.roomId||!this.localPlayerId||!this.isHost||!pvp||this.roomStatus!=='playing'){
+        if(this.hostDisconnectOp)await this.cancelPVPHostDisconnect();
+        return false;
+      }
+      const code=this.roomId,uid=this.localPlayerId;
+      const successorUid=pvpNextHostCandidate(room,uid,false)?.uid||null;
+      if(this.hostDisconnectOp&&this.hostDisconnectSuccessorUid===successorUid)return true;
+      await this.cancelPVPHostDisconnect();
+      const version=this.hostDisconnectVersion,F=await this.waitFirebase();
+      const valid=()=>this.roomId===code&&this.localPlayerId===uid&&this.isHost&&
+        this.roomStatus==='playing'&&this.hostDisconnectVersion===version;
+      if(!valid())return false;
+      const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?`rooms/${code}/hostUid`:`rooms/${code}`));
+      try{
+        if(successorUid&&op?.set)await op.set(successorUid);
+        else if(!successorUid&&op?.remove)await op.remove();
+        if(!valid()){if(op?.cancel)await op.cancel();return false}
+        this.hostDisconnectOp=op;this.hostDisconnectSuccessorUid=successorUid;return true;
+      }catch(_){if(op?.cancel)try{await op.cancel()}catch(_){}return false}
+    };
+    this.hostDisconnectRefreshPromise=run();
+    try{return await this.hostDisconnectRefreshPromise}
+    finally{this.hostDisconnectRefreshPromise=null}
   },
   async handoffPVPHost(reason='hidden'){
     if(this.hostHandoffInFlight||!this.roomId||!this.localPlayerId||!this.isHost||this.roomStatus!=='playing')return false;
@@ -3414,6 +3423,14 @@ const NetworkAdapter = {
           if(key==='regions'){
             // Regional snapshots are consumed directly by the global host loop.
             // Guests only publish their own region; no lobby/UI reconciliation here.
+            return;
+          }
+          if(key==='inputs'){
+            this.remoteInputs=this.roomCache.inputs||{};
+            return;
+          }
+          if(key==='commands'){
+            handleHostCommands(this.roomCache.commands);
             return;
           }
           if(key==='game'){
@@ -3540,7 +3557,12 @@ const NetworkAdapter = {
     })();
     return this.regionSendPromise;
   },
-  async pushState(snapshot){if(!this.roomId||!this.isHost||state.phase==='finished')return;const F=await this.waitFirebase();if(state.phase==='finished')return;await F.update(F.ref(F.firebaseDb,`rooms/${this.roomId}`),{status:'playing',game:snapshot})},
+  async pushState(snapshot){
+    if(!this.roomId||!this.isHost||state.phase==='finished')return;
+    const roomId=this.roomId,uid=this.localPlayerId,F=await this.waitFirebase();
+    if(this.roomId!==roomId||!this.isHost||this.localPlayerId!==uid||state.phase==='finished')return;
+    await F.update(F.ref(F.firebaseDb,`rooms/${roomId}`),{status:'playing',game:{...snapshot,authorityUid:uid}});
+  },
   async removeCommand(uid,id){const F=await this.waitFirebase();await F.remove(F.ref(F.firebaseDb,`rooms/${this.roomId}/commands/${uid}/${id}`))}
 };
 
@@ -3653,10 +3675,10 @@ const ASSETS = {
 };
 
 /* PERSISTENT ASSET CACHE 2026-09-12 */
-const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/anubis/attack-melee.gif":"78abb76450087da56f12","assets/egypt/anubis/attack-ranged.gif":"94e53115c854cc4a904b","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/anubis/idle.gif":"76f2dc839b54e98e0de6","assets/egypt/anubis/projectile.gif":"829fa4a4e1e0d4fc0919","assets/egypt/anubis/walk.gif":"3a8ba2d2c0b99e4c2682","assets/egypt/isis/attack-normal.gif":"e024c3d53f7f335cf712","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/isis/idle.gif":"b3f9e09dfbeec94e8511","assets/egypt/isis/power-special.gif":"798c06f46b6efd2845ea","assets/egypt/isis/special.gif":"675126cdb4a57710654f","assets/egypt/isis/walk.gif":"f476072733ea094eea8a","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"a1262c7c563be2832bee","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/naja/attack-normal.gif":"21a72d3b18444a00bcee","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/naja/idle.gif":"1d18872f7b8f6c15524f","assets/egypt/naja/special-burrow.gif":"d060111a4165a18d7b92","assets/egypt/naja/special-emerge.gif":"3b5ecf5f7f2a950c2c98","assets/egypt/naja/walk.gif":"ffaa3749396e1ce4917c","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/poseidon/idle.gif":"5652578ed08710ad5df4","assets/water/poseidon/normal.gif":"1854cad0138c174ea4e8","assets/water/poseidon/special-summon.gif":"ae61432321b445e83b69","assets/water/poseidon/special-wave.gif":"54771f8a4a73606204c1","assets/water/poseidon/walk.gif":"85b1928db6bf830fe959","assets/water/poseidon/wave.gif":"3564b50f36305cdfc9b7","assets/water/seahorse/attack.gif":"39bf4678846ad1d5c610","assets/water/seahorse/card.png":"fb07fee512437b85d6ca","assets/water/seahorse/idle.gif":"2dabeea956360ffddaf0","assets/water/seahorse/walk.gif":"bb7f07d736f19c2fc4ec"});
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/brown-warrior/guerreira-marrom-andando.gif":"61c0609c9195f705c034","assets/brown-warrior/guerreira-marrom-ataque-especial.gif":"6d6dce18a65003ae9b7f","assets/brown-warrior/guerreira-marrom-ataque-normal.gif":"df1dcfa3755167f11e21","assets/brown-warrior/guerreira-marrom-parada.gif":"5054bcb25e3ecac21947","assets/brown-warrior/poder-especial-guerreira-marrom.gif":"d4706ce61dd0d8e94b06","assets/dragon/bola-de-fogo.gif":"a53adcb311ee24a75b1c","assets/dragon/dragao-guerreiro-atacando.gif":"361d4109a32d72a1477b","assets/dragon/dragao-guerreiro-parado.gif":"3957c1c2d3ced76e2025","assets/dragon/dragao-guerreiro-pulando.gif":"15e9cff46f277368ccaa","assets/dragon/dragao-guerreiro-voando.gif":"37226564c62889b89e40","assets/egypt/anubis/attack-melee.gif":"78abb76450087da56f12","assets/egypt/anubis/attack-ranged.gif":"94e53115c854cc4a904b","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/anubis/idle.gif":"76f2dc839b54e98e0de6","assets/egypt/anubis/projectile.gif":"829fa4a4e1e0d4fc0919","assets/egypt/anubis/walk.gif":"3a8ba2d2c0b99e4c2682","assets/egypt/isis/attack-normal.gif":"e024c3d53f7f335cf712","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/isis/idle.gif":"b3f9e09dfbeec94e8511","assets/egypt/isis/power-special.gif":"798c06f46b6efd2845ea","assets/egypt/isis/special.gif":"675126cdb4a57710654f","assets/egypt/isis/walk.gif":"f476072733ea094eea8a","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/female-idle.gif":"17697bc39650b4a1e361","assets/egypt/mage/female-special.gif":"cd488ab343330c6c1b57","assets/egypt/mage/female-walk.gif":"0d647ec840fe38671bc2","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/male-idle.gif":"1de6462dd2de24e98b72","assets/egypt/mage/male-special.gif":"6cab324993ff08cb9bef","assets/egypt/mage/male-walk.gif":"d69e94512803f8c1e800","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/mage/power-special.gif":"a1262c7c563be2832bee","assets/egypt/mage/staff.gif":"914820f6bb3829349ad4","assets/egypt/naja/attack-normal.gif":"21a72d3b18444a00bcee","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/naja/idle.gif":"1d18872f7b8f6c15524f","assets/egypt/naja/special-burrow.gif":"d060111a4165a18d7b92","assets/egypt/naja/special-emerge.gif":"3b5ecf5f7f2a950c2c98","assets/egypt/naja/walk.gif":"ffaa3749396e1ce4917c","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/female-idle.gif":"85f113b877ddec820d5b","assets/egypt/warrior/female-walk.gif":"47cee01ee6f0de0c09df","assets/egypt/warrior/male-idle.gif":"67b124655842dfeae42e","assets/egypt/warrior/male-walk.gif":"068eb198f91580e0de78","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/golem-andando.gif":"c5d97e981381fac0c515","assets/golem/golem-ataque.gif":"16e57c364d4183534477","assets/golem/golem-especial.gif":"e475e6dc5ead0f00dd95","assets/golem/golem-parado.gif":"bbf80c6627ce48d2efcd","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/king/card.png":"65a1234077906cbb8d47","assets/king/idle.gif":"57f9985d1a8cb61283b1","assets/king/power.gif":"09ef34bf326adbfb3542","assets/king/special.gif":"ef1a885b7376595d5668","assets/king/sword.png":"8105d9f3509070ea78e2","assets/king/walk.gif":"de13759b74f421ab5177","assets/mage/maga-andando.gif":"d7fb255ed05b949c1759","assets/mage/maga-especial.gif":"b4dad793b9f7379787ba","assets/mage/maga-parada.gif":"53bdbf02d9a18fd650db","assets/mage/mago-andando.gif":"07c053928df29d54c4de","assets/mage/mago-especial.gif":"9f326f228e93c6d7d00c","assets/mage/mago-parado.gif":"dd2d9f7333dc3485093f","assets/mage/mao-cajado.gif":"57ceebcf1c3044204319","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago-especial.gif":"f46eb1e4fd4bb4f2097e","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/warrior/guerreira-andando.gif":"110fe58f5ac993759d7f","assets/warrior/guerreira-parada.gif":"6196ec9884d23a185852","assets/warrior/guerreiro-andando.gif":"9d74fab3a5bda9d15343","assets/warrior/guerreiro-parado.gif":"3ee1716010bc42021ac5","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/poseidon/idle.gif":"5652578ed08710ad5df4","assets/water/poseidon/normal.gif":"1854cad0138c174ea4e8","assets/water/poseidon/special-summon.gif":"ae61432321b445e83b69","assets/water/poseidon/special-wave.gif":"54771f8a4a73606204c1","assets/water/poseidon/walk.gif":"85b1928db6bf830fe959","assets/water/poseidon/wave.gif":"3564b50f36305cdfc9b7","assets/water/seahorse/attack.gif":"39bf4678846ad1d5c610","assets/water/seahorse/card.png":"fb07fee512437b85d6ca","assets/water/seahorse/idle.gif":"2dabeea956360ffddaf0","assets/water/seahorse/walk.gif":"bb7f07d736f19c2fc4ec","assets/warrior/pvp/guerreiro-morrendo.gif":"02d564aabf4df3ea98c8","assets/warrior/pvp/guerreiro-ataque-unico.gif":"ec27ab556c2a76a577ff","assets/warrior/pvp/combo-ataque-guerreiro.gif":"2625c2a7830831c72514","assets/warrior/pvp/especial-guerreiro.gif":"28b1569761782d9b2750"});
 const BOOT_CACHE_NAME="rampage-assets-v3";
 const BOOT_MANIFEST_KEY="rampageAssetManifestV3";
-const BOOT_FETCH_CONCURRENCY=10;
+const BOOT_FETCH_CONCURRENCY=4;
 function setBootProgress(value){
  const pct=Math.max(0,Math.min(100,Math.round(value)));
  const text=document.getElementById('bootLoaderPercent'),bar=document.getElementById('bootLoaderBar');
@@ -3957,7 +3979,7 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
  // continuam nas URLs normais, evitando baixar e manter cópias extras de todos
  // os GIFs na memória sem qualquer ganho visual.
  const gifKeys=['golemAttack','golemSpecial','najaAttack','najaSpecial','najaSpecialFinal','brownAttack','brownSpecial','brownPower','magePower','mageSpecial','femaleMageSpecial','magePowerSpecial','egyptMagePower','egyptMageSpecial','egyptFemaleMageSpecial','egyptMagePowerSpecial','kingSpecial','kingPower','dragonTakeoff','dragonAttack','dragonFireball','anubisMeleeAttack','anubisRangedAttack','isisAttack','isisSpecial','isisPower'];
- await Promise.all(gifKeys.map(async key=>{
+ for(const key of gifKeys){
    const src=ASSETS[key];
    try{
      const probeUrl=new URL(src,location.href);
@@ -4020,7 +4042,8 @@ function gifActionDurationMs(buffer,maxFrameDelayMs=2000){
        if(brownGifReadyKeys.size===3)brownAttackAssetsReady=true;
      }
    }
- }));
+   await new Promise(resolve=>setTimeout(resolve,state.running?25:0));
+ }
  MAGE_SPECIAL_DURATION=Math.max(MAGE_SPECIAL_MALE_DURATION,MAGE_SPECIAL_FEMALE_DURATION,MAGE_POWER_SPECIAL_DURATION);
  BROWN_SPECIAL_DURATION=BROWN_POWER_DURATION;
  KING_SPECIAL_DURATION=Math.max(KING_BODY_SPECIAL_DURATION,KING_POWER_DURATION);
@@ -4373,23 +4396,20 @@ function meleeFightSfxAttacking(e,now){
  return false;
 }
 function bestMeleeFightSfxCluster(now){
- const fighters=state.entities.filter(meleeFightSfxCandidate);
- if(fighters.length<4)return null;
  const clusterSq=170*170,enemySq=125*125;
  let best=null,bestGain=0;
- for(const attacker of fighters){
-   if(!meleeFightSfxAttacking(attacker,now))continue;
-   const group=[];let enemyClose=false;
-   for(const other of fighters){
+ for(const attacker of state.entities){
+   if(!meleeFightSfxCandidate(attacker)||!meleeFightSfxAttacking(attacker,now))continue;
+   let count=0,sumX=0,sumY=0,enemyClose=false;
+   forEachWarSpatialCandidate(attacker.x-170,attacker.y-170,attacker.x+170,attacker.y+170,other=>{
+     if(!meleeFightSfxCandidate(other))return;
      const dx=other.x-attacker.x,dy=other.y-attacker.y,d2=dx*dx+dy*dy;
-     if(d2<=clusterSq)group.push(other);
+     if(d2<=clusterSq){count++;sumX+=other.x;sumY+=other.y}
      if(other.team!==attacker.team&&d2<=enemySq)enemyClose=true;
-   }
-   if(group.length<4||!enemyClose||new Set(group.map(e=>e.team)).size<2)continue;
-   const x=group.reduce((sum,e)=>sum+e.x,0)/group.length;
-   const y=group.reduce((sum,e)=>sum+e.y,0)/group.length;
-   const mix=worldSfxMix(x,y);
-   if(mix.gain>bestGain){bestGain=mix.gain;best={x,y,mix,count:group.length}}
+   });
+   if(count<4||!enemyClose)continue;
+   const x=sumX/count,y=sumY/count,mix=worldSfxMix(x,y);
+   if(mix.gain>bestGain){bestGain=mix.gain;best={x,y,mix,count}}
  }
  return best;
 }
@@ -5226,7 +5246,7 @@ function serializeGame(){
    id:p.id,x:p.x,y:p.y,vx:p.vx||0,vy:p.vy||0,targetId:p.targetId,
    targetX:p.targetX,targetY:p.targetY,team:p.team,sourceId:p.sourceId,serial:p.serial||0,
    kind:p.kind||'dragon',damage:Number(p.damage)||DRAGON_FIREBALL_DAMAGE,burn:p.burn!==false,speed:Number(p.speed)||DRAGON_FIREBALL_SPEED,
-    ...(state.mode==='pvp'?{pvpHit:!!p.pvpHit}:{})
+    ...(state.mode==='pvp'?{pvpHit:!!p.pvpHit,pvpRegionalAuthorityUid:p.pvpRegionalAuthorityUid||null}:{})
  }));
  const pvpHostView=state.mode==='pvp'?pvpCurrentAuthorityView():null;
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:networkPlayers,entities,dragonProjectiles,
@@ -5345,15 +5365,20 @@ function pvpLocalSimulationView(){
 }
 function pvpLocalRegionOwnsEntity(entity){
  if(!pvpLocalRegionalAuthority||!entity)return false;
- if(entity.ownerId===NetworkAdapter.localPlayerId&&!entity.pvpMinion)return true;
- const view=pvpLocalSimulationView();
+ if(entity.ownerId&&!entity.pvpMinion&&!entity.pvpAllyBot)
+   return String(entity.ownerId)===String(NetworkAdapter.localPlayerId);
+ // A camera is a proposal, not a grant. Overlapping guests must never both
+ // simulate the same NPC or another human's movement/HP/attack timelines.
+ if(String(entity.pvpRegionalAuthorityUid||'')!==String(NetworkAdapter.localPlayerId))return false;
+ const view=pvpLastRegionalView||pvpLocalSimulationView();
  return !!view&&pvpPointInAuthorityView(entity,view,0);
 }
 function pvpLocalRegionOwnsProjectile(projectile){
  if(!pvpLocalRegionalAuthority||!projectile)return false;
  const source=state.entities.find(e=>String(e.id)===String(projectile.sourceId));
  if(source&&pvpLocalRegionOwnsEntity(source))return true;
- return !!pvpLocalSimulationView()&&pvpPointInAuthorityView(projectile,pvpLocalSimulationView(),0);
+ return String(projectile.pvpRegionalAuthorityUid||'')===String(NetworkAdapter.localPlayerId)&&
+   !!pvpLocalSimulationView()&&pvpPointInAuthorityView(projectile,pvpLocalSimulationView(),0);
 }
 function pvpHostShouldSimulateEntity(entity){
  return !entity?.pvpRegionalAuthorityUid||String(entity.pvpRegionalAuthorityUid)===String(NetworkAdapter.localPlayerId);
@@ -5414,11 +5439,13 @@ function pvpBuildRegionalSnapshot(handoff=false){
  const view=(pvpLocalRegionalAuthority?pvpLocalSimulationView():pvpLastRegionalView);
  const hero=pvpLocalHero()||state.entities.find(e=>!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||null;
  if(!view||!hero)return null;
- const entities=state.entities.filter(e=>pvpPointInAuthorityView(e,view,0)||(!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId));
+ const entities=state.entities.filter(e=>
+   (!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||
+   (handoff?String(e.pvpRegionalAuthorityUid||'')===String(NetworkAdapter.localPlayerId):pvpLocalRegionOwnsEntity(e)));
  const entityIds=new Set(entities.map(e=>String(e.id)));
  const projectiles=(state.dragonProjectiles||[]).filter(p=>{
    if(entityIds.has(String(p.sourceId)))return true;
-   return pvpPointInAuthorityView(p,view,0);
+   return String(p.pvpRegionalAuthorityUid||'')===String(NetworkAdapter.localPlayerId);
  });
  const representedOwners=new Set(entities.filter(e=>e.ownerId&&!e.pvpMinion).map(e=>String(e.ownerId)));
  representedOwners.add(String(NetworkAdapter.localPlayerId));
@@ -5433,6 +5460,7 @@ function pvpBuildRegionalSnapshot(handoff=false){
      remainingMs:Math.max(0,PVP_DAMAGE_TEXT_MS-(now-Number(h.at)))}));
  return {
    epoch:pvpLocalRegionalEpoch,seq:++pvpRegionalSnapshotSeq,active:!handoff,handoff:!!handoff,
+   matchId:state.matchId,round:state.round,authorityUid:NetworkAdapter.hostUid,
    view:{...view,hostUid:NetworkAdapter.localPlayerId},
    focus:{x:Number(hero.x)||0,y:Number(hero.y)||0,entityId:hero.id},
    entities:entities.map(e=>pvpPackRegionalEntity(e,now)),
@@ -5509,36 +5537,66 @@ function pvpApplyRegionalEntitySnapshot(local,decoded,uid,epoch,active,now){
 function pvpIntegrateRemoteRegions(now=performance.now()){
  if(!NetworkAdapter.isHost||state.mode!=='pvp'||!state.running||state.phase!=='combat')return;
  const hostView=pvpCurrentAuthorityView();
- for(const e of state.entities){e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0}
+ const previousOwners=new Map();
+ for(const e of state.entities){previousOwners.set(String(e.id),e.pvpRegionalAuthorityUid);e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0}
  for(const p of state.dragonProjectiles||[])p.pvpRegionalAuthorityUid=null;
  const roomRegions=NetworkAdapter.roomCache?.regions||{},players=NetworkAdapter.roomCache?.players||{};
  const packets=[];
  for(const [uid,packet] of Object.entries(roomRegions)){
    if(uid===NetworkAdapter.localPlayerId||!players[uid]||!pvpRegionalPacketFresh(packet))continue;
+   if(packet.authorityUid&&String(packet.authorityUid)!==String(NetworkAdapter.hostUid))continue;
+   if(packet.matchId&&packet.matchId!==state.matchId)continue;
+   if(packet.round!=null&&Number(packet.round)!==Number(state.round))continue;
    const epoch=Number(packet.epoch)||0,seq=Number(packet.seq)||0;if(epoch<=0||seq<=0)continue;
    const focus=packet.focus||{},probe={alive:true,pvpMinion:false,ownerId:uid,x:Number(focus.x),y:Number(focus.y)};
    if(!Number.isFinite(probe.x)||!Number.isFinite(probe.y)||!pvpValidAuthorityView(packet.view))continue;
    const remembered=pvpHostRegionState.get(uid)||{epoch:0,seq:0,active:false};
+   // Reject old generations before decoding. Never lower the stored sequence:
+   // a stale handoff used to win arbitration and roll HP/poses back repeatedly.
+   if(epoch<remembered.epoch||(epoch===remembered.epoch&&seq<remembered.seq))continue;
+   const newer=epoch>remembered.epoch||seq>remembered.seq;
    const activeAllowed=!!packet.active&&pvpRegionalAuthorityDecision(probe,hostView,!!remembered.active);
    const takeover=!!packet.handoff||(!activeAllowed&&!!remembered.active);
-   const slot=Number(players[uid]?.slot)||999;
+   if(!activeAllowed&&!newer&&!remembered.active)continue;
+   const slot=Number.isFinite(Number(players[uid]?.slot))?Number(players[uid].slot):999;
+   if(newer||!remembered.decodedEntities){
+     const age=clamp(NetworkAdapter.serverNow()-Number(packet.at),0,PVP_REGION_PACKET_MAX_AGE_MS);
+     remembered.decodedEntities=(packet.entities||[]).map(e=>pvpRegionDecodeRuntime(e,now-age));
+     remembered.decodedProjectiles=(packet.dragonProjectiles||[]).map(p=>pvpRegionDecodeRuntime(p,now-age));
+   }
    packets.push({uid,packet,epoch,seq,focus,activeAllowed,takeover,slot,remembered});
  }
  const entityCandidates=new Map(),projectileCandidates=new Map();
  for(const entry of packets){
    const {uid,packet,epoch,focus,activeAllowed,takeover,slot}=entry;
-   for(const encoded of packet.entities||[]){
-     const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
+   // The host grants NPC leases even before a guest has simulated one. Grants
+   // travel in /game; guests publish only entities granted to them.
+   if(activeAllowed)for(const e of state.entities){
+     if(!e.pvpMode||!pvpPointInAuthorityView(e,packet.view,0)||
+        pvpPointInAuthorityView(e,hostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
+     if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot&&String(e.ownerId)!==uid)continue;
+     const dx=e.x-Number(focus.x),dy=e.y-Number(focus.y);
+     const own=!e.pvpMinion&&String(e.ownerId)===uid;
+     const retained=String(previousOwners.get(String(e.id))||'')===uid;
+     const score=(own?-1e12:0)+(dx*dx+dy*dy)*(retained?.8:1)+slot*.001;
+     const old=entityCandidates.get(String(e.id));
+     if(!old||score<old.score)entityCandidates.set(String(e.id),{...entry,decoded:null,score});
+   }
+   for(const decoded of entry.remembered.decodedEntities){
+     if(!decoded||decoded.id==null)continue;
+     if(decoded.ownerId&&!decoded.pvpMinion&&!decoded.pvpAllyBot&&String(decoded.ownerId)!==uid)continue;
+     const oldOwner=previousOwners.get(String(decoded.id));
+     if(oldOwner&&String(oldOwner)!==uid)continue;
      if(!pvpPointInAuthorityView(decoded,packet.view,0)&&String(decoded.ownerId)!==uid)continue;
      if(activeAllowed&&pvpPointInAuthorityView(decoded,hostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
      const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
      const own=String(decoded.ownerId||'')===uid&&!decoded.pvpMinion;
-     const score=(takeover?-2e12:0)+(own?-1e12:0)+dx*dx+dy*dy+slot*.001;
+     const score=(takeover?-2e12:0)+(own?-1e12:0)+(dx*dx+dy*dy)*(String(oldOwner||'')===uid?.8:1)+slot*.001;
      const old=entityCandidates.get(String(decoded.id));
-     if(!old||score<old.score)entityCandidates.set(String(decoded.id),{...entry,decoded,score});
+     if(!old||score<old.score||old.uid===uid)entityCandidates.set(String(decoded.id),{...entry,decoded,score});
    }
-   for(const encoded of packet.dragonProjectiles||[]){
-     const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
+   for(const decoded of entry.remembered.decodedProjectiles){
+     if(!decoded||decoded.id==null)continue;
      if(activeAllowed&&pvpPointInAuthorityView(decoded,hostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
      const sourceCandidate=entityCandidates.get(String(decoded.sourceId));
      const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
@@ -5554,7 +5612,7 @@ function pvpIntegrateRemoteRegions(now=performance.now()){
    const stateRec=pvpHostRegionState.get(uid)||{epoch:0,seq:0,active:false};
    const newer=epoch>Number(stateRec.epoch)||(epoch===Number(stateRec.epoch)&&candidate.seq>Number(stateRec.seq));
    const reclaim=!activeAllowed&&!!stateRec.active;
-   if((newer||reclaim)&&(!local||local.pvpMode)){
+   if(decoded&&(newer||reclaim)&&(!local||local.pvpMode)){
      if(!local){
        if(!decoded.pvpMode||(!decoded.pvpMinion&&String(decoded.ownerId||'')!==uid))continue;
        local={};state.entities.push(local);entityMap.set(id,local);
@@ -5585,10 +5643,16 @@ function pvpIntegrateRemoteRegions(now=performance.now()){
      if(packet.matchStats)state.matchStats=pvpMergeMonotonicStats(state.matchStats,pvpRegionDecodeRuntime(packet.matchStats,now));
      pvpApplyRegionalDamageVisuals(uid,packet.pvpDamageEvents,now);
    }
-   pvpHostRegionState.set(uid,{epoch,seq,active:!!activeAllowed,at:Number(packet.at)||0});
+   pvpHostRegionState.set(uid,{...remembered,epoch,seq,active:!!activeAllowed,at:Number(packet.at)||0});
    if((takeover||!activeAllowed)&&!packet.active){
      for(const p of state.dragonProjectiles||[])if(String(p.pvpRegionalAuthorityUid||'')===uid)p.pvpRegionalAuthorityUid=null;
    }
+ }
+ // Existing projectiles follow their source lease without needing to be echoed
+ // by a guest before it receives its first grant.
+ for(const p of state.dragonProjectiles||[]){
+   const source=entityMap.get(String(p.sourceId));
+   if(source?.pvpRegionalAuthorityUid)p.pvpRegionalAuthorityUid=source.pvpRegionalAuthorityUid;
  }
 }
 function resetPVPRegionalAuthority(){
@@ -5676,6 +5740,7 @@ function sampleRemotePosition(obj,now,allowExtrapolation=false){
 const remotePreviousEntities=new Map();
 // WAR NETWORK JANK FIX 2026-09-18
 function applyRemoteGame(game){
+ if(game?.authorityUid&&NetworkAdapter.hostUid&&String(game.authorityUid)!==String(NetworkAdapter.hostUid))return;
  if(!game||Number(game.seq||0)<=NetworkAdapter.lastRemoteSeq)return;
  NetworkAdapter.lastRemoteSeq=Number(game.seq||0);
  const remoteNow=performance.now();
@@ -7305,6 +7370,7 @@ attackBtn.addEventListener('contextmenu',e=>e.preventDefault());
 function entityBase(type,x,y,team,color){
  const entityId=(state.mode==='pvp'&&pvpRegionalSimulationUid)?pvpNextRegionalEntityId():state.nextId++;
  return {id:entityId,type,x,y,vx:0,vy:0,team,color,r:30,hp:100,maxHp:100,shield:50,maxShield:50,damage:20,
+ ...(state.mode==='pvp'&&pvpRegionalSimulationUid?{pvpRegionalAuthorityUid:pvpRegionalSimulationUid,pvpRegionalEpoch:pvpLocalRegionalEpoch}:{}),
  speed:speedMap[state.speed],alive:true,attackCooldown:0,attackAnim:0,attackSerial:0,comboStep:0,lastAttackAt:0,
  hitSerial:0,hitDirX:0,hitDirY:0,hitTilt:13,shakeSerial:0,shakePower:0,knockVX:0,knockVY:0,knockTime:0,
  deathStarted:0,removeAt:0,deathDir:1,heading:0,facing:1,moving:false,target:null,controlled:false,
@@ -7929,6 +7995,7 @@ function pvpPrepareGifImage(img,src,requestedSrc){
  img._pvpGifLoadCleanup=cleanup;
  img.addEventListener('load',onLoad);img.addEventListener('error',onError);
 }
+let gifRestartIdentity=0;
 function restartGif(img,keyOrSrc,serial=0){
  if(!img)return;
  const key=ASSETS[keyOrSrc]?keyOrSrc:Object.keys(ASSETS).find(k=>ASSETS[k]===keyOrSrc);
@@ -7959,7 +8026,9 @@ function restartGif(img,keyOrSrc,serial=0){
    img.src=src;
  }else{
    const sep=String(src).includes('?')?'&':'?';
-   const requestedSrc=src+sep+'gifStart='+Date.now()+'_'+serial;
+   if(!img._gifRestartIdentity)img._gifRestartIdentity=++gifRestartIdentity;
+   img._gifRestartSlot=((img._gifRestartSlot||0)+1)%2;
+   const requestedSrc=src+sep+'gifStart='+img._gifRestartIdentity+'_'+img._gifRestartSlot;
    if(state.mode==='pvp'&&key)pvpPrepareGifImage(img,src,requestedSrc);
    img.src=requestedSrc;
  }
@@ -10229,18 +10298,19 @@ function pvpExpireSummons(now,shouldSimulate=null){
 // independently for each ally/NPC. Target eligibility and attack AI are unchanged.
 const pvpFrameTargetLists=new Map(),pvpFrameLiving=[];
 function pvpRebuildTargets(){
- pvpFrameTargetLists.clear();pvpFrameLiving.length=0;
- for(const e of state.entities)if(e.alive)pvpFrameLiving.push(e);
+ pvpFrameLiving.length=0;
+ for(const targets of pvpFrameTargetLists.values())targets.length=0;
+ const regional=!!pvpRegionalSimulationUid;
+ for(const e of state.entities)if(e.alive&&
+    (regional?pvpLocalRegionOwnsEntity(e):(NetworkAdapter.isHost?pvpHostShouldSimulateEntity(e):true)))pvpFrameLiving.push(e);
  for(const e of pvpFrameLiving)if(!pvpFrameTargetLists.has(e.team))pvpFrameTargetLists.set(e.team,[]);
  for(const [team,targets] of pvpFrameTargetLists){
   for(const e of pvpFrameLiving)if(e.team!==team)targets.push(e);
  }
+ buildWarAIGrid(pvpFrameLiving);
 }
 function pvpTargetsFor(e){
- const targets=pvpFrameTargetLists.get(e.team)||state.entities;
- if(pvpRegionalSimulationUid)return targets.filter(t=>pvpLocalRegionOwnsEntity(t));
- if(NetworkAdapter.isHost)return targets.filter(t=>pvpHostShouldSimulateEntity(t));
- return targets;
+ return pvpFrameTargetLists.get(e.team)||state.entities;
 }
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
@@ -11368,6 +11438,8 @@ const WAR_SEPARATION_INTERVAL_SEC=1/30;
 const warFrameEnemiesByTeam=new Map();
 const warEntityById=new Map();
 const warCombatGrid=new Map();
+const warGridBucketPool=[];
+let warSpatialGridMode=null;
 const warCandidateCache=new Map();
 const warCandidateLists=new Map();
 const warBurningEntities=new Set();
@@ -11402,10 +11474,12 @@ function rebuildWarFrameEnemyCache(living){
  return teams;
 }
 function buildWarAIGrid(living){
- const cells=warCombatGrid;cells.clear();
+ const cells=warCombatGrid;
+ for(const bucket of cells.values()){bucket.length=0;warGridBucketPool.push(bucket)}
+ cells.clear();warSpatialGridMode=state.mode;
  for(const e of living){
    const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=warGridKey(cx,cy);
-   let bucket=cells.get(key);if(!bucket){bucket=[];cells.set(key,bucket)}bucket.push(e);
+   let bucket=cells.get(key);if(!bucket){bucket=warGridBucketPool.pop()||[];cells.set(key,bucket)}bucket.push(e);
  }
  return cells;
 }
@@ -11414,7 +11488,7 @@ function buildWarAIGrid(living){
 // acertos mesmo que as entidades tenham se movido alguns pixels após a grade
 // ter sido montada no início do frame; a hitbox final continua exatamente igual.
 function forEachWarSpatialCandidate(minX,minY,maxX,maxY,visit){
- if(state.mode!=='war'||state.phase!=='combat'||!warCombatGrid.size){
+ if((state.mode!=='war'&&state.mode!=='pvp')||state.phase!=='combat'||!warCombatGrid.size||warSpatialGridMode!==state.mode){
    for(const t of state.entities)visit(t);
    return;
  }
@@ -11432,14 +11506,18 @@ function nearestEnemyFromWarGrid(e,grid,nonDragonOnly=false){
  const maxR=Math.ceil(Math.max(state.world.w,state.world.h)/cs)+1;
  let best=null,bestSq=Infinity;
  for(let r=0;r<=maxR;r++){
-   for(let x=cx-r;x<=cx+r;x++)for(let y=cy-r;y<=cy+r;y++){
-     if(r>0 && x>cx-r && x<cx+r && y>cy-r && y<cy+r)continue;
-     const bucket=grid.get(warGridKey(x,y));if(!bucket)continue;
+   const visit=(x,y)=>{
+     const bucket=grid.get(warGridKey(x,y));if(!bucket)return;
      for(const t of bucket){
        if(!t.alive||t===e||t.team===e.team||(nonDragonOnly&&t.type==='dragon')||!canEngageTarget(e,t))continue;
        const dx=t.x-e.x,dy=t.y-e.y,ds=dx*dx+dy*dy;
        if(ds<bestSq){bestSq=ds;best=t}
      }
+   };
+   if(!r)visit(cx,cy);
+   else{
+     for(let x=cx-r;x<=cx+r;x++){visit(x,cy-r);visit(x,cy+r)}
+     for(let y=cy-r+1;y<cy+r;y++){visit(cx-r,y);visit(cx+r,y)}
    }
    if(best){
      const minX=(cx-r)*cs,maxX=(cx+r+1)*cs,minY=(cy-r)*cs,maxY=(cy+r+1)*cs;
@@ -12186,16 +12264,7 @@ function updateSpectatorTransition(now){
   }
 }
 
-function loop(now){
- const dt=Math.min(.033,(now-last)/1000);last=now;
-
- // contador de FPS leve
- state.fpsFrames++;
- if(now-state.fpsLast>=500){
-   state.fps=Math.round(state.fpsFrames*1000/(now-state.fpsLast));
-   state.fpsFrames=0; state.fpsLast=now;
- }
-
+function updateGameSimulation(dt,now){
  const authoritative=!NetworkAdapter.online||NetworkAdapter.isHost;
  if(state.running&&authoritative){
    if(state.mode==='pve')updatePVE(dt);else if(state.mode==='pvp')updatePVP(dt);else updateWar(dt);
@@ -12244,6 +12313,31 @@ function loop(now){
    if(state.mode==='pvp'){
      try{updateEntities(dt,pvpHostShouldSimulateEntity);updateParticles(dt)}catch(err){pvpReportError('entidades',err)}
    }else{updateEntities(dt);updateParticles(dt)}
+ }
+}
+
+const GAME_RENDER_MAX_FPS=120;
+const GAME_SIMULATION_STEP_SEC=1/60;
+const GAME_MAX_CATCHUP_STEPS=3;
+let gameRenderAccumulatorMs=0,gameSimulationAccumulatorSec=0,gameLastRenderAt=last;
+function loop(now){
+ const elapsedMs=clamp(now-last,0,250);last=now;
+ gameRenderAccumulatorMs+=elapsedMs;
+ gameSimulationAccumulatorSec=Math.min(gameSimulationAccumulatorSec+elapsedMs/1000,
+   GAME_SIMULATION_STEP_SEC*GAME_MAX_CATCHUP_STEPS);
+ const renderInterval=1000/GAME_RENDER_MAX_FPS;
+ if(gameRenderAccumulatorMs+.01<renderInterval){requestAnimationFrame(loop);return}
+ gameRenderAccumulatorMs=Math.max(0,gameRenderAccumulatorMs-renderInterval)%renderInterval;
+ let steps=0;
+ while(gameSimulationAccumulatorSec+1e-9>=GAME_SIMULATION_STEP_SEC&&steps<GAME_MAX_CATCHUP_STEPS){
+   updateGameSimulation(GAME_SIMULATION_STEP_SEC,now);
+   gameSimulationAccumulatorSec-=GAME_SIMULATION_STEP_SEC;steps++;
+ }
+ const dt=Math.min(.05,(now-gameLastRenderAt)/1000);gameLastRenderAt=now;
+ state.fpsFrames++;
+ if(now-state.fpsLast>=500){
+   state.fps=Math.round(state.fpsFrames*1000/(now-state.fpsLast));
+   state.fpsFrames=0;state.fpsLast=now;
  }
  updateWarCameraIntro(now);
  updateWarCameraInertia(dt);
@@ -13403,7 +13497,7 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
      if(assetWarning)assetWarning.classList.remove('show');
    });
    img.addEventListener('error',()=>{
-     if(state.mode==='pvp')return; // PvP loader owns its single canonical retry.
+     if(state.mode==='pvp'&&img._pvpGifLoadCleanup)return; // Active one-shot loader owns its retry.
      if(!retried){
        retried=true;
        const currentSrc=img.getAttribute('src')||'';
@@ -13769,8 +13863,10 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
    if(el._screenX!==renderX||el._screenY!==visualTop||el._visualScale!==visualScale){
      el._screenX=renderX;el._screenY=visualTop;el._visualScale=visualScale;
      el.style.transform=`translate3d(${renderX}px,${visualTop}px,0) translate(-50%,-58%) scale(${visualScale})`;
-     const uiInverseScale=1/Math.max(.001,visualScale);
-     el.style.setProperty('--entity-ui-inverse-scale',String(uiInverseScale));
+     if(el._uiScale!==visualScale){
+       el._uiScale=visualScale;
+       el.style.setProperty('--entity-ui-inverse-scale',String(1/Math.max(.001,visualScale)));
+     }
    }
    const visualZ=(isAirborneCombatTarget(e,localNow)?900:100)+Math.round(sy);
    if(el._visualZ!==visualZ){el._visualZ=visualZ;el.style.zIndex=String(visualZ)}

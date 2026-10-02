@@ -7,6 +7,9 @@ on:
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'
       - 'tests/pvp-browser-smoke.cjs'
+      - 'tests/performance-network-smoke.cjs'
+      - 'tests/battle-load-browser.cjs'
+      - 'sw.js'
       - '.github/workflows/validate-pvp.yml'
   pull_request:
     branches: [main]
@@ -15,6 +18,9 @@ on:
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'
       - 'tests/pvp-browser-smoke.cjs'
+      - 'tests/performance-network-smoke.cjs'
+      - 'tests/battle-load-browser.cjs'
+      - 'sw.js'
       - '.github/workflows/validate-pvp.yml'
   workflow_dispatch:
 permissions:
@@ -28,6 +34,8 @@ jobs:
         run: node tests/pvp-smoke.cjs
       - name: Ensure core War mechanics are unchanged
         run: node tests/war-preservation.cjs
+      - name: Stress targeting, clock and regional network races
+        run: node tests/performance-network-smoke.cjs
 
   browser:
     needs: validate
@@ -41,3 +49,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Exercise PvP lobby and match in a real browser
         run: node tests/pvp-browser-smoke.cjs
+      - name: Exercise real sprites and large battles
+        run: node tests/battle-load-browser.cjs
+      - name: Save battle performance results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: battle-load-results
+          path: test-results/
+          if-no-files-found: ignore
