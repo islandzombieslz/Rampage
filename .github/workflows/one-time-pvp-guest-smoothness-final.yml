@@ -1,0 +1,296 @@
+name: One-time PvP guest smoothness final
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-pvp-guest-smoothness-final.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply PvP-only guest networking fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def one(text, old, new, label):
+              n=text.count(old)
+              if n!=1:
+                  raise SystemExit(f"{label}: expected 1 match, found {n}")
+              return text.replace(old,new,1)
+
+          p=Path("index.html")
+          s=p.read_text(encoding="utf-8")
+
+          s=one(s,
+            "pvpInputSeq:0,pvpRenderDelayMs:90,pvpSnapshotGapEwma:0,pvpSnapshotJitterEwma:0,pvpLastSampleAt:0,",
+            "pvpInputSeq:0,pvpRenderDelayMs:120,pvpSnapshotGapEwma:0,pvpSnapshotJitterEwma:0,pvpLastSampleAt:0,",
+            "adapter default render delay")
+
+          old_reset="this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=90;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;"
+          new_reset="this.inputQueue=[];this.lastInputSignature='';this.lastInputSentAt=0;this.pvpInputSeq=0;this.pvpRenderDelayMs=120;this.pvpSnapshotGapEwma=0;this.pvpSnapshotJitterEwma=0;this.pvpLastSampleAt=0;"
+          reset_count=s.count(old_reset)
+          if reset_count<1:
+              raise SystemExit("PvP reset anchors not found")
+          s=s.replace(old_reset,new_reset)
+
+          s=one(s,
+          """const PVP_REMOTE_RENDER_DELAY_MS=90;
+          const PVP_REMOTE_RENDER_DELAY_MIN_MS=72;
+          const PVP_REMOTE_RENDER_DELAY_MAX_MS=135;
+          const PVP_REMOTE_MAX_EXTRAP_MS=110;
+          const PVP_INPUT_INTERVAL_MS=33;
+          const PVP_SNAPSHOT_INTERVAL_MS=60;
+          const PVP_INPUT_KEEPALIVE_MS=150;
+          const PVP_INPUT_STALE_MS=420;
+          const PVP_LOCAL_SOFT_ERROR_PX=58;
+          const PVP_LOCAL_SNAP_ERROR_PX=260;""",
+          """const PVP_REMOTE_RENDER_DELAY_MS=120;
+          const PVP_REMOTE_RENDER_DELAY_MIN_MS=95;
+          const PVP_REMOTE_RENDER_DELAY_MAX_MS=190;
+          const PVP_REMOTE_MAX_EXTRAP_MS=150;
+          const PVP_INPUT_INTERVAL_MS=50;
+          const PVP_SNAPSHOT_INTERVAL_MS=100;
+          const PVP_INPUT_KEEPALIVE_MS=120;
+          const PVP_INPUT_STALE_MS=700;
+          const PVP_LOCAL_SOFT_ERROR_PX=120;
+          const PVP_LOCAL_MOVING_RECONCILE_PX=420;
+          const PVP_LOCAL_SNAP_ERROR_PX=620;
+          const PVP_CLIENT_POSE_MAX_AGE_MS=800;
+          const PVP_CLIENT_POSE_MAX_STEP_MS=280;
+          const PVP_CLIENT_POSE_SPEED_FACTOR=2.4;""",
+          "PvP network constants")
+
+          s=one(s,
+          """   NetworkAdapter.pvpSnapshotGapEwma=mean;NetworkAdapter.pvpSnapshotJitterEwma=jitter;
+             NetworkAdapter.pvpRenderDelayMs=clamp(mean+Math.max(12,jitter*2.2),PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS);""",
+          """   NetworkAdapter.pvpSnapshotGapEwma=mean;NetworkAdapter.pvpSnapshotJitterEwma=jitter;
+             const targetDelay=clamp(mean+Math.max(18,jitter*2.4),PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS);
+             const currentDelay=clamp(Number(NetworkAdapter.pvpRenderDelayMs)||PVP_REMOTE_RENDER_DELAY_MS,PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS);
+             NetworkAdapter.pvpRenderDelayMs=clamp(currentDelay+(targetDelay-currentDelay)*.14,PVP_REMOTE_RENDER_DELAY_MIN_MS,PVP_REMOTE_RENDER_DELAY_MAX_MS);""",
+          "smooth adaptive delay")
+
+          s=one(s,
+          """const pvpRemoteRegionalAuthority=new Map();
+          const pvpHostRegionState=new Map();""",
+          """const pvpRemoteRegionalAuthority=new Map();
+          const pvpRemoteClientPoseState=new Map();
+          const pvpHostRegionState=new Map();""",
+          "pose state map")
+
+          s=one(s,
+          "pvpRemoteRegionalAuthority.clear();pvpHostRegionState.clear();pvpHostRegionDamageSeen.clear();pvpCoordinatedUids.clear();",
+          "pvpRemoteRegionalAuthority.clear();pvpRemoteClientPoseState.clear();pvpHostRegionState.clear();pvpHostRegionDamageSeen.clear();pvpCoordinatedUids.clear();",
+          "pose state reset")
+
+          s=one(s,
+          """ if(pvp&&!NetworkAdapter.isHost){
+             input.pvpInputSeq=++NetworkAdapter.pvpInputSeq;
+             const hero=pvpLocalHero();
+             if(hero)hero.pvpLastInputSeq=input.pvpInputSeq;
+           }""",
+          """ if(pvp&&!NetworkAdapter.isHost){
+             input.pvpInputSeq=++NetworkAdapter.pvpInputSeq;
+             const hero=pvpLocalHero();
+             if(hero){
+               hero.pvpLastInputSeq=input.pvpInputSeq;
+               input.pvpClientPose={
+                 seq:input.pvpInputSeq,x:Number(hero.x)||0,y:Number(hero.y)||0,
+                 heading:Number(hero.heading)||0,facing:Number(hero.facing)||1,moving:!!hero.moving
+               };
+             }
+           }""",
+          "client pose packet")
+
+          s=one(s,
+          "function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvpCurrentAuthorityView()){",
+          """function pvpApplyGuestClientPose(entity,input,now=performance.now()){
+           if(!entity?.alive||!entity.ownerId||entity.pvpMinion||entity.ownerId===NetworkAdapter.localPlayerId)return false;
+           if(entity.pvpRegionalAuthorityUid&&String(entity.pvpRegionalAuthorityUid)===String(entity.ownerId))return false;
+           if(Number(entity.knockTime)>0||Number(entity.pvpWarriorChargeUntil)>now)return false;
+           const pose=input?.pvpClientPose;
+           const packetAt=Number(input?.t)||0,seq=Number(pose?.seq)||Number(input?.pvpInputSeq)||0;
+           if(!pose||!Number.isFinite(Number(pose.x))||!Number.isFinite(Number(pose.y))||!seq)return false;
+           if(!packetAt||Math.abs(NetworkAdapter.serverNow()-packetAt)>PVP_CLIENT_POSE_MAX_AGE_MS)return false;
+           const key=String(entity.ownerId),remembered=pvpRemoteClientPoseState.get(key)||{seq:0,packetAt:0};
+           if(seq<=Number(remembered.seq||0))return false;
+           const bounds=pvpArenaBounds(entity.r||30);
+           let targetX=clamp(Number(pose.x),bounds.left,bounds.right),targetY=clamp(Number(pose.y),bounds.top,bounds.bottom);
+           const previousPacketAt=Number(remembered.packetAt)||packetAt-PVP_INPUT_KEEPALIVE_MS;
+           const stepMs=clamp(packetAt-previousPacketAt,16,PVP_CLIENT_POSE_MAX_STEP_MS);
+           const dx=targetX-entity.x,dy=targetY-entity.y,distance=Math.hypot(dx,dy);
+           const normalAllowance=Math.max(42,(Number(entity.speed)||PVP_BASE.speed)*(stepMs/1000)*PVP_CLIENT_POSE_SPEED_FACTOR+28);
+           const allowance=Number(remembered.seq)?normalAllowance:Math.max(normalAllowance,220);
+           if(distance>allowance&&distance>0){
+             const scale=allowance/distance;targetX=entity.x+dx*scale;targetY=entity.y+dy*scale;
+           }
+           entity.x=targetX;entity.y=targetY;
+           entity.heading=Number(pose.heading)||0;entity.facing=Number(pose.facing)<0?-1:1;entity.moving=!!pose.moving;
+           pvpRemoteClientPoseState.set(key,{seq,packetAt});
+           return true;
+          }
+
+          function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvpCurrentAuthorityView()){""",
+          "client pose validator")
+
+          s=one(s,
+          "     const regionalPose=e.ownerId!==NetworkAdapter.localPlayerId&&pvpApplyDelegatedRemotePose(e,input,now);",
+          """     const regionalPose=e.ownerId!==NetworkAdapter.localPlayerId&&pvpApplyDelegatedRemotePose(e,input,now);
+             const clientPose=!regionalPose&&e.ownerId!==NetworkAdapter.localPlayerId&&pvpApplyGuestClientPose(e,input,now);""",
+          "host pose selection")
+
+          s=one(s,
+          """     if(!regionalPose&&(dx||dy)){
+               const b=pvpArenaBounds(e.r||30);
+               e.x=clamp(e.x+dx*e.speed*dt,b.left,b.right);
+               e.y=clamp(e.y+dy*e.speed*dt,b.top,b.bottom);
+               e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
+             }else if(!regionalPose)e.moving=false;""",
+          """     if(!regionalPose&&!clientPose&&(dx||dy)){
+               const b=pvpArenaBounds(e.r||30);
+               e.x=clamp(e.x+dx*e.speed*dt,b.left,b.right);
+               e.y=clamp(e.y+dy*e.speed*dt,b.top,b.bottom);
+               e.moving=true;e.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)e.facing=dx<0?-1:1;
+             }else if(!regionalPose&&!clientPose)e.moving=false;""",
+          "host movement fallback")
+
+          s=one(s,
+          """ // Huge divergence after acknowledged input means teleport/knockback/respawn:
+           // authority wins immediately.
+           if(error>PVP_LOCAL_SNAP_ERROR_PX||(locked&&error>90)){
+             e.x=ax;e.y=ay;pvpClampEntity(e);return;
+           }
+           // While moving, ignore the normal network-distance gap so stale snapshots do not
+           // pull the guest backwards. When idle, converge quickly and invisibly.
+           const deadZone=(dx||dy)?PVP_LOCAL_SOFT_ERROR_PX:3;
+           if(error<=deadZone)return;
+           const strength=(dx||dy)?4.2:11;
+           const alpha=1-Math.exp(-strength*Math.max(0,dt));
+           const excess=(error-deadZone)/error;
+           e.x+=ex*alpha*excess;e.y+=ey*alpha*excess;
+           pvpClampEntity(e);""",
+          """ // Knockback/special locks are host-authoritative and may need a quick correction.
+           if(locked&&error>90){
+             e.x=ax;e.y=ay;pvpClampEntity(e);return;
+           }
+           const moving=!!(dx||dy);
+           if(moving){
+             if(error<=PVP_LOCAL_MOVING_RECONCILE_PX)return;
+             if(error>PVP_LOCAL_SNAP_ERROR_PX){
+               e.x=ax;e.y=ay;pvpClampEntity(e);return;
+             }
+             const alpha=1-Math.exp(-.75*Math.max(0,dt));
+             const excess=(error-PVP_LOCAL_MOVING_RECONCILE_PX)/error;
+             e.x+=ex*alpha*excess;e.y+=ey*alpha*excess;pvpClampEntity(e);return;
+           }
+           if(error>PVP_LOCAL_SNAP_ERROR_PX){
+             e.x=ax;e.y=ay;pvpClampEntity(e);return;
+           }
+           const deadZone=4;
+           if(error<=deadZone)return;
+           const alpha=1-Math.exp(-9*Math.max(0,dt));
+           const excess=(error-deadZone)/error;
+           e.x+=ex*alpha*excess;e.y+=ey*alpha*excess;
+           pvpClampEntity(e);""",
+          "guest reconciliation")
+
+          s=one(s,
+          """     if(out.dragonBurnRemainingMs!=null){
+               const remaining=Math.max(0,Number(out.dragonBurnRemainingMs)||0);
+               out.dragonBurnUntil=localNow+remaining;
+               out.dragonBurnStartedAt=localNow-Math.max(0,DRAGON_BURN_DURATION_MS-remaining);
+             }
+             return out;""",
+          """     if(out.dragonBurnRemainingMs!=null){
+               const remaining=Math.max(0,Number(out.dragonBurnRemainingMs)||0);
+               out.dragonBurnUntil=localNow+remaining;
+               out.dragonBurnStartedAt=localNow-Math.max(0,DRAGON_BURN_DURATION_MS-remaining);
+             }
+             if(localPredicted&&old){
+               const hostLocksMovement=Number(out.knockTime)>0||Number(out.pvpWarriorChargeUntil)>localNow;
+               if(!hostLocksMovement){
+                 out.heading=Number(old.heading)||0;out.facing=Number(old.facing)<0?-1:1;out.moving=!!old.moving;
+               }
+               if(Number(old.pvpWarriorSingleSerial)>Number(out.pvpWarriorSingleSerial)){
+                 out.pvpWarriorSingleSerial=old.pvpWarriorSingleSerial;
+                 out.pvpWarriorSingleUntil=old.pvpWarriorSingleUntil;
+                 out.pvpMeleeVisualUntil=Math.max(Number(out.pvpMeleeVisualUntil)||0,Number(old.pvpMeleeVisualUntil)||0);
+                 out.attackSerial=Math.max(Number(out.attackSerial)||0,Number(old.attackSerial)||0);
+               }
+               if(Number(old.pvpWarriorComboSerial)>Number(out.pvpWarriorComboSerial)){
+                 out.pvpWarriorComboSerial=old.pvpWarriorComboSerial;
+                 out.pvpWarriorComboUntil=old.pvpWarriorComboUntil;out.pvpWarriorComboStartedAt=old.pvpWarriorComboStartedAt;
+                 out.pvpWarriorComboHitIndex=old.pvpWarriorComboHitIndex;out.pvpWarriorComboRequestUntil=old.pvpWarriorComboRequestUntil;
+               }
+               Object.assign(old,out);return old;
+             }
+             return out;""",
+          "preserve local hero state")
+
+          s=s.replace("/game é o caminho quente (cerca de 8 snapshots/s). Antes ele passava",
+                      "/game é o caminho quente (cerca de 10 snapshots/s). Antes ele passava")
+
+          p.write_text(s,encoding="utf-8")
+
+          p=Path("tests/pvp-smoke.cjs")
+          t=p.read_text(encoding="utf-8")
+
+          t=one(t,
+          """assert(html.includes("const PVP_INPUT_INTERVAL_MS=33")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=60")&&
+           html.includes("const PVP_REMOTE_RENDER_DELAY_MS=90")&&html.includes("const PVP_REMOTE_RENDER_DELAY_MIN_MS=72"),
+           'PvP uses a faster authoritative cadence plus a jitter-safe interpolation buffer without changing War constants');""",
+          """assert(html.includes("const PVP_INPUT_INTERVAL_MS=50")&&html.includes("const PVP_SNAPSHOT_INTERVAL_MS=100")&&
+           html.includes("const PVP_REMOTE_RENDER_DELAY_MS=120")&&html.includes("const PVP_REMOTE_RENDER_DELAY_MIN_MS=95"),
+           'PvP uses a lighter authoritative snapshot cadence plus a larger jitter-safe interpolation buffer without changing War constants');""",
+          "cadence test")
+
+          t=one(t,
+          """assert(html.includes("function pvpRemoteInputFor(ownerId)")&&html.includes("const PVP_INPUT_STALE_MS=420"),
+           'the host stops stale guest movement if keepalives disappear instead of drifting indefinitely');""",
+          """assert(html.includes("function pvpRemoteInputFor(ownerId)")&&html.includes("const PVP_INPUT_STALE_MS=700"),
+           'the host tolerates transient Firebase jitter but still stops genuinely stale guest movement');""",
+          "stale input test")
+
+          t=one(t,
+          """assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_SOFT_ERROR_PX"),
+           'non-host PvP movement must be predicted locally and softly reconciled');""",
+          """assert(html.includes("function pvpPredictGuestLocal(dt)")&&html.includes("PVP_LOCAL_MOVING_RECONCILE_PX=420")&&
+           html.includes("const alpha=1-Math.exp(-.75*Math.max(0,dt))"),
+           'non-host PvP movement stays local-first and only reconciles large moving divergence');""",
+          "prediction test")
+
+          marker="""assert(html.includes("input.pvpInputSeq=++NetworkAdapter.pvpInputSeq")&&html.includes("e.pvpLastInputSeq=inputSeq"),
+           'PvP uses monotonic input sequence numbers and host acknowledgements for reconciliation');"""
+          addition="""
+          assert(html.includes("input.pvpClientPose={")&&html.includes("function pvpApplyGuestClientPose(entity,input")&&
+           html.includes("PVP_CLIENT_POSE_SPEED_FACTOR=2.4"),
+           'PvP guests publish a validated local pose anchor so the host mirrors movement without RTT-sized drift');
+          assert(html.includes("Object.assign(old,out);return old")&&html.includes("out.heading=Number(old.heading)||0"),
+           'host snapshots preserve the local guest hero object and immediate movement presentation');"""
+          if addition.strip() not in t:
+              if marker not in t: raise SystemExit("input sequence marker missing")
+              t=t.replace(marker,marker+addition,1)
+
+          p.write_text(t,encoding="utf-8")
+          PY
+      - name: Run focused regression tests
+        run: |
+          node tests/pvp-smoke.cjs
+          node tests/progression-smoke.cjs
+      - name: Commit final changes and remove temporary workflows
+        shell: bash
+        run: |
+          rm -f .github/workflows/one-time-pvp-guest-smoothness.yml
+          rm -f .github/workflows/one-time-pvp-guest-smoothness-retry.yml
+          rm -f .github/workflows/one-time-pvp-guest-smoothness-final.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html tests/pvp-smoke.cjs .github/workflows/one-time-pvp-guest-smoothness.yml .github/workflows/one-time-pvp-guest-smoothness-retry.yml .github/workflows/one-time-pvp-guest-smoothness-final.yml
+          git commit -m "Smooth non-host PvP networking"
+          git push origin HEAD:main
