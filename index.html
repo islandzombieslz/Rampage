@@ -6848,10 +6848,10 @@ let historySelectedServerId=null;
 const HISTORY_SERVER_FALLBACK=Object.freeze([
  {id:'history-1',name:'Servidor História 1',map:'arena-pvp',maxPlayers:8,players:0,online:false}
 ]);
-const HISTORY_RENDER_DELAY_MIN_MS=45;
-const HISTORY_RENDER_DELAY_MAX_MS=95;
-const HISTORY_REMOTE_MAX_EXTRAP_MS=120;
-const HISTORY_INPUT_KEEPALIVE_MS=95;
+const HISTORY_RENDER_DELAY_MIN_MS=35;
+const HISTORY_RENDER_DELAY_MAX_MS=80;
+const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
+const HISTORY_INPUT_KEEPALIVE_MS=50;
 function historyServerEndpoint(path=''){return historyServerBase?historyServerBase+path:''}
 function historyEscape(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function historyFallbackUid(){
@@ -6869,6 +6869,34 @@ function historyCreatePvpEntity(hero,x,y,team,color,ownerId,minion){
 }
 function historyFindEntity(kind,id){
  return state.entities.find(e=>e.historyServerId===(kind==='dragon'?'dragon:':'player:')+String(id))||null;
+}
+function historyApplyHitFeedback(e,impact,sourceId=null){
+ if(!e)return;
+ let dx=Number(impact?.dirX)||0,dy=Number(impact?.dirY)||0,len=Math.hypot(dx,dy);
+ if(len<.001&&sourceId){
+   const source=historyFindEntity('dragon',sourceId)||historyFindEntity('player',sourceId);
+   if(source){dx=e.x-source.x;dy=e.y-source.y;len=Math.hypot(dx,dy)}
+ }
+ if(len<.001){dx=e.facing<0?-1:1;dy=0;len=1}
+ dx/=len;dy/=len;
+ e.hitDirX=dx;e.hitDirY=dy;e.hitTilt=Number(impact?.tilt)||7;
+ e.hitSerial=(Number(e.hitSerial)||0)+1;e.lastCombatAt=performance.now();
+ if(impact&&Number(impact.force)>0&&Number(impact.timeMs)>0){
+   e.knockTime=Math.max(Number(e.knockTime)||0,Number(impact.timeMs)/1000);
+   e.knockVX=dx*Number(impact.force);e.knockVY=dy*Number(impact.force);e.moving=false;
+   e.shakeSerial=(Number(e.shakeSerial)||0)+1;e.shakePower=9;
+ }
+}
+function historyResetDeathVisual(e){
+ if(!e)return;
+ e.deathStarted=0;e.removeAt=0;e.deathDir=0;e.pvpWarriorDeathGifAt=0;e.pvpWarriorDeathUntil=0;
+ e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ const node=entityNodes.get(e.id);
+ if(node){
+   node.querySelectorAll('img').forEach(releaseGifObjectUrl);
+   node.remove();entityNodes.delete(e.id);
+ }
+ if(e.controlled)pvpResetLocalSpectatorAfterRevive();
 }
 function historyPushRemoteSample(e,x,y,t){
  const history=Array.isArray(e.netHistory)?e.netHistory:[];
@@ -6996,6 +7024,7 @@ const HistoryAdapter={
      if(e){
        if(Number.isFinite(Number(data.hp)))e.hp=Math.max(0,Number(data.hp));
        if(Number.isFinite(Number(data.shield)))e.shield=Math.max(0,Number(data.shield));
+       historyApplyHitFeedback(e,data.impact,data.sourceId);
        recordPVPDamage(e,Number(data.amount)||0);
      }
      return;
@@ -7022,7 +7051,7 @@ const HistoryAdapter={
    if(data.type==='dragons_respawned'){flash('OS DRAGÕES RETORNARAM',1.1);return}
    if(data.type==='player_defeated'){
      const e=historyFindEntity('player',data.uid);
-     if(e){e.alive=false;e.hp=0;e.moving=false}
+     if(e){e.hp=0;e.moving=false;if(!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0)}
      const p=state.players.find(x=>String(x.id)===String(data.uid));
      if(p)p.pvpReviveAt=performance.now()+Math.max(0,(Number(data.respawnAt)||0)-(Number(data.at)||Date.now()));
      if(String(data.uid)===String(this.uid))flash('DERROTADO • REVIVENDO...',1.4);
@@ -7063,7 +7092,9 @@ const HistoryAdapter={
      let e=oldByServerId.get(sid),wasAlive=e?.alive;
      if(!e)e=historyCreatePvpEntity(hero,Number(sp.x)||state.world.w/2,Number(sp.y)||state.world.h/2,'history-players',player.color,String(sp.id),false);
      e.historyServerId=sid;e.ownerId=String(sp.id);e.team='history-players';e.controlled=String(sp.id)===String(this.uid);
-     e.alive=sp.alive!==false;e.hp=Math.max(0,Number(sp.hp)||0);e.maxHp=Math.max(1,Number(sp.maxHp)||350);
+     const serverAlive=sp.alive!==false;
+     if(wasAlive===false&&serverAlive)historyResetDeathVisual(e);
+     e.alive=serverAlive;e.hp=Math.max(0,Number(sp.hp)||0);e.maxHp=Math.max(1,Number(sp.maxHp)||350);
      e.shield=Math.max(0,Number(sp.shield)||0);e.maxShield=Math.max(0,Number(sp.maxShield)||250);
      e.heading=Number(sp.heading)||0;e.facing=Number(sp.facing)<0?-1:1;e.moving=!!sp.moving;
      e.pvpWarriorSpecialHits=clamp(Number(sp.specialHits)||0,0,PVP_WARRIOR.specialUnlockHits);
@@ -7081,6 +7112,7 @@ const HistoryAdapter={
        e.dragonBurnSerial=Number(sp.burnSerial)||1;e.dragonBurnUntil=arrival+burnRemaining;
        e.dragonBurnStartedAt=arrival-Math.max(0,DRAGON_BURN_DURATION_MS-burnRemaining);e.dragonBurnFlameCount=2+(e.dragonBurnSerial%2);
      }else{e.dragonBurnUntil=0;e.dragonBurnStartedAt=0}
+     if(wasAlive===true&&!serverAlive&&!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0);
      if(e.controlled){
        e.historyAuthX=Number(sp.x)||0;e.historyAuthY=Number(sp.y)||0;e.historyAuthInputSeq=Number(sp.lastInputSeq)||0;e.historyAuthArrivalAt=arrival;
        if(first||wasAlive===false&&e.alive||!Number.isFinite(Number(e.x))){e.x=e.historyAuthX;e.y=e.historyAuthY}
@@ -7089,10 +7121,12 @@ const HistoryAdapter={
    }
    const rawDragons=Array.isArray(snapshot.dragons)?snapshot.dragons:[];
    for(const sd of rawDragons){
-     const sid='dragon:'+String(sd.id);let e=oldByServerId.get(sid);
+     const sid='dragon:'+String(sd.id);let e=oldByServerId.get(sid),wasAlive=e?.alive;
      if(!e)e=historyCreatePvpEntity(PVP_ENEMY_HEROES.dragon,Number(sd.x)||state.world.w/2,Number(sd.y)||state.world.h/2,'pvp-enemy','#d86543',null,true);
      e.historyServerId=sid;e.team='pvp-enemy';e.ownerId=null;e.pvpMinion=true;e.pvpWarAI=true;e.pvpEnemy=true;
-     e.alive=sd.alive!==false;e.hp=Math.max(0,Number(sd.hp)||0);e.maxHp=Math.max(1,Number(sd.maxHp)||100);
+     const serverAlive=sd.alive!==false;
+     if(wasAlive===false&&serverAlive)historyResetDeathVisual(e);
+     e.alive=serverAlive;e.hp=Math.max(0,Number(sd.hp)||0);e.maxHp=Math.max(1,Number(sd.maxHp)||100);
      e.shield=Math.max(0,Number(sd.shield)||0);e.maxShield=Math.max(0,Number(sd.maxShield)||50);
      e.heading=Number(sd.heading)||0;e.facing=Number(sd.facing)<0?-1:1;e.moving=!!sd.moving;
      const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
@@ -7102,6 +7136,7 @@ const HistoryAdapter={
      }
      e.dragonTakeoffSerial=takeoffSerial;e.dragonFlightState=flight;
      if(flight==='flying'){e.dragonTakeoffEndAt=0;e.dragonTakeoffStartedAt=0}
+     if(wasAlive===true&&!serverAlive&&!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0);
      const attackSerial=Number(sd.attackSerial)||0,attackRemaining=Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime);
      e.dragonAttackSerial=Math.max(Number(e.dragonAttackSerial)||0,attackSerial);
      if(attackRemaining>0)e.pendingDragonAttack={serial:attackSerial,startedAt:arrival,soundAt:arrival+Math.min(950,attackRemaining*.55),endAt:arrival+attackRemaining};
@@ -7130,7 +7165,17 @@ const HistoryAdapter={
      const input=getLocalMovement();
      let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
      if(len>1){dx/=len;dy/=len}
-     const charging=pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now,locked=Number(me.knockTime)>0;
+     let knocked=false;
+   if(Number(me.knockTime)>0){
+     const step=Math.min(dt,Number(me.knockTime)||0),b=pvpArenaBounds(me.r||30);
+     me.x=clamp(me.x+(Number(me.knockVX)||0)*step,b.left,b.right);
+     me.y=clamp(me.y+(Number(me.knockVY)||0)*step,b.top,b.bottom);
+     me.knockTime=Math.max(0,(Number(me.knockTime)||0)-dt);
+     const damping=Math.pow(.16,dt);me.knockVX=(Number(me.knockVX)||0)*damping;me.knockVY=(Number(me.knockVY)||0)*damping;
+     if(me.knockTime<=0){me.knockVX=0;me.knockVY=0}
+     me.moving=false;knocked=true;
+   }
+   const charging=pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now,locked=knocked;
      if(charging&&!locked){
        if(len>.12)me.pvpWarriorChargeAngle=Math.atan2(dy,dx);
        const angle=Number(me.pvpWarriorChargeAngle)||0,b=pvpArenaBounds(me.r||30),speed=me.speed*PVP_WARRIOR.specialSpeedMultiplier;
@@ -7143,7 +7188,7 @@ const HistoryAdapter={
      }else if(!locked)me.moving=false;
 
      const ax=Number(me.historyAuthX),ay=Number(me.historyAuthY);
-     if(Number.isFinite(ax)&&Number.isFinite(ay)){
+     if(!knocked&&Number.isFinite(ax)&&Number.isFinite(ay)){
        const ex=ax-me.x,ey=ay-me.y,error=Math.hypot(ex,ey);
        const ack=Number(me.historyAuthInputSeq)||0,unacked=ack<(Number(this.inputSeq)||0);
        const authAge=Math.max(0,now-Number(me.historyAuthArrivalAt||now));
@@ -7157,7 +7202,9 @@ const HistoryAdapter={
 
      const signature=Number(dx).toFixed(3)+'|'+Number(dy).toFixed(3);
      if(signature!==this.lastInputSignature||now-this.lastInputAt>=HISTORY_INPUT_KEEPALIVE_MS){
-       this.lastInputSignature=signature;this.lastInputAt=now;this.send({type:'input',dx,dy,seq:++this.inputSeq});
+       this.lastInputSignature=signature;this.lastInputAt=now;
+       const seq=++this.inputSeq;
+       this.send({type:'input',dx,dy,seq,pose:{x:me.x,y:me.y,heading:Number(me.heading)||0,facing:Number(me.facing)<0?-1:1}});
      }
    }
 
@@ -8608,7 +8655,7 @@ function startEntityDeath(e,dx=0,dy=0){
  }
  burst(e.x,e.y,e.color);
 
- if(state.mode==='pvp'&&e.pvpMode&&!e.pvpMinion&&e.ownerId)pvpRegisterRoundDeath(e,now);
+ if(state.mode==='pvp'&&!state.historyActive&&e.pvpMode&&!e.pvpMinion&&e.ownerId)pvpRegisterRoundDeath(e,now);
 
  // O player local NÃO troca imediatamente de câmera ao morrer.
  // Primeiro assiste à própria queda + piscadas; depois a tela escurece

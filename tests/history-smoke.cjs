@@ -56,4 +56,16 @@ assert(worker.includes('launchDragonFireball')&&worker.includes('flightState: "t
 assert(worker.includes('now - this.lastBroadcastAt >= 50')&&worker.includes('}, 33);'),
   'History server must run a faster active simulation and snapshot cadence');
 
+
+assert(html.includes('HISTORY_RENDER_DELAY_MIN_MS=35')&&html.includes('HISTORY_RENDER_DELAY_MAX_MS=80')&&html.includes('HISTORY_INPUT_KEEPALIVE_MS=50'),
+  'History must use the lower latency interpolation/input profile');
+assert(html.includes("pose:{x:me.x,y:me.y")&&worker.includes('applyClientPose(player, message.pose, inputSeq)'),
+  'History must send a validated predicted client pose to reduce projectile/player mismatch');
+assert(worker.includes('const DRAGON_SPEED = 97.5'),
+  'History dragon speed must match PvP dragon speed');
+assert(html.includes('historyApplyHitFeedback(e,data.impact,data.sourceId)')&&worker.includes('armKnockback(target'),
+  'History must reuse hit reaction and authoritative knockback feedback');
+assert(html.includes('startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0)')&&html.includes("!state.historyActive&&e.pvpMode"),
+  'History deaths must use PvP death visuals without consuming PvP round lives');
+
 console.log('History smoke checks passed.');
