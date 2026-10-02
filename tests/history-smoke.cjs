@@ -85,8 +85,9 @@ assert(html.includes("if(data.type==='combat_sfx'){historyApplyCombatSfx(data);r
   html.includes("pvpPlayEntitySfxNow(e,'warrior-single',serial,'pvpWarriorSingle'")&&
   html.includes('function pvpEntitySfxMix(e)')&&html.includes('updatePvpCombatSfx(now)'),
   'History combat sounds must reuse PvP spatial audio and serial de-duplication');
-assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+Math.max(0,1000-attackElapsed)'),
-  'History dragon attack SFX timing must match the PvP 1000 ms cue');
+assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+1000')&&
+  html.includes('Number(e.pendingDragonAttack.serial)!==attackSerial'),
+  'History dragon attack SFX and GIF must share the PvP 1000 ms cue without snapshot restarts');
 assert(html.includes('historyPreviewLocalAction(me,action,pvpControls.targetId)'),
   'History local previews must obey PvP attack activation gates');
 assert(worker.includes('retaliatePending')&&worker.includes('retaliateImmediate')&&
@@ -97,5 +98,8 @@ assert(worker.includes('projectile.pvpHit = true')&&worker.includes('projectile.
   worker.includes('105, 60')&&worker.includes('impact.tilt = 6')&&
   html.includes("if(data.type==='projectile_hit')")&&html.includes('p.pvpHit=true'),
   'History fireballs must preserve PvP impact knockback and the 400 ms collision linger');
+assert(worker.includes('burnSourceX')&&worker.includes('burnSourceY')&&
+  worker.includes('player, 4')&&worker.includes('"burn", player.burnSourceId, burnImpact'),
+  'History burn ticks must use PvP-style light hit feedback without knockback');
 
 console.log('History smoke checks passed.');
