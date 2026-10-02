@@ -5269,7 +5269,7 @@ const PVP_REGION_FIRST_POSE_ALLOWANCE_PX=150;
 const PVP_REGION_HARD_SNAP_ERROR_PX=520;
 let pvpLatestHostView=null,pvpLocalRegionalAuthority=false,pvpRegionalPoseSeq=0;
 let pvpLocalRegionalEpoch=0,pvpRegionalSnapshotSeq=0,pvpRegionLastPublishAt=0;
-let pvpRegionHandoffPending=false,pvpRegionHandoffUntil=0,pvpLastRegionalView=null;
+let pvpRegionHandoffPending=false,pvpRegionHandoffUntil=0,pvpRegionHandoffSnapshot=null,pvpLastRegionalView=null;
 let pvpRegionalSimulationUid=null,pvpRegionalEntityCounter=0,pvpRegionalProjectileCounter=0;
 const pvpRemoteRegionalAuthority=new Map();
 const pvpHostRegionState=new Map();
@@ -5338,6 +5338,10 @@ function pvpSetLocalRegionalAuthority(next){
    pvpLocalRegionalEpoch++;pvpRegionalSnapshotSeq=0;pvpRegionalEntityCounter=0;pvpRegionalProjectileCounter=0;
    pvpRegionHandoffPending=false;pvpRegionHandoffUntil=0;
  }else if(pvpLocalRegionalAuthority){
+   // Capture the final owned state BEFORE giving the lease up. Building the
+   // handoff after disabling authority used to include host-owned neighbours
+   // from the old camera rectangle and could roll them backwards.
+   pvpRegionHandoffSnapshot=pvpBuildRegionalSnapshot(true);
    pvpRegionHandoffPending=true;
    pvpRegionHandoffUntil=performance.now()+PVP_REGION_HANDOFF_LINGER_MS;
  }
@@ -5372,7 +5376,11 @@ function pvpLocalRegionOwnsEntity(entity){
  if(!pvpLocalRegionalAuthority||!entity)return false;
  if(entity.ownerId===NetworkAdapter.localPlayerId&&!entity.pvpMinion)return true;
  const view=pvpLocalSimulationView();
- return !!view&&pvpPointInAuthorityView(entity,view,0);
+ if(!view||!pvpPointInAuthorityView(entity,view,0))return false;
+ // The room host always owns anything already inside its visible safety zone.
+ // This prevents the same NPC from being advanced by two machines during overlap.
+ if(pvpValidAuthorityView(pvpLatestHostView)&&pvpPointInAuthorityView(entity,pvpLatestHostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))return false;
+ return true;
 }
 function pvpLocalRegionOwnsProjectile(projectile){
  if(!pvpLocalRegionalAuthority||!projectile)return false;
@@ -5439,12 +5447,9 @@ function pvpBuildRegionalSnapshot(handoff=false){
  const view=(pvpLocalRegionalAuthority?pvpLocalSimulationView():pvpLastRegionalView);
  const hero=pvpLocalHero()||state.entities.find(e=>!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||null;
  if(!view||!hero)return null;
- const entities=state.entities.filter(e=>pvpPointInAuthorityView(e,view,0)||(!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId));
+ const entities=state.entities.filter(e=>pvpLocalRegionOwnsEntity(e)||(!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId));
  const entityIds=new Set(entities.map(e=>String(e.id)));
- const projectiles=(state.dragonProjectiles||[]).filter(p=>{
-   if(entityIds.has(String(p.sourceId)))return true;
-   return pvpPointInAuthorityView(p,view,0);
- });
+ const projectiles=(state.dragonProjectiles||[]).filter(p=>pvpLocalRegionOwnsProjectile(p)||entityIds.has(String(p.sourceId)));
  const representedOwners=new Set(entities.filter(e=>e.ownerId&&!e.pvpMinion).map(e=>String(e.ownerId)));
  representedOwners.add(String(NetworkAdapter.localPlayerId));
  const players=state.players.filter(p=>representedOwners.has(String(p.id))).map(p=>({
@@ -5473,8 +5478,8 @@ function pvpMaybePublishRegion(now=performance.now(),force=false){
    pvpRegionLastPublishAt=now;NetworkAdapter.pushPVPRegion(snapshot).catch(err=>pvpReportError('região',err));return;
  }
  if(pvpRegionHandoffPending){
-   const snapshot=pvpBuildRegionalSnapshot(true);
-   pvpRegionHandoffPending=false;pvpRegionLastPublishAt=now;
+   const snapshot=pvpRegionHandoffSnapshot||pvpBuildRegionalSnapshot(true);
+   pvpRegionHandoffSnapshot=null;pvpRegionHandoffPending=false;pvpRegionLastPublishAt=now;
    if(snapshot)NetworkAdapter.pushPVPRegion(snapshot).catch(err=>pvpReportError('handoff regional',err));
  }
 }
@@ -5531,95 +5536,159 @@ function pvpApplyRegionalEntitySnapshot(local,decoded,uid,epoch,active,now){
  pvpClampEntity(merged);
  return merged;
 }
+function pvpHostRegionRecord(uid){
+ const key=String(uid||'');
+ let rec=pvpHostRegionState.get(key);
+ if(!rec){
+   rec={epoch:0,seq:0,active:false,closedEpoch:0,at:0,entityIds:new Set(),projectileIds:new Set(),packet:null};
+   pvpHostRegionState.set(key,rec);
+ }
+ if(!(rec.entityIds instanceof Set))rec.entityIds=new Set(rec.entityIds||[]);
+ if(!(rec.projectileIds instanceof Set))rec.projectileIds=new Set(rec.projectileIds||[]);
+ rec.closedEpoch=Number(rec.closedEpoch)||0;
+ return rec;
+}
+function pvpReleaseHostRegionLease(uid,rec,closeEpoch=true){
+ if(!rec)return;
+ const key=String(uid||'');
+ for(const id of rec.entityIds||[]){
+   const e=state.entities.find(x=>String(x.id)===String(id));
+   if(e&&String(e.pvpRegionalAuthorityUid||'')===key){
+     e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0;e.pvpRegionalAuthorityScore=Infinity;
+   }
+ }
+ for(const id of rec.projectileIds||[]){
+   const p=(state.dragonProjectiles||[]).find(x=>String(x.id)===String(id));
+   if(p&&String(p.pvpRegionalAuthorityUid||'')===key){
+     p.pvpRegionalAuthorityUid=null;p.pvpRegionalAuthorityScore=Infinity;
+   }
+ }
+ rec.active=false;
+ if(closeEpoch)rec.closedEpoch=Math.max(Number(rec.closedEpoch)||0,Number(rec.epoch)||0);
+ rec.entityIds.clear();rec.projectileIds.clear();
+}
+function pvpApplyRegionalPacketToHost(uid,packet,rec,now,activeAllowed){
+ const epoch=Number(packet.epoch)||0,focus=packet.focus||{},slot=Number(NetworkAdapter.roomCache?.players?.[uid]?.slot)||999;
+ const entityMap=new Map(state.entities.map(e=>[String(e.id),e]));
+ const nextEntityIds=new Set();
+ for(const encoded of packet.entities||[]){
+   const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
+   const own=String(decoded.ownerId||'')===String(uid)&&!decoded.pvpMinion;
+   if(!pvpPointInAuthorityView(decoded,packet.view,0)&&!own)continue;
+   if(activeAllowed&&pvpPointInAuthorityView(decoded,pvpCurrentAuthorityView(),PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
+   const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
+   const score=(own?-1e12:0)+dx*dx+dy*dy+slot*.001;
+   let local=entityMap.get(String(decoded.id));
+   if(activeAllowed&&local&&local.pvpRegionalAuthorityUid&&String(local.pvpRegionalAuthorityUid)!==String(uid)){
+     const other=pvpHostRegionRecord(local.pvpRegionalAuthorityUid);
+     if(other.active&&Number(local.pvpRegionalAuthorityScore)<=score)continue;
+   }
+   if(!local){
+     if(!decoded.pvpMode||(!decoded.pvpMinion&&String(decoded.ownerId||'')!==String(uid)))continue;
+     local={};state.entities.push(local);entityMap.set(String(decoded.id),local);
+   }
+   if(local&&!local.pvpMode&&decoded.pvpMode)continue;
+   pvpApplyRegionalEntitySnapshot(local,decoded,uid,epoch,activeAllowed,now);
+   local.pvpRegionalAuthorityScore=activeAllowed?score:Infinity;
+   if(activeAllowed)nextEntityIds.add(String(decoded.id));
+ }
+ for(const oldId of rec.entityIds){
+   if(nextEntityIds.has(String(oldId)))continue;
+   const e=entityMap.get(String(oldId));
+   if(e&&String(e.pvpRegionalAuthorityUid||'')===String(uid)){
+     e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0;e.pvpRegionalAuthorityScore=Infinity;
+   }
+ }
+ rec.entityIds=nextEntityIds;
+
+ const projectileMap=new Map((state.dragonProjectiles||[]).map(p=>[String(p.id),p]));
+ const nextProjectileIds=new Set();
+ for(const encoded of packet.dragonProjectiles||[]){
+   const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
+   if(activeAllowed&&pvpPointInAuthorityView(decoded,pvpCurrentAuthorityView(),PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
+   const source=entityMap.get(String(decoded.sourceId));
+   const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
+   const score=(source&&String(source.pvpRegionalAuthorityUid||'')===String(uid)?-1e12:0)+dx*dx+dy*dy+slot*.001;
+   let local=projectileMap.get(String(decoded.id));
+   if(activeAllowed&&local&&local.pvpRegionalAuthorityUid&&String(local.pvpRegionalAuthorityUid)!==String(uid)&&
+      Number(local.pvpRegionalAuthorityScore)<=score)continue;
+   if(!local){local={};state.dragonProjectiles.push(local);projectileMap.set(String(decoded.id),local)}
+   Object.assign(local,decoded);
+   local.pvpRegionalAuthorityUid=activeAllowed?uid:null;
+   local.pvpRegionalAuthorityScore=activeAllowed?score:Infinity;
+   if(activeAllowed)nextProjectileIds.add(String(decoded.id));
+ }
+ for(const oldId of rec.projectileIds){
+   if(nextProjectileIds.has(String(oldId)))continue;
+   const p=projectileMap.get(String(oldId));
+   if(p&&String(p.pvpRegionalAuthorityUid||'')===String(uid)){
+     p.pvpRegionalAuthorityUid=null;p.pvpRegionalAuthorityScore=Infinity;
+   }
+ }
+ rec.projectileIds=nextProjectileIds;
+ pvpApplyRegionalPlayerState(packet.players,now);
+ if(packet.matchStats)state.matchStats=pvpMergeMonotonicStats(state.matchStats,pvpRegionDecodeRuntime(packet.matchStats,now));
+ pvpApplyRegionalDamageVisuals(uid,packet.pvpDamageEvents,now);
+}
 function pvpIntegrateRemoteRegions(now=performance.now()){
  if(!NetworkAdapter.isHost||state.mode!=='pvp'||!state.running||state.phase!=='combat')return;
  const hostView=pvpCurrentAuthorityView();
- for(const e of state.entities){e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0}
- for(const p of state.dragonProjectiles||[])p.pvpRegionalAuthorityUid=null;
  const roomRegions=NetworkAdapter.roomCache?.regions||{},players=NetworkAdapter.roomCache?.players||{};
- const packets=[];
+
+ // Release only genuinely expired/departed leases. The old implementation
+ // cleared every authority flag on every render frame and then rebuilt it from
+ // Firebase, which created one-frame host/guest fights whenever packets jittered.
+ for(const [uid,rec] of pvpHostRegionState){
+   const packet=roomRegions[uid];
+   if(!players[uid]||!packet||!pvpRegionalPacketFresh(packet)){
+     if(rec.active)pvpReleaseHostRegionLease(uid,rec,true);
+   }
+ }
+
  for(const [uid,packet] of Object.entries(roomRegions)){
-   if(uid===NetworkAdapter.localPlayerId||!players[uid]||!pvpRegionalPacketFresh(packet))continue;
-   const epoch=Number(packet.epoch)||0,seq=Number(packet.seq)||0;if(epoch<=0||seq<=0)continue;
+   if(String(uid)===String(NetworkAdapter.localPlayerId)||!players[uid]||!pvpRegionalPacketFresh(packet))continue;
+   const epoch=Number(packet.epoch)||0,seq=Number(packet.seq)||0;
+   if(epoch<=0||seq<=0||!pvpValidAuthorityView(packet.view))continue;
    const focus=packet.focus||{},probe={alive:true,pvpMinion:false,ownerId:uid,x:Number(focus.x),y:Number(focus.y)};
-   if(!Number.isFinite(probe.x)||!Number.isFinite(probe.y)||!pvpValidAuthorityView(packet.view))continue;
-   const remembered=pvpHostRegionState.get(uid)||{epoch:0,seq:0,active:false};
-   const activeAllowed=!!packet.active&&pvpRegionalAuthorityDecision(probe,hostView,!!remembered.active);
-   const takeover=!!packet.handoff||(!activeAllowed&&!!remembered.active);
-   const slot=Number(players[uid]?.slot)||999;
-   packets.push({uid,packet,epoch,seq,focus,activeAllowed,takeover,slot,remembered});
- }
- const entityCandidates=new Map(),projectileCandidates=new Map();
- for(const entry of packets){
-   const {uid,packet,epoch,focus,activeAllowed,takeover,slot}=entry;
-   for(const encoded of packet.entities||[]){
-     const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
-     if(!pvpPointInAuthorityView(decoded,packet.view,0)&&String(decoded.ownerId)!==uid)continue;
-     if(activeAllowed&&pvpPointInAuthorityView(decoded,hostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
-     const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
-     const own=String(decoded.ownerId||'')===uid&&!decoded.pvpMinion;
-     const score=(takeover?-2e12:0)+(own?-1e12:0)+dx*dx+dy*dy+slot*.001;
-     const old=entityCandidates.get(String(decoded.id));
-     if(!old||score<old.score)entityCandidates.set(String(decoded.id),{...entry,decoded,score});
+   if(!Number.isFinite(probe.x)||!Number.isFinite(probe.y))continue;
+   const rec=pvpHostRegionRecord(uid);
+
+   // Once the host has closed an epoch, old active packets from that same epoch
+   // can never reacquire the area. The guest must open a new epoch.
+   if(epoch<=Number(rec.closedEpoch)||epoch<Number(rec.epoch))continue;
+
+   const newer=epoch>Number(rec.epoch)||(epoch===Number(rec.epoch)&&seq>Number(rec.seq));
+   const activeAllowed=!!packet.active&&!packet.handoff&&
+     pvpRegionalAuthorityDecision(probe,hostView,!!rec.active);
+
+   if(!newer){
+     // No recursive decode/allocation for an unchanged Firebase packet. We only
+     // reevaluate host overlap, which is cheap and may close the current lease.
+     if(rec.active&&!activeAllowed)pvpReleaseHostRegionLease(uid,rec,true);
+     continue;
    }
-   for(const encoded of packet.dragonProjectiles||[]){
-     const decoded=pvpRegionDecodeRuntime(encoded,now);if(!decoded||decoded.id==null)continue;
-     if(activeAllowed&&pvpPointInAuthorityView(decoded,hostView,PVP_REGION_HOST_PRIORITY_MARGIN_PX))continue;
-     const sourceCandidate=entityCandidates.get(String(decoded.sourceId));
-     const dx=(Number(decoded.x)||0)-(Number(focus.x)||0),dy=(Number(decoded.y)||0)-(Number(focus.y)||0);
-     const score=(takeover?-2e12:0)+(sourceCandidate?.uid===uid?-1e12:0)+dx*dx+dy*dy+slot*.001;
-     const old=projectileCandidates.get(String(decoded.id));
-     if(!old||score<old.score)projectileCandidates.set(String(decoded.id),{...entry,decoded,score});
+
+   if(epoch>Number(rec.epoch)){
+     if(rec.active)pvpReleaseHostRegionLease(uid,rec,false);
+     rec.epoch=epoch;rec.seq=0;rec.closedEpoch=Math.min(Number(rec.closedEpoch)||0,epoch-1);
    }
- }
- const entityMap=new Map(state.entities.map(e=>[String(e.id),e]));
- for(const [id,candidate] of entityCandidates){
-   const {uid,epoch,activeAllowed,decoded}=candidate;
-   let local=entityMap.get(id);
-   const stateRec=pvpHostRegionState.get(uid)||{epoch:0,seq:0,active:false};
-   const newer=epoch>Number(stateRec.epoch)||(epoch===Number(stateRec.epoch)&&candidate.seq>Number(stateRec.seq));
-   const reclaim=!activeAllowed&&!!stateRec.active;
-   if((newer||reclaim)&&(!local||local.pvpMode)){
-     if(!local){
-       if(!decoded.pvpMode||(!decoded.pvpMinion&&String(decoded.ownerId||'')!==uid))continue;
-       local={};state.entities.push(local);entityMap.set(id,local);
-     }
-     pvpApplyRegionalEntitySnapshot(local,decoded,uid,epoch,activeAllowed,now);
-   }else if(local&&activeAllowed){
-     local.pvpRegionalAuthorityUid=uid;local.pvpRegionalEpoch=epoch;
-   }
- }
- const projectileMap=new Map((state.dragonProjectiles||[]).map(p=>[String(p.id),p]));
- for(const [id,candidate] of projectileCandidates){
-   const {uid,epoch,activeAllowed,decoded}=candidate;
-   let local=projectileMap.get(id);
-   const stateRec=pvpHostRegionState.get(uid)||{epoch:0,seq:0,active:false};
-   const newer=epoch>Number(stateRec.epoch)||(epoch===Number(stateRec.epoch)&&candidate.seq>Number(stateRec.seq));
-   const reclaim=!activeAllowed&&!!stateRec.active;
-   if(newer||reclaim){
-     if(!local){local={};state.dragonProjectiles.push(local);projectileMap.set(id,local)}
-     Object.assign(local,decoded);local.pvpRegionalAuthorityUid=activeAllowed?uid:null;
-   }else if(local&&activeAllowed)local.pvpRegionalAuthorityUid=uid;
- }
- for(const entry of packets){
-   const {uid,packet,epoch,seq,activeAllowed,takeover,remembered}=entry;
-   const newer=epoch>Number(remembered.epoch)||(epoch===Number(remembered.epoch)&&seq>Number(remembered.seq));
-   const reclaim=!activeAllowed&&!!remembered.active;
-   if(newer||reclaim){
-     pvpApplyRegionalPlayerState(packet.players,now);
-     if(packet.matchStats)state.matchStats=pvpMergeMonotonicStats(state.matchStats,pvpRegionDecodeRuntime(packet.matchStats,now));
-     pvpApplyRegionalDamageVisuals(uid,packet.pvpDamageEvents,now);
-   }
-   pvpHostRegionState.set(uid,{epoch,seq,active:!!activeAllowed,at:Number(packet.at)||0});
-   if((takeover||!activeAllowed)&&!packet.active){
-     for(const p of state.dragonProjectiles||[])if(String(p.pvpRegionalAuthorityUid||'')===uid)p.pvpRegionalAuthorityUid=null;
+   rec.epoch=epoch;rec.seq=seq;rec.at=Number(packet.at)||0;rec.packet=packet;
+
+   if(activeAllowed){
+     pvpApplyRegionalPacketToHost(uid,packet,rec,now,true);
+     rec.active=true;
+   }else{
+     // Handoff/overlap: consume this final state exactly once, then fence the
+     // epoch so late packets cannot pull HP, position or GIF timers backwards.
+     pvpApplyRegionalPacketToHost(uid,packet,rec,now,false);
+     pvpReleaseHostRegionLease(uid,rec,true);
    }
  }
 }
 function resetPVPRegionalAuthority(){
  pvpLatestHostView=null;pvpLocalRegionalAuthority=false;pvpRegionalPoseSeq=0;
  pvpLocalRegionalEpoch=0;pvpRegionalSnapshotSeq=0;pvpRegionLastPublishAt=0;
- pvpRegionHandoffPending=false;pvpRegionHandoffUntil=0;pvpLastRegionalView=null;
+ pvpRegionHandoffPending=false;pvpRegionHandoffUntil=0;pvpRegionHandoffSnapshot=null;pvpLastRegionalView=null;
  pvpRegionalSimulationUid=null;pvpRegionalEntityCounter=0;pvpRegionalProjectileCounter=0;
  pvpRemoteRegionalAuthority.clear();pvpHostRegionState.clear();pvpHostRegionDamageSeen.clear();
 }
