@@ -187,7 +187,8 @@ export class HistoryRoom extends DurableObject {
       alive: true, facing, heading: facing < 0 ? Math.PI : 0, moving: false, wave,
       flightState: "takeoff", takeoffSerial: wave, takeoffUntil: now + DRAGON_TAKEOFF_MS,
       attackSerial: 0, attackUntil: 0, nextShotAt: now + DRAGON_TAKEOFF_MS + 180,
-      closeShotAt: now + DRAGON_TAKEOFF_MS + 180,
+      closeShotAt: now + DRAGON_TAKEOFF_MS + 180, npcNextAttackAt: 0,
+      firstHitSeen: false, retaliatePending: false, retaliateImmediate: false, retaliateTargetId: null,
       knockUntil: 0, knockVX: 0, knockVY: 0
     });
     return [
@@ -552,6 +553,18 @@ export class HistoryRoom extends DurableObject {
   damageDragon(dragon, amount, kind = "player", sourceId = null, impact = null) {
     if (!dragon?.alive) return 0;
     const dealt = this.applyDamage("dragon", dragon, amount, kind, sourceId, impact);
+    if (dealt > 0 && dragon.alive && sourceId) {
+      const first = !dragon.firstHitSeen;
+      dragon.firstHitSeen = true;
+      dragon.retaliatePending = true;
+      dragon.retaliateTargetId = sourceId;
+      if (first) {
+        dragon.retaliateImmediate = true;
+        dragon.npcNextAttackAt = 0;
+        dragon.nextShotAt = 0;
+        dragon.closeShotAt = 0;
+      }
+    }
     if (dragon.hp <= 0) {
       dragon.alive = false;
       dragon.moving = false;
@@ -587,6 +600,7 @@ export class HistoryRoom extends DurableObject {
     dragon.moving = false;
     dragon.attackSerial = (Number(dragon.attackSerial) || 0) + 1;
     dragon.attackUntil = now + DRAGON_ATTACK_VISUAL_MS;
+    dragon.npcNextAttackAt = now + Math.max(2000, DRAGON_ATTACK_VISUAL_MS);
 
     if (emergency) {
       dragon.closeShotAt = now + DRAGON_CLOSE_SHOT_COOLDOWN_MS;
@@ -670,8 +684,26 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
-      if (this.stepKnockback(dragon, dt, now)) continue;
       const players = Object.values(this.room.players).filter(p => p.alive);
+      if (dragon.retaliatePending && dragon.flightState === "flying" && now >= Number(dragon.attackUntil || 0) &&
+          (dragon.retaliateImmediate || now >= Number(dragon.npcNextAttackAt || 0))) {
+        const retaliationTarget = this.room.players[dragon.retaliateTargetId];
+        const target = retaliationTarget?.alive
+          ? retaliationTarget
+          : players.reduce((best, p) => !best || distance(dragon, p) < distance(dragon, best) ? p : best, null);
+        if (target) {
+          if (dragon.retaliateImmediate) { dragon.nextShotAt = 0; dragon.closeShotAt = 0; }
+          const emergency = distance(dragon, target) < DRAGON_CLOSE_RANGE;
+          if (this.launchDragonFireball(dragon, target, now, emergency)) {
+            dragon.retaliatePending = false; dragon.retaliateImmediate = false;
+            dragon.nextShotAt = Math.max(Number(dragon.nextShotAt) || 0, Number(dragon.npcNextAttackAt) || 0);
+            dragon.closeShotAt = Math.max(Number(dragon.closeShotAt) || 0, Number(dragon.npcNextAttackAt) || 0);
+            continue;
+          }
+        }
+      }
+
+      if (this.stepKnockback(dragon, dt, now)) continue;
       if (!players.length) { dragon.moving = false; continue; }
 
       const target = players.reduce((best, p) => !best || distance(dragon, p) < distance(dragon, best) ? p : best, null);
@@ -737,6 +769,7 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
+      this.updateWarriorCombo(player, now);
       if (this.stepKnockback(player, dt, now)) continue;
       const specialActive = now < Number(player.specialActiveUntil || 0);
       let dx = Number(player.input?.dx) || 0, dy = Number(player.input?.dy) || 0;
@@ -751,8 +784,6 @@ export class HistoryRoom extends DurableObject {
         player.x = clamp(player.x + dx * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
         player.y = clamp(player.y + dy * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
       }
-
-      this.updateWarriorCombo(player, now);
 
       if (specialActive) {
         const hitState = player.specialHitState && typeof player.specialHitState === "object"
