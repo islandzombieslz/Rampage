@@ -7,7 +7,16 @@ const root=path.resolve(__dirname,'..'),original=fs.readFileSync(path.join(root,
 const smoke=fs.readFileSync(path.join(__dirname,'pvp-browser-smoke.cjs'),'utf8');
 const firebase=smoke.slice(smoke.indexOf('const firebaseStub=String.raw`')+'const firebaseStub=String.raw`'.length,smoke.indexOf('\n`;\n// Inject'));
 assert(firebase.includes('window.FirebaseBridge=F'));
-const hook=`window.__battleLoad={
+const hook=`const battleProfile={simulation:[],draw:[]};
+const battleOriginalSimulation=updateGameSimulation,battleOriginalDraw=draw;
+updateGameSimulation=function(dt,now){const start=performance.now();try{return battleOriginalSimulation(dt,now)}finally{battleProfile.simulation.push(performance.now()-start)}};
+draw=function(){const start=performance.now();try{return battleOriginalDraw()}finally{battleProfile.draw.push(performance.now()-start)}};
+window.__battleLoad={
+ resetProfile(){battleProfile.simulation.length=0;battleProfile.draw.length=0},
+ profile(){
+  const summarize=list=>{const sorted=list.slice().sort((a,b)=>a-b);return {samples:sorted.length,medianMs:+(sorted[Math.floor(sorted.length*.5)]||0).toFixed(2),p95Ms:+(sorted[Math.floor(sorted.length*.95)]||0).toFixed(2)}};
+  return {simulation:summarize(battleProfile.simulation),draw:summarize(battleProfile.draw)};
+ },
  pvp(wave){
   NetworkAdapter.roomId=null;NetworkAdapter.hostUid=NetworkAdapter.localPlayerId;
   state.mode='pvp';state.difficulty='hard';state.phase='combat';state.running=true;state.round=1;state.rounds=99;
@@ -54,6 +63,7 @@ const server=http.createServer((req,res)=>{
 });
 async function measure(page,name){
  await page.waitForTimeout(1500);
+ await page.evaluate(()=>window.__battleLoad.resetProfile());
  const frames=await page.evaluate(()=>new Promise(resolve=>{
   const times=[];let started=performance.now(),last=started;
   function frame(now){times.push(now-last);last=now;if(now-started>=2000)resolve(times);else requestAnimationFrame(frame)}
@@ -61,6 +71,7 @@ async function measure(page,name){
  }));
  frames.sort((a,b)=>a-b);
  const result={name,...await page.evaluate(()=>window.__battleLoad.metrics()),
+  cpu:await page.evaluate(()=>window.__battleLoad.profile()),
   frameMedianMs:+frames[Math.floor(frames.length*.5)].toFixed(1),frameP95Ms:+frames[Math.floor(frames.length*.95)].toFixed(1),
   frameMaxMs:+frames.at(-1).toFixed(1)};
  assert(result.floorLoaded,name+' floor must load');assert(result.visible>0,name+' sprites must render');

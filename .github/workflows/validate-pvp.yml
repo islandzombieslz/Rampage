@@ -10,6 +10,10 @@ on:
       - 'tests/performance-network-smoke.cjs'
       - 'tests/battle-load-browser.cjs'
       - 'sw.js'
+      - 'assets/runtime/**'
+      - 'tests/display-sprites-smoke.cjs'
+      - '.github/update_asset_cache.py'
+      - '.github/rebalance_war_units_v3.py'
       - '.github/workflows/validate-pvp.yml'
   pull_request:
     branches: [main]
@@ -21,6 +25,10 @@ on:
       - 'tests/performance-network-smoke.cjs'
       - 'tests/battle-load-browser.cjs'
       - 'sw.js'
+      - 'assets/runtime/**'
+      - 'tests/display-sprites-smoke.cjs'
+      - '.github/update_asset_cache.py'
+      - '.github/rebalance_war_units_v3.py'
       - '.github/workflows/validate-pvp.yml'
   workflow_dispatch:
 permissions:
@@ -37,6 +45,9 @@ jobs:
       - name: Stress targeting, clock and regional network races
         run: node tests/performance-network-smoke.cjs
 
+      - name: Preserve every display animation and the cache across regeneration
+        run: node tests/display-sprites-smoke.cjs
+
   browser:
     needs: validate
     runs-on: ubuntu-latest
@@ -50,6 +61,7 @@ jobs:
       - name: Exercise PvP lobby and match in a real browser
         run: node tests/pvp-browser-smoke.cjs
       - name: Exercise real sprites and large battles
+        if: success() || failure()
         run: node tests/battle-load-browser.cjs
       - name: Save battle performance results
         if: always()
