@@ -91,8 +91,9 @@ assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+1000')&
 assert(html.includes('historyPreviewLocalAction(me,action,pvpControls.targetId)'),
   'History local previews must obey PvP attack activation gates');
 assert(worker.includes('action === "combo_cancel"')&&worker.includes('"combo-cancel"')&&
-  html.includes('sendComboCancel()')&&html.includes('if(state.historyActive)HistoryAdapter.sendComboCancel()'),
-  'History must cancel held Warrior combos on Cloudflare as soon as the local button is released');
+  html.includes('sendComboCancel()')&&html.includes('if(state.historyActive)HistoryAdapter.sendComboCancel()')&&
+  html.includes('const staleForLocal=e.controlled&&Number(e.attackSerial||0)>Number(data.attackSerial||0)'),
+  'History must cancel held Warrior combos on Cloudflare immediately without letting a stale cancel overwrite a newer local attack');
 assert(html.includes('function historyTickLocalWarriorComboVisual')&&
   html.includes('historyTickLocalWarriorComboVisual(me,now)')&&html.includes('if(repeat)return pvpStartWarriorCombo(e,now)'),
   'History must keep held local combo GIF cycles continuous without running local damage simulation');
