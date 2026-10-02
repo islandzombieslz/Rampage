@@ -6985,7 +6985,6 @@ function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
  if(comboSerial>Number(e.pvpWarriorComboSerial)||0){
    e.pvpWarriorComboSerial=comboSerial;
    if(comboRemaining>0){
-     const elapsed=Math.max(0,WARRIOR_COMBO_DURATION_MS?0:0);
      e.pvpWarriorComboStartedAt=arrival-Math.max(0,PVP_WARRIOR.comboFallbackMs-comboRemaining);
      e.pvpWarriorComboUntil=arrival+comboRemaining;e.pvpMeleeVisualUntil=e.pvpWarriorComboUntil;e.pvpActionUntil=e.pvpWarriorComboUntil;
    }
