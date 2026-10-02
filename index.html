@@ -16,6 +16,7 @@
 <link rel="preload" as="image" href="assets/ui/usar-codigo.png" fetchpriority="high">
 <link rel="prefetch" as="image" href="assets/ui/botao-pvp.png">
 <link rel="prefetch" as="image" href="assets/ui/botao-mestre-da-guerra.png">
+<link rel="prefetch" as="image" href="https://i.postimg.cc/HnSCZB63/Botao-modo-historia.png">
 <link rel="prefetch" as="image" href="assets/ui/pvp-menu.png">
 <link rel="prefetch" as="image" href="assets/ui/mestre-da-guerra-menu.png">
 <link rel="prefetch" as="image" href="assets/ui/botao-loja.png">
@@ -137,7 +138,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 /* ESCOLHA DO MODO: somente sprites e os dois botões inferiores, sem cards/textos. */
 #modeScreen .mode-menu-shell{
   position:relative;z-index:2;
-  width:min(650px,92vw);
+  width:min(900px,94vw);
   display:grid;gap:10px;
   padding:0;
   margin:0;
@@ -147,7 +148,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 }
 #modeScreen .mode-grid{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:22px;
   align-items:center;
 }
@@ -193,10 +194,69 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
   min-height:44px;
 }
 @media(max-height:520px) and (pointer:fine){
-  #modeScreen .mode-menu-shell{width:min(540px,86vw)}
+  #modeScreen .mode-menu-shell{width:min(760px,90vw)}
   #modeScreen .mode-grid,#modeScreen .mode-actions{gap:14px}
 }
+@media(max-width:720px){
+  #modeScreen .mode-menu-shell{width:min(650px,94vw)}
+  #modeScreen .mode-grid{gap:10px}
+}
 
+
+/* ===== HISTORY: LISTA DE SERVIDORES ===== */
+#historyServerScreen{
+  overflow:hidden;
+  background:
+    linear-gradient(rgba(3,6,10,.68),rgba(3,6,10,.76)),
+    url("assets/ui/walpaper.gif") center/cover no-repeat !important;
+}
+#historyServerScreen>.card{
+  position:relative;
+  width:min(720px,92vh,94vw);
+  height:min(720px,92vh,94vw);
+  max-width:none;max-height:none;
+  aspect-ratio:1/1;
+  margin:0;padding:0;overflow:visible;
+  border:0;border-radius:0;box-shadow:none;
+  background:transparent url("assets/ui/pvp-menu.png") center/contain no-repeat;
+}
+#historyServerScreen h2{
+  position:absolute;left:21%;right:21%;top:29%;
+  margin:0;text-align:center;font-size:clamp(18px,3vh,26px);
+  color:#fff;text-shadow:0 2px 5px #000;
+}
+#historyServerList{
+  position:absolute;left:21%;right:21%;top:36%;bottom:27%;
+  display:grid;align-content:start;gap:7px;overflow-y:auto;
+}
+.history-server-item{
+  width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:8px;padding:9px 10px!important;
+  border:1px solid rgba(255,255,255,.12)!important;border-radius:9px!important;
+  background:rgba(8,12,16,.32)!important;text-align:left;
+}
+.history-server-item.selected{
+  outline:2px solid #58a6ff!important;
+  box-shadow:inset 0 0 15px rgba(88,166,255,.12)!important;
+}
+.history-server-name{font-weight:900;font-size:12px;line-height:1.1}
+.history-server-meta{font-size:9px;color:#d7dde5;margin-top:3px}
+.history-server-status{font-size:9px;font-weight:900;color:#3fb950;white-space:nowrap}
+.history-server-status.offline{color:#f0b429}
+#historyServerMessage{
+  position:absolute;left:21%;right:21%;bottom:22.3%;
+  min-height:20px;text-align:center;font-size:9px;color:#e4e8ee;
+  text-shadow:0 1px 3px #000;
+}
+#historyServerActions{
+  position:absolute;left:21%;right:21%;bottom:15.2%;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+}
+#historyServerActions button{min-width:0;min-height:34px;padding:6px 7px;font-size:10px}
+@media(max-height:650px) and (pointer:fine){
+  #historyServerScreen>.card{width:min(610px,94vh,94vw);height:min(610px,94vh,94vw)}
+  #historyServerList{top:35.5%;bottom:27.5%}
+}
 
 /* ===== CONFIGURAÇÃO: PAINÉIS EM SPRITE =====
    PVP e Mestre da Guerra usam o mesmo fundo do menu, mais escurecido.
@@ -2986,10 +3046,26 @@ window.dispatchEvent(new Event('firebase-ready'));
       <button class="mode-card" data-mode="war" type="button" aria-label="Mestre da Guerra">
         <img src="assets/ui/botao-mestre-da-guerra.png" alt="Mestre da Guerra" draggable="false" loading="lazy" decoding="async">
       </button>
+      <button class="mode-card" data-mode="history" type="button" aria-label="History">
+        <img src="https://i.postimg.cc/HnSCZB63/Botao-modo-historia.png" alt="History" draggable="false" loading="lazy" decoding="async">
+      </button>
     </div>
     <div class="mode-actions">
       <button data-back="menuScreen">Voltar</button>
       <button id="configureBtn" class="primary">Configurar partida</button>
+    </div>
+  </div>
+</section>
+
+<section id="historyServerScreen" class="screen">
+  <div class="card">
+    <h2>History — Servidores</h2>
+    <div id="historyServerList" aria-label="Servidores disponíveis"></div>
+    <div id="historyServerMessage">Carregando servidores...</div>
+    <div id="historyServerActions">
+      <button data-back="modeScreen">Voltar</button>
+      <button id="historyRefreshServers" type="button">Atualizar</button>
+      <button id="historyServerConfirm" class="primary" type="button" disabled>Entrar</button>
     </div>
   </div>
 </section>
@@ -6756,11 +6832,74 @@ function gameViewportSize(){
 }
 
 
+const HISTORY_SERVER_BASE_DEFAULT='';
+let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
+let historySelectedServerId=null;
+const HISTORY_SERVER_FALLBACK=Object.freeze([
+ {id:'history-1',name:'Servidor História 1',map:'arena-pvp',maxPlayers:8,players:0,online:false}
+]);
+function historyServerEndpoint(path=''){
+ return historyServerBase?historyServerBase+path:'';
+}
+function renderHistoryServers(servers){
+ const list=$('#historyServerList');if(!list)return;
+ list.innerHTML='';
+ const rows=Array.isArray(servers)&&servers.length?servers:HISTORY_SERVER_FALLBACK;
+ if(!historySelectedServerId||!rows.some(server=>server.id===historySelectedServerId))historySelectedServerId=rows[0]?.id||null;
+ for(const server of rows){
+   const button=document.createElement('button');
+   button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
+   const status=historyServerBase&&server.online!==false;
+   button.innerHTML='<span><div class="history-server-name">'+escapeHtml(server.name||server.id)+'</div>'+
+     '<div class="history-server-meta">'+escapeHtml(server.map||'arena-pvp')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores</div></span>'+
+     '<span class="history-server-status'+(status?'':' offline')+'">'+(status?'ONLINE':'AGUARDANDO')+'</span>';
+   button.onclick=()=>{historySelectedServerId=server.id;renderHistoryServers(rows);updateHistoryServerConfirm(rows)};
+   list.appendChild(button);
+ }
+ updateHistoryServerConfirm(rows);
+}
+function updateHistoryServerConfirm(servers=HISTORY_SERVER_FALLBACK){
+ const button=$('#historyServerConfirm'),message=$('#historyServerMessage');
+ const selected=(servers||[]).find(server=>server.id===historySelectedServerId);
+ if(!button||!message)return;
+ const ready=!!historyServerBase&&!!selected&&selected.online!==false;
+ button.disabled=!ready;
+ message.textContent=ready?'Servidor autoritativo Cloudflare selecionado.':'Publique o Worker History na Cloudflare para habilitar a entrada.';
+}
+async function refreshHistoryServers(){
+ const message=$('#historyServerMessage');if(message)message.textContent='Consultando servidores...';
+ if(!historyServerBase){renderHistoryServers(HISTORY_SERVER_FALLBACK);return HISTORY_SERVER_FALLBACK}
+ try{
+   const response=await fetch(historyServerEndpoint('/servers'),{cache:'no-store'});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json(),servers=Array.isArray(data?.servers)?data.servers:[];
+   renderHistoryServers(servers);
+   return servers;
+ }catch(err){
+   console.error('History servers:',err);
+   renderHistoryServers(HISTORY_SERVER_FALLBACK);
+   if(message)message.textContent='Servidor History indisponível no momento.';
+   return HISTORY_SERVER_FALLBACK;
+ }
+}
+async function openHistoryServerBrowser(){
+ state.mode='history';
+ preloadExtraPVPGifDurations();pvpLoadFlameFrames();
+ navigateScreen('historyServerScreen');
+ await refreshHistoryServers();
+}
+$('#historyRefreshServers').onclick=()=>refreshHistoryServers();
+$('#historyServerConfirm').onclick=()=>{
+ if(!historyServerBase||!historySelectedServerId)return;
+ flash('Servidor History pronto. Falta apenas vincular a URL publicada ao cliente de jogo.',1.8);
+};
+
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}});
+$('.mode-card').forEach(c=>c.onclick=()=>{$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}if(state.mode==='history')openHistoryServerBrowser().catch(console.error)});
 $('#configureBtn').onclick=async()=>{
+  if(state.mode==='history'){await openHistoryServerBrowser();return}
   if(state.mode==='war'){
     state.rounds=Math.max(2,Number(state.rounds)||2);
     await createCurrentRoom($('#configureBtn'));
