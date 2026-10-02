@@ -52,16 +52,13 @@ const firebaseStub=String.raw`
   }
  };
  window.FirebaseBridge=F;
- // The Firebase module slot appears before the game's main inline script.
- // Dispatch once after parsing as well so the production listener cannot miss
- // the test-only readiness event at a microtask checkpoint.
  queueMicrotask(()=>window.dispatchEvent(new Event('firebase-ready')));
- setTimeout(()=>window.dispatchEvent(new Event('firebase-ready')),0);
 })();
 `;
 // Inject a test-only hook inside the game's closure; nothing is exported by
 // the production build and no production code is changed for browser tests.
 const pvpTestHook=`window.__pvpBrowserTest={
+ accountXpReady(){return accountProgress.verified&&accountProgress.status==='ready'},
  roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
  humanRoster(){return state.players.filter(p=>p.human).map(p=>p.id)},
  remoteHumanLabel(){
@@ -484,11 +481,12 @@ async function main(){
    await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>!document.body.classList.contains('booting'),null,{timeout:55000});
    try{
-     await page.waitForFunction(()=>document.querySelector('#accountXpSync')?.textContent==='XP salvo na conta',null,{timeout:15000});
+     await page.waitForFunction(()=>window.__pvpBrowserTest?.accountXpReady?.()===true,null,{timeout:15000});
    }catch(err){
      const status=await page.evaluate(()=>({
        booting:document.body.classList.contains('booting'),
-       xp:document.querySelector('#accountXpSync')?.textContent,
+       xpState:document.querySelector('#accountXpSync')?.dataset?.state,
+       xpLevel:document.querySelector('#accountXpLevel')?.textContent,
        account:document.querySelector('#accountStatus')?.textContent,
        firebase:document.querySelector('#firebaseStatus')?.textContent,
        name:document.querySelector('#accountName')?.textContent,
