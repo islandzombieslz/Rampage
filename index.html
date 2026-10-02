@@ -10716,9 +10716,11 @@ function updatePVP(dt){
    if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now){
      let chargeInput={};
      if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot)
-       chargeInput=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+       chargeInput=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():pvpRemoteInputFor(e.ownerId);
      pvpTickWarriorSpecial(e,chargeInput,dt,now);
      if(e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot){
+       const inputSeq=Number(chargeInput.pvpInputSeq)||0;
+       if(inputSeq>Number(e.pvpLastInputSeq||0))e.pvpLastInputSeq=inputSeq;
        const seq=Number(chargeInput.attackSeq)||0;
        if(seq>e.pvpLastAttackSeq)e.pvpLastAttackSeq=seq;
      }
@@ -10727,7 +10729,9 @@ function updatePVP(dt){
    if(e.pvpAllyBot){pvpAllyBotAction(e,dt)}
    else if(e.ownerId&&!e.pvpMinion){
      if(e.knockTime>0){e.moving=false;continue}
-     const input=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():(NetworkAdapter.remoteInputs[e.ownerId]||{});
+     const input=e.ownerId===NetworkAdapter.localPlayerId?getLocalMovement():pvpRemoteInputFor(e.ownerId);
+     const inputSeq=Number(input.pvpInputSeq)||0;
+     if(inputSeq>Number(e.pvpLastInputSeq||0))e.pvpLastInputSeq=inputSeq;
      const regionalPose=e.ownerId!==NetworkAdapter.localPlayerId&&pvpApplyDelegatedRemotePose(e,input,now);
      if(pvpIsWarriorHero(e)){
        const cancelSeq=Number(input.pvpComboCancelSeq)||0;
