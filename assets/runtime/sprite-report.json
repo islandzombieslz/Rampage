@@ -1,0 +1,1226 @@
+[
+  {
+    "key": "idle",
+    "original": "assets/warrior/guerreiro-parado.gif",
+    "runtime": "assets/runtime/idle.gif",
+    "originalSize": [
+      505,
+      689
+    ],
+    "runtimeSize": [
+      281,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3115697,
+    "runtimeBytes": 836214
+  },
+  {
+    "key": "walk",
+    "original": "assets/warrior/guerreiro-andando.gif",
+    "runtime": "assets/runtime/walk.gif",
+    "originalSize": [
+      505,
+      689
+    ],
+    "runtimeSize": [
+      281,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3042138,
+    "runtimeBytes": 852978
+  },
+  {
+    "key": "pvpWarriorDeath",
+    "original": "assets/warrior/pvp/guerreiro-morrendo.gif",
+    "runtime": "assets/runtime/pvpWarriorDeath.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 76,
+    "durationMs": 2530,
+    "originalBytes": 1313613,
+    "runtimeBytes": 1062315
+  },
+  {
+    "key": "pvpWarriorAttack",
+    "original": "assets/warrior/pvp/guerreiro-ataque-unico.gif",
+    "runtime": "assets/runtime/pvpWarriorAttack.gif",
+    "originalSize": [
+      505,
+      689
+    ],
+    "runtimeSize": [
+      281,
+      384
+    ],
+    "frames": 43,
+    "durationMs": 1430,
+    "originalBytes": 1324783,
+    "runtimeBytes": 810991
+  },
+  {
+    "key": "pvpWarriorCombo",
+    "original": "assets/warrior/pvp/combo-ataque-guerreiro.gif",
+    "runtime": "assets/runtime/pvpWarriorCombo.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 94,
+    "durationMs": 3130,
+    "originalBytes": 2566319,
+    "runtimeBytes": 1357975
+  },
+  {
+    "key": "pvpWarriorSpecial",
+    "original": "assets/warrior/pvp/especial-guerreiro.gif",
+    "runtime": "assets/runtime/pvpWarriorSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 117,
+    "durationMs": 3900,
+    "originalBytes": 8724736,
+    "runtimeBytes": 2385380
+  },
+  {
+    "key": "femaleIdle",
+    "original": "assets/warrior/guerreira-parada.gif",
+    "runtime": "assets/runtime/femaleIdle.gif",
+    "originalSize": [
+      505,
+      689
+    ],
+    "runtimeSize": [
+      281,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3986293,
+    "runtimeBytes": 998097
+  },
+  {
+    "key": "femaleWalk",
+    "original": "assets/warrior/guerreira-andando.gif",
+    "runtime": "assets/runtime/femaleWalk.gif",
+    "originalSize": [
+      505,
+      689
+    ],
+    "runtimeSize": [
+      281,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3612152,
+    "runtimeBytes": 974821
+  },
+  {
+    "key": "brownIdle",
+    "original": "assets/brown-warrior/guerreira-marrom-parada.gif",
+    "runtime": "assets/runtime/brownIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 103,
+    "durationMs": 2060,
+    "originalBytes": 7652756,
+    "runtimeBytes": 1693794
+  },
+  {
+    "key": "brownWalk",
+    "original": "assets/brown-warrior/guerreira-marrom-andando.gif",
+    "runtime": "assets/runtime/brownWalk.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 5166953,
+    "runtimeBytes": 1167068
+  },
+  {
+    "key": "brownAttack",
+    "original": "assets/brown-warrior/guerreira-marrom-ataque-normal.gif",
+    "runtime": "assets/runtime/brownAttack.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 118,
+    "durationMs": 2360,
+    "originalBytes": 8244516,
+    "runtimeBytes": 1951770
+  },
+  {
+    "key": "brownSpecial",
+    "original": "assets/brown-warrior/guerreira-marrom-ataque-especial.gif",
+    "runtime": "assets/runtime/brownSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 70,
+    "durationMs": 2920,
+    "originalBytes": 4904779,
+    "runtimeBytes": 1167818
+  },
+  {
+    "key": "brownPower",
+    "original": "assets/brown-warrior/poder-especial-guerreira-marrom.gif",
+    "runtime": "assets/runtime/brownPower.gif",
+    "originalSize": [
+      521,
+      316
+    ],
+    "runtimeSize": [
+      512,
+      311
+    ],
+    "frames": 36,
+    "durationMs": 1500,
+    "originalBytes": 1229979,
+    "runtimeBytes": 1100503
+  },
+  {
+    "key": "kingIdle",
+    "original": "assets/king/idle.gif",
+    "runtime": "assets/runtime/kingIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 103,
+    "durationMs": 2060,
+    "originalBytes": 8677971,
+    "runtimeBytes": 2339580
+  },
+  {
+    "key": "kingWalk",
+    "original": "assets/king/walk.gif",
+    "runtime": "assets/runtime/kingWalk.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 152,
+    "durationMs": 3040,
+    "originalBytes": 7982463,
+    "runtimeBytes": 3519682
+  },
+  {
+    "key": "kingSpecial",
+    "original": "assets/king/special.gif",
+    "runtime": "assets/runtime/kingSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 127,
+    "durationMs": 2540,
+    "originalBytes": 11163629,
+    "runtimeBytes": 3029750
+  },
+  {
+    "key": "kingPower",
+    "original": "assets/king/power.gif",
+    "runtime": "assets/runtime/kingPower.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      512,
+      512
+    ],
+    "frames": 152,
+    "durationMs": 3040,
+    "originalBytes": 5951255,
+    "runtimeBytes": 2822991
+  },
+  {
+    "key": "golemIdle",
+    "original": "assets/golem/golem-parado.gif",
+    "runtime": "assets/runtime/golemIdle.gif",
+    "originalSize": [
+      698,
+      800
+    ],
+    "runtimeSize": [
+      335,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 6000447,
+    "runtimeBytes": 1281090
+  },
+  {
+    "key": "golemWalk",
+    "original": "assets/golem/golem-andando.gif",
+    "runtime": "assets/runtime/golemWalk.gif",
+    "originalSize": [
+      698,
+      800
+    ],
+    "runtimeSize": [
+      335,
+      384
+    ],
+    "frames": 31,
+    "durationMs": 1290,
+    "originalBytes": 3284708,
+    "runtimeBytes": 680354
+  },
+  {
+    "key": "golemAttack",
+    "original": "assets/golem/golem-ataque.gif",
+    "runtime": "assets/runtime/golemAttack.gif",
+    "originalSize": [
+      698,
+      800
+    ],
+    "runtimeSize": [
+      335,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 8940733,
+    "runtimeBytes": 1774346
+  },
+  {
+    "key": "golemSpecial",
+    "original": "assets/golem/golem-especial.gif",
+    "runtime": "assets/runtime/golemSpecial.gif",
+    "originalSize": [
+      698,
+      800
+    ],
+    "runtimeSize": [
+      335,
+      384
+    ],
+    "frames": 98,
+    "durationMs": 4080,
+    "originalBytes": 12355992,
+    "runtimeBytes": 2715821
+  },
+  {
+    "key": "mageIdle",
+    "original": "assets/mage/mago-parado.gif",
+    "runtime": "assets/runtime/mageIdle.gif",
+    "originalSize": [
+      623,
+      717
+    ],
+    "runtimeSize": [
+      334,
+      384
+    ],
+    "frames": 25,
+    "durationMs": 1040,
+    "originalBytes": 2189612,
+    "runtimeBytes": 584520
+  },
+  {
+    "key": "mageWalk",
+    "original": "assets/mage/mago-andando.gif",
+    "runtime": "assets/runtime/mageWalk.gif",
+    "originalSize": [
+      623,
+      717
+    ],
+    "runtimeSize": [
+      334,
+      384
+    ],
+    "frames": 45,
+    "durationMs": 1870,
+    "originalBytes": 4187627,
+    "runtimeBytes": 1088080
+  },
+  {
+    "key": "mageSpecial",
+    "original": "assets/mage/mago-especial.gif",
+    "runtime": "assets/runtime/mageSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 187,
+    "durationMs": 3740,
+    "originalBytes": 18542435,
+    "runtimeBytes": 4961486
+  },
+  {
+    "key": "magePower",
+    "original": "assets/mage/poder-mago.gif",
+    "runtime": "assets/runtime/magePower.gif",
+    "originalSize": [
+      800,
+      404
+    ],
+    "runtimeSize": [
+      512,
+      259
+    ],
+    "frames": 198,
+    "durationMs": 4940,
+    "originalBytes": 6046472,
+    "runtimeBytes": 2578072
+  },
+  {
+    "key": "magePowerSpecial",
+    "original": "assets/mage/poder-mago-especial.gif",
+    "runtime": "assets/runtime/magePowerSpecial.gif",
+    "originalSize": [
+      638,
+      800
+    ],
+    "runtimeSize": [
+      408,
+      512
+    ],
+    "frames": 233,
+    "durationMs": 4660,
+    "originalBytes": 15493995,
+    "runtimeBytes": 5929449
+  },
+  {
+    "key": "mageStaff",
+    "original": "assets/mage/mao-cajado.gif",
+    "runtime": "assets/runtime/mageStaff.gif",
+    "originalSize": [
+      288,
+      800
+    ],
+    "runtimeSize": [
+      138,
+      384
+    ],
+    "frames": 25,
+    "durationMs": 1040,
+    "originalBytes": 919900,
+    "runtimeBytes": 272507
+  },
+  {
+    "key": "femaleMageIdle",
+    "original": "assets/mage/maga-parada.gif",
+    "runtime": "assets/runtime/femaleMageIdle.gif",
+    "originalSize": [
+      623,
+      717
+    ],
+    "runtimeSize": [
+      334,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 5030750,
+    "runtimeBytes": 1335989
+  },
+  {
+    "key": "femaleMageWalk",
+    "original": "assets/mage/maga-andando.gif",
+    "runtime": "assets/runtime/femaleMageWalk.gif",
+    "originalSize": [
+      623,
+      717
+    ],
+    "runtimeSize": [
+      334,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 5137560,
+    "runtimeBytes": 1330540
+  },
+  {
+    "key": "femaleMageSpecial",
+    "original": "assets/mage/maga-especial.gif",
+    "runtime": "assets/runtime/femaleMageSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 188,
+    "durationMs": 3760,
+    "originalBytes": 21267186,
+    "runtimeBytes": 5661454
+  },
+  {
+    "key": "egyptWarriorIdle",
+    "original": "assets/egypt/warrior/male-idle.gif",
+    "runtime": "assets/runtime/egyptWarriorIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 25,
+    "durationMs": 1040,
+    "originalBytes": 2215748,
+    "runtimeBytes": 523503
+  },
+  {
+    "key": "egyptWarriorWalk",
+    "original": "assets/egypt/warrior/male-walk.gif",
+    "runtime": "assets/runtime/egyptWarriorWalk.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 3296013,
+    "runtimeBytes": 1592761
+  },
+  {
+    "key": "egyptFemaleWarriorIdle",
+    "original": "assets/egypt/warrior/female-idle.gif",
+    "runtime": "assets/runtime/egyptFemaleWarriorIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 25,
+    "durationMs": 1040,
+    "originalBytes": 2175835,
+    "runtimeBytes": 503751
+  },
+  {
+    "key": "egyptFemaleWarriorWalk",
+    "original": "assets/egypt/warrior/female-walk.gif",
+    "runtime": "assets/runtime/egyptFemaleWarriorWalk.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 3236852,
+    "runtimeBytes": 1582403
+  },
+  {
+    "key": "egyptMageStaff",
+    "original": "assets/egypt/mage/staff.gif",
+    "runtime": "assets/runtime/egyptMageStaff.gif",
+    "originalSize": [
+      538,
+      800
+    ],
+    "runtimeSize": [
+      258,
+      384
+    ],
+    "frames": 61,
+    "durationMs": 2540,
+    "originalBytes": 3801469,
+    "runtimeBytes": 1114872
+  },
+  {
+    "key": "egyptMagePower",
+    "original": "assets/egypt/mage/power-normal.gif",
+    "runtime": "assets/runtime/egyptMagePower.gif",
+    "originalSize": [
+      800,
+      375
+    ],
+    "runtimeSize": [
+      512,
+      240
+    ],
+    "frames": 85,
+    "durationMs": 3540,
+    "originalBytes": 2734179,
+    "runtimeBytes": 1260096
+  },
+  {
+    "key": "egyptMagePowerSpecial",
+    "original": "assets/egypt/mage/power-special.gif",
+    "runtime": "assets/runtime/egyptMagePowerSpecial.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      512,
+      512
+    ],
+    "frames": 25,
+    "durationMs": 790,
+    "originalBytes": 1399025,
+    "runtimeBytes": 842784
+  },
+  {
+    "key": "egyptMageIdle",
+    "original": "assets/egypt/mage/male-idle.gif",
+    "runtime": "assets/runtime/egyptMageIdle.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3011681,
+    "runtimeBytes": 1089485
+  },
+  {
+    "key": "egyptMageWalk",
+    "original": "assets/egypt/mage/male-walk.gif",
+    "runtime": "assets/runtime/egyptMageWalk.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 4328740,
+    "runtimeBytes": 1600828
+  },
+  {
+    "key": "egyptMageSpecial",
+    "original": "assets/egypt/mage/male-special.gif",
+    "runtime": "assets/runtime/egyptMageSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 61,
+    "durationMs": 2540,
+    "originalBytes": 5784193,
+    "runtimeBytes": 1576537
+  },
+  {
+    "key": "egyptFemaleMageIdle",
+    "original": "assets/egypt/mage/female-idle.gif",
+    "runtime": "assets/runtime/egyptFemaleMageIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 25,
+    "durationMs": 1040,
+    "originalBytes": 2635831,
+    "runtimeBytes": 589451
+  },
+  {
+    "key": "egyptFemaleMageWalk",
+    "original": "assets/egypt/mage/female-walk.gif",
+    "runtime": "assets/runtime/egyptFemaleMageWalk.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 3548961,
+    "runtimeBytes": 1768538
+  },
+  {
+    "key": "egyptFemaleMageSpecial",
+    "original": "assets/egypt/mage/female-special.gif",
+    "runtime": "assets/runtime/egyptFemaleMageSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 61,
+    "durationMs": 2540,
+    "originalBytes": 4688217,
+    "runtimeBytes": 1680850
+  },
+  {
+    "key": "najaIdle",
+    "original": "assets/egypt/naja/idle.gif",
+    "runtime": "assets/runtime/najaIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 4390116,
+    "runtimeBytes": 1017064
+  },
+  {
+    "key": "najaWalk",
+    "original": "assets/egypt/naja/walk.gif",
+    "runtime": "assets/runtime/najaWalk.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 63,
+    "durationMs": 2100,
+    "originalBytes": 5520609,
+    "runtimeBytes": 1309386
+  },
+  {
+    "key": "najaAttack",
+    "original": "assets/egypt/naja/attack-normal.gif",
+    "runtime": "assets/runtime/najaAttack.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 39,
+    "durationMs": 1300,
+    "originalBytes": 3775478,
+    "runtimeBytes": 882321
+  },
+  {
+    "key": "najaSpecial",
+    "original": "assets/egypt/naja/special-burrow.gif",
+    "runtime": "assets/runtime/najaSpecial.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 62,
+    "durationMs": 2070,
+    "originalBytes": 5841961,
+    "runtimeBytes": 1264506
+  },
+  {
+    "key": "najaSpecialFinal",
+    "original": "assets/egypt/naja/special-emerge.gif",
+    "runtime": "assets/runtime/najaSpecialFinal.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 55,
+    "durationMs": 1830,
+    "originalBytes": 5737522,
+    "runtimeBytes": 1364316
+  },
+  {
+    "key": "anubisIdle",
+    "original": "assets/egypt/anubis/idle.gif",
+    "runtime": "assets/runtime/anubisIdle.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3722318,
+    "runtimeBytes": 826213
+  },
+  {
+    "key": "anubisWalk",
+    "original": "assets/egypt/anubis/walk.gif",
+    "runtime": "assets/runtime/anubisWalk.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3853559,
+    "runtimeBytes": 904540
+  },
+  {
+    "key": "anubisMeleeAttack",
+    "original": "assets/egypt/anubis/attack-melee.gif",
+    "runtime": "assets/runtime/anubisMeleeAttack.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 2430,
+    "originalBytes": 6408790,
+    "runtimeBytes": 1597307
+  },
+  {
+    "key": "anubisRangedAttack",
+    "original": "assets/egypt/anubis/attack-ranged.gif",
+    "runtime": "assets/runtime/anubisRangedAttack.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 102,
+    "durationMs": 3400,
+    "originalBytes": 8406006,
+    "runtimeBytes": 2072743
+  },
+  {
+    "key": "anubisProjectile",
+    "original": "assets/egypt/anubis/projectile.gif",
+    "runtime": "assets/runtime/anubisProjectile.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 52,
+    "durationMs": 1730,
+    "originalBytes": 3230258,
+    "runtimeBytes": 780007
+  },
+  {
+    "key": "isisIdle",
+    "original": "assets/egypt/isis/idle.gif",
+    "runtime": "assets/runtime/isisIdle.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 92,
+    "durationMs": 3070,
+    "originalBytes": 3926870,
+    "runtimeBytes": 2271151
+  },
+  {
+    "key": "isisWalk",
+    "original": "assets/egypt/isis/walk.gif",
+    "runtime": "assets/runtime/isisWalk.gif",
+    "originalSize": [
+      640,
+      640
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 2702347,
+    "runtimeBytes": 1702892
+  },
+  {
+    "key": "isisAttack",
+    "original": "assets/egypt/isis/attack-normal.gif",
+    "runtime": "assets/runtime/isisAttack.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 65,
+    "durationMs": 2170,
+    "originalBytes": 2380061,
+    "runtimeBytes": 1583768
+  },
+  {
+    "key": "isisSpecial",
+    "original": "assets/egypt/isis/special.gif",
+    "runtime": "assets/runtime/isisSpecial.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 155,
+    "durationMs": 10330,
+    "originalBytes": 9587197,
+    "runtimeBytes": 5191893
+  },
+  {
+    "key": "isisPower",
+    "original": "assets/egypt/isis/power-special.gif",
+    "runtime": "assets/runtime/isisPower.gif",
+    "originalSize": [
+      495,
+      640
+    ],
+    "runtimeSize": [
+      396,
+      512
+    ],
+    "frames": 67,
+    "durationMs": 2230,
+    "originalBytes": 2239654,
+    "runtimeBytes": 3333661
+  },
+  {
+    "key": "poseidonIdle",
+    "original": "assets/water/poseidon/idle.gif",
+    "runtime": "assets/runtime/poseidonIdle.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 53,
+    "durationMs": 1770,
+    "originalBytes": 3843951,
+    "runtimeBytes": 1339463
+  },
+  {
+    "key": "poseidonWalk",
+    "original": "assets/water/poseidon/walk.gif",
+    "runtime": "assets/runtime/poseidonWalk.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 46,
+    "durationMs": 1530,
+    "originalBytes": 3549561,
+    "runtimeBytes": 1189313
+  },
+  {
+    "key": "poseidonNormal",
+    "original": "assets/water/poseidon/normal.gif",
+    "runtime": "assets/runtime/poseidonNormal.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 92,
+    "durationMs": 3070,
+    "originalBytes": 3878513,
+    "runtimeBytes": 2560833
+  },
+  {
+    "key": "poseidonWaveCast",
+    "original": "assets/water/poseidon/special-wave.gif",
+    "runtime": "assets/runtime/poseidonWaveCast.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      512,
+      512
+    ],
+    "frames": 72,
+    "durationMs": 2400,
+    "originalBytes": 2078148,
+    "runtimeBytes": 3080292
+  },
+  {
+    "key": "poseidonSummonCast",
+    "original": "assets/water/poseidon/special-summon.gif",
+    "runtime": "assets/runtime/poseidonSummonCast.gif",
+    "originalSize": [
+      800,
+      800
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 85,
+    "durationMs": 3540,
+    "originalBytes": 4925252,
+    "runtimeBytes": 2507499
+  },
+  {
+    "key": "poseidonWavePower",
+    "original": "assets/water/poseidon/wave.gif",
+    "runtime": "assets/runtime/poseidonWavePower.gif",
+    "originalSize": [
+      640,
+      576
+    ],
+    "runtimeSize": [
+      512,
+      461
+    ],
+    "frames": 73,
+    "durationMs": 3040,
+    "originalBytes": 3330227,
+    "runtimeBytes": 1913729
+  },
+  {
+    "key": "seahorseIdle",
+    "original": "assets/water/seahorse/idle.gif",
+    "runtime": "assets/runtime/seahorseIdle.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 38,
+    "durationMs": 1270,
+    "originalBytes": 1575379,
+    "runtimeBytes": 632570
+  },
+  {
+    "key": "seahorseWalk",
+    "original": "assets/water/seahorse/walk.gif",
+    "runtime": "assets/runtime/seahorseWalk.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 36,
+    "durationMs": 1200,
+    "originalBytes": 1598152,
+    "runtimeBytes": 641915
+  },
+  {
+    "key": "seahorseAttack",
+    "original": "assets/water/seahorse/attack.gif",
+    "runtime": "assets/runtime/seahorseAttack.gif",
+    "originalSize": [
+      720,
+      720
+    ],
+    "runtimeSize": [
+      384,
+      384
+    ],
+    "frames": 44,
+    "durationMs": 1470,
+    "originalBytes": 1826883,
+    "runtimeBytes": 789396
+  },
+  {
+    "key": "dragonGround",
+    "original": "assets/dragon/dragao-guerreiro-parado.gif",
+    "runtime": "assets/runtime/dragonGround.gif",
+    "originalSize": [
+      800,
+      700
+    ],
+    "runtimeSize": [
+      384,
+      336
+    ],
+    "frames": 65,
+    "durationMs": 2030,
+    "originalBytes": 5970001,
+    "runtimeBytes": 1314438
+  },
+  {
+    "key": "dragonTakeoff",
+    "original": "assets/dragon/dragao-guerreiro-pulando.gif",
+    "runtime": "assets/runtime/dragonTakeoff.gif",
+    "originalSize": [
+      800,
+      700
+    ],
+    "runtimeSize": [
+      384,
+      336
+    ],
+    "frames": 103,
+    "durationMs": 2060,
+    "originalBytes": 11568256,
+    "runtimeBytes": 2515622
+  },
+  {
+    "key": "dragonFly",
+    "original": "assets/dragon/dragao-guerreiro-voando.gif",
+    "runtime": "assets/runtime/dragonFly.gif",
+    "originalSize": [
+      800,
+      700
+    ],
+    "runtimeSize": [
+      384,
+      336
+    ],
+    "frames": 98,
+    "durationMs": 1960,
+    "originalBytes": 9890045,
+    "runtimeBytes": 2122627
+  },
+  {
+    "key": "dragonAttack",
+    "original": "assets/dragon/dragao-guerreiro-atacando.gif",
+    "runtime": "assets/runtime/dragonAttack.gif",
+    "originalSize": [
+      800,
+      700
+    ],
+    "runtimeSize": [
+      384,
+      336
+    ],
+    "frames": 127,
+    "durationMs": 2540,
+    "originalBytes": 13097479,
+    "runtimeBytes": 2859063
+  },
+  {
+    "key": "dragonFireball",
+    "original": "assets/dragon/bola-de-fogo.gif",
+    "runtime": "assets/runtime/dragonFireball.gif",
+    "originalSize": [
+      623,
+      727
+    ],
+    "runtimeSize": [
+      329,
+      384
+    ],
+    "frames": 49,
+    "durationMs": 2040,
+    "originalBytes": 3663765,
+    "runtimeBytes": 926478
+  }
+]
