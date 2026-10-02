@@ -68,4 +68,26 @@ assert(html.includes('historyApplyHitFeedback(e,data.impact,data.sourceId)')&&wo
 assert(html.includes('startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0)')&&html.includes("!state.historyActive&&e.pvpMode"),
   'History deaths must use PvP death visuals without consuming PvP round lives');
 
+assert(worker.includes('WARRIOR_COMBO_CHAIN_MS = 950')&&worker.includes('WARRIOR_COMBO_CONTINUE_MS = 460')&&
+  worker.includes('const hitFractions = [.18, .50, .82]')&&worker.includes('type: "combat_sfx"'),
+  'History warrior combo timing, hits and sound events must mirror PvP');
+assert(worker.includes('WARRIOR_SPECIAL_DAMAGE_MIN = 50')&&worker.includes('WARRIOR_SPECIAL_DAMAGE_MAX = 70')&&
+  worker.includes('WARRIOR_SPECIAL_DAMAGE_HITS = 5')&&worker.includes('WARRIOR_SPECIAL_HEAL = 30')&&
+  worker.includes('const fractions = [0, .24, .49, .74, .96]'),
+  'History warrior special must mirror PvP five-hit damage and healing rules');
+assert(worker.includes('player.specialAngle = heading')&&worker.includes('WARRIOR_SPECIAL_KNOCK_FORCE = 560')&&
+  worker.includes('WARRIOR_SPECIAL_KNOCK_TIME_MS = 340'),
+  'History special must remain steerable and use PvP final knockback');
+assert(html.includes('function historyApplyAuthoritativeAction')&&html.includes('function historySyncWarriorCombatSnapshot')&&
+  html.includes('historyServerSpecialSerial')&&html.includes('historyServerComboSerial')&&html.includes('historyServerSingleSerial'),
+  'History client must use authoritative Cloudflare action serials instead of reconstructing actions from jitter');
+assert(html.includes("if(data.type==='combat_sfx'){historyApplyCombatSfx(data);return}")&&
+  html.includes("pvpPlayEntitySfxNow(e,'warrior-single',serial,'pvpWarriorSingle'")&&
+  html.includes('function pvpEntitySfxMix(e)')&&html.includes('updatePvpCombatSfx(now)'),
+  'History combat sounds must reuse PvP spatial audio and serial de-duplication');
+assert(html.includes('soundAt:now+1000')&&html.includes('soundAt:arrival+Math.max(0,1000-attackElapsed)'),
+  'History dragon attack SFX timing must match the PvP 1000 ms cue');
+assert(html.includes('historyPreviewLocalAction(me,action,pvpControls.targetId)'),
+  'History local previews must obey PvP attack activation gates');
+
 console.log('History smoke checks passed.');
