@@ -1303,14 +1303,14 @@ html,body{
  display:flex;align-items:flex-end;gap:5px;pointer-events:auto}
 #pvpCombatHud[hidden]{display:none!important}
 #pvpCombatHud [data-pvp-action]{appearance:none;-webkit-appearance:none;touch-action:none}
-#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(108px,14vw,136px);height:clamp(48px,7vw,64px);
- display:flex;align-items:flex-end;justify-content:flex-start;isolation:isolate}
-#pvpCombatHud .pvp-special-button{position:relative;width:clamp(82px,10.5vw,104px);height:clamp(48px,7vw,64px);min-height:0;margin:0;
+#pvpCombatHud .pvp-special-wrap{position:relative;width:clamp(98px,12.5vw,122px);height:clamp(46px,6.6vw,60px);
+ display:flex;align-items:flex-end;justify-content:flex-start;isolation:isolate;cursor:pointer}
+#pvpCombatHud .pvp-special-button{position:relative;width:clamp(74px,9.4vw,92px);height:clamp(46px,6.6vw,60px);min-height:0;margin:0;
  padding:0;overflow:hidden;border:2px solid #4b4030;border-radius:11px;background:#17191c;
  box-shadow:inset 0 1px 4px #000b,0 2px 6px #0007;transition:border-color .13s ease,box-shadow .13s ease,filter .13s ease}
 #pvpCombatHud .pvp-special-fill{position:absolute;left:0;top:0;bottom:0;width:var(--pvp-special-progress,0%);
  border-radius:8px 0 0 8px;
- background:repeating-linear-gradient(90deg,#963b1d 0 7px,#c95c20 7px 14px,#e89028 14px 21px,#f2b53b 21px 28px,#3b2418 28px 31px);
+ background:repeating-linear-gradient(110deg,#a9461d 0px,#a9461d 10px,#e58a27 10px,#e58a27 20px,#ffd34d 20px,#ffd34d 30px,#cf6b20 30px,#cf6b20 40px);
  box-shadow:inset -2px 0 4px #0007;transition:width .12s linear,filter .13s ease}
 #pvpCombatHud .pvp-special-button.ready{border-color:#f0c75d;box-shadow:inset 0 0 8px #ffe58d55,0 0 11px #e8aa398f}
 #pvpCombatHud .pvp-special-button.ready .pvp-special-fill{filter:brightness(1.18) saturate(1.08)}
@@ -1320,7 +1320,7 @@ html,body{
 #pvpCombatHud .pvp-special-button.unavailable{opacity:.42;filter:grayscale(1)}
 #pvpCombatHud .pvp-special-button .pvp-cooldown{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
  color:#fff;font-size:9px;font-weight:900;line-height:1;text-shadow:0 1px 2px #000}
-#pvpCombatHud .pvp-special-icon{position:absolute;right:-7px;bottom:-8px;width:clamp(64px,8.8vw,82px);height:clamp(64px,8.8vw,82px);
+#pvpCombatHud .pvp-special-icon{position:absolute;right:-13px;bottom:-13px;width:clamp(82px,11vw,104px);height:clamp(82px,11vw,104px);
  object-fit:contain;z-index:4;pointer-events:none;user-select:none;filter:drop-shadow(0 3px 5px #000a);transition:transform .13s ease,filter .13s ease}
 #pvpCombatHud .pvp-special-wrap.ready .pvp-special-icon{transform:scale(1.06);
  filter:drop-shadow(0 0 9px #ffd95fbb) drop-shadow(0 3px 5px #000a)}
@@ -11148,11 +11148,21 @@ function pvpActivateHudAction(button,event=null){
 }
 $$('#pvpCombatHud [data-pvp-action]').forEach(button=>{
  if(button.dataset.pvpAction==='special'){
-   // Primeiro contato: outro dedo pode continuar no joystick ou no botão de ataque.
-   button.addEventListener('pointerdown',event=>pvpActivateHudAction(button,event));
    button.onclick=event=>{event.preventDefault();event.stopPropagation()};
  }else button.onclick=event=>pvpActivateHudAction(button,event);
 });
+const pvpSpecialWrap=$('#pvpCombatHud .pvp-special-wrap');
+const pvpSpecialButton=pvpSpecialWrap?.querySelector('[data-pvp-action="special"]');
+if(pvpSpecialWrap&&pvpSpecialButton){
+ const activateWholeSpecialHud=event=>{
+   if(state.mode!=='pvp'||!state.running||pvpSpecialButton.disabled)return;
+   event.preventDefault();event.stopPropagation();
+   pvpActivateHudAction(pvpSpecialButton,event);
+ };
+ pvpSpecialWrap.style.touchAction='none';
+ pvpSpecialWrap.addEventListener('pointerdown',activateWholeSpecialHud);
+ pvpSpecialWrap.onclick=event=>{event.preventDefault();event.stopPropagation()};
+}
 const pvpGameScreen=$('#gameScreen');
 function pvpAimFromPointer(event){
  const me=pvpLocalHero();if(!me?.alive||!(me.pvpPowerUntil>performance.now()))return false;

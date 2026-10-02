@@ -230,14 +230,14 @@ assert(html.includes("specialInactive:'assets/ui/pvp/punho-especial-inativo.png'
 assert(html.includes('class="pvp-special-fill"')&&
  html.includes("button.style.setProperty('--pvp-special-progress'"),
  'special HUD must use the existing cooldown/unlock state to fill its progress bar');
-assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(82px,10.5vw,104px);height:clamp(48px,7vw,64px)"),
- 'special control keeps the current height but uses a rectangular HUD');
-assert(html.includes('repeating-linear-gradient(90deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
- 'special HUD uses striped progress and lights up the whole control when ready');
-assert(html.includes("width:clamp(64px,8.8vw,82px);height:clamp(64px,8.8vw,82px)"),
- 'Warrior special fist icon is deliberately larger');
-assert(html.includes("button.addEventListener('pointerdown',event=>pvpActivateHudAction(button,event))"),
- 'special fires on pointerdown so multitouch does not wait for click release');
+assert(html.includes("#pvpCombatHud .pvp-special-button{position:relative;width:clamp(74px,9.4vw,92px);height:clamp(46px,6.6vw,60px)"),
+ 'special control remains rectangular but is slightly smaller');
+assert(html.includes('repeating-linear-gradient(110deg')&&html.includes('.pvp-special-wrap.ready .pvp-special-button'),
+ 'special HUD uses diagonal XP-style stripes and lights up the whole control when ready');
+assert(html.includes("width:clamp(82px,11vw,104px);height:clamp(82px,11vw,104px)"),
+ 'Warrior special fist icon is significantly larger');
+assert(html.includes("pvpSpecialWrap.addEventListener('pointerdown',activateWholeSpecialHud)"),
+ 'the entire special HUD fires on pointerdown for click/touch multitouch support');
 assert(html.includes('pvpCancelWarriorCombo(e,now)')&&html.includes('e.attackCooldown=0;e.attackAnim=0'),
  'ready Warrior special can preempt a basic attack/combo');
 assert(html.includes("const specialHudActive=!!(available&&!warriorUnlock&&(specialReady||specialRunning))")&&
