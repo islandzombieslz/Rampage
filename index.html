@@ -9973,6 +9973,12 @@ function pvpBasicAttack(e){
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorChargeUntil)>now)return false;
  if(pvpIsWarriorHero(e)&&Number(e.pvpWarriorComboUntil)>now){
    e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+   // Each held/repeated input is still a real basic-attack request even while
+   // the Warrior combo GIF owns the visible timeline. Keep the generic attack
+   // serial monotonic so local/remote state and browser input diagnostics do
+   // not collapse repeated presses into a single event.
+   e.attackSerial=(Number(e.attackSerial)||0)+1;
+   e.lastAttackAt=now;e.lastCombatAt=now;
    return true;
  }
  if(pvpIsWarriorHero(e)){
@@ -10159,6 +10165,8 @@ function pvpPreviewBasicAttack(e){
  if(pvpIsWarriorHero(e)){
    if(Number(e.pvpWarriorComboUntil)>now){
      e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
+     e.attackSerial=(Number(e.attackSerial)||0)+1;
+     e.lastAttackAt=now;e.lastCombatAt=now;
      return;
    }
    const last=Number(e.pvpWarriorLastBasicAt)||0;
