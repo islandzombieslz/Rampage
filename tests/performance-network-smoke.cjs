@@ -17,15 +17,15 @@ function regionalTests(){
  vm.runInContext(section('const REMOTE_WAR_RENDER_DELAY_MS=','function appendRemotePositionSample('),ctx);
  const run=s=>vm.runInContext(s,ctx);
  const host={id:1,type:'warrior',ownerId:'host',team:'host',x:320,y:340,alive:true,pvpMode:true};
- const g1={id:2,type:'warrior',ownerId:'g1',team:'g1',x:1500,y:1100,alive:true,pvpMode:true};
- const g2={id:3,type:'mage',ownerId:'g2',team:'g2',x:1700,y:1200,alive:true,pvpMode:true};
+ const g1={id:2,type:'warrior',ownerId:'g1',team:'g1',x:1100,y:1100,alive:true,pvpMode:true};
+ const g2={id:3,type:'mage',ownerId:'g2',team:'g2',x:2000,y:1100,alive:true,pvpMode:true};
  const npc={id:4,type:'dragon',pvpMinion:true,team:'enemy',x:1450,y:1100,alive:true,pvpMode:true,hp:100,shield:50};
  state.entities=[host,g1,g2,npc];
  function packet(uid,seq,entities,extra={}){
   ctx.toEncode=entities;
   const encoded=run('toEncode.map(e=>pvpPackRegionalEntity(e,performance.now()))');
   return {uid,epoch:1,seq,active:true,handoff:false,at:serverNow,authorityUid:'host',matchId:state.matchId,round:1,
-   view:{hostUid:uid,left:1000,top:750,right:2100,bottom:1500},focus:uid==='g1'?{x:1500,y:1100}:{x:1700,y:1200},
+   view:{hostUid:uid,left:1000,top:750,right:2100,bottom:1500},focus:{x:(uid==='g1'?g1:g2).x,y:(uid==='g1'?g1:g2).y},
    entities:encoded,dragonProjectiles:[],players:[],...extra};
  }
  const apply=()=>run('pvpIntegrateRemoteRegions(performance.now())');
@@ -42,10 +42,15 @@ function regionalTests(){
  net.roomCache.regions.g1=packet('g1',3,[g1,{...npc,hp:61}]);
  net.roomCache.regions.g2=packet('g2',1,[g2,{...npc,hp:888}]);apply();
  assert.equal(npc.pvpRegionalAuthorityUid,'g1','overlapping regions have exactly one stable owner');assert.equal(npc.hp,61);
- net.localPlayerId='g2';run('pvpLocalRegionalAuthority=true;pvpLastRegionalView=NetworkAdapter.roomCache.regions.g2.view');
+ net.localPlayerId='g2';run('pvpLocalRegionalAuthority=true;pvpLocalRegionalEpoch=1;pvpLastRegionalView=NetworkAdapter.roomCache.regions.g2.view');
  ctx.npc=npc;ctx.g1=g1;assert(!run('pvpLocalRegionOwnsEntity(npc)'),'second guest cannot simulate first guest NPC');
  assert(!run('pvpLocalRegionOwnsEntity(g1)'),'second guest cannot simulate another human');
  net.localPlayerId='g1';assert(run('pvpLocalRegionOwnsEntity(npc)'));
+ ctx.incoming={...npc,pvpRegionalAuthorityUid:null,pvpRegionalEpoch:0};
+ assert(!run('pvpRetainRegionalEntityOnSnapshot(npc,incoming)'),'guest must accept a revoked NPC lease immediately');
+ ctx.incoming={...npc,pvpRegionalAuthorityUid:'g2'};
+ assert(!run('pvpRetainRegionalEntityOnSnapshot(npc,incoming)'),'guest must accept another guest ownership grant');
+ ctx.incoming={...npc};assert(run('pvpRetainRegionalEntityOnSnapshot(npc,incoming)'),'same acknowledged lease keeps local simulation');
  net.localPlayerId='host';net.roomCache.regions.g2=null;delete net.roomCache.regions.g2;
  net.roomCache.regions.g1=packet('g1',4,[g1,{...npc,hp:54}],{active:false,handoff:true});apply();
  assert.equal(npc.hp,54);assert.equal(npc.pvpRegionalAuthorityUid,null,'handoff returns simulation to host');
@@ -54,6 +59,12 @@ function regionalTests(){
  assert.equal(npc.hp,45,'previous authority generation never resurrects old state');
  net.roomCache.regions.g1=packet('g1',5,[{...npc,hp:999}],{round:2});apply();assert.equal(npc.hp,45);
  net.roomCache.regions.g1=packet('g1',5,[{...npc,hp:999}],{authorityUid:'old-host'});apply();assert.equal(npc.hp,45);
+ g2.x=g1.x+100;
+ net.roomCache.regions={g1:packet('g1',5,[g1]),g2:packet('g2',2,[g2])};apply();
+ assert.equal(npc.pvpRegionalAuthorityUid,null,'nearby humans share host combat so cross-player hits remain possible');
+ assert(run('pvpCoordinatedUids.has("g1")&&pvpCoordinatedUids.has("g2")'));
+ net.localPlayerId='g1';run('pvpLocalRegionalAuthority=true');
+ ctx.g1=g1;assert(!run('pvpLocalRegionOwnsEntity(g1)'),'shared combat immediately accepts host snapshots');
  console.log('NETWORK PASS: single NPC grants, no other-human takeover, monotonic packets, decode reuse, timed handoffs');
 }
 function loadTests(){

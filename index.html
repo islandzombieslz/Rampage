@@ -3179,6 +3179,7 @@ const NetworkAdapter = {
   regionSending:false,regionPending:null,regionSendPromise:null,
   hostDisconnectOp:null,hostDisconnectSuccessorUid:null,hostHandoffInFlight:false,
   hostDisconnectVersion:0,hostDisconnectRefreshPromise:null,
+  hostDisconnectRefreshDirty:false,
   presenceTimer:null,cleanupTimer:null,serverOffsetUnsub:null,serverTimeOffset:0,cleanupRunning:false,maintenanceStarted:false,leaving:false,createPromise:null,joinPromise:null,authPromise:null,
   async waitFirebase(){if(window.FirebaseBridge)return window.FirebaseBridge;await new Promise(r=>window.addEventListener('firebase-ready',r,{once:true}));return window.FirebaseBridge},
   async ensureAuth(){
@@ -3279,7 +3280,7 @@ const NetworkAdapter = {
     if(op?.cancel)try{await op.cancel()}catch(_){}
   },
   async refreshPVPHostDisconnect(room=this.roomCache){
-    if(this.hostDisconnectRefreshPromise)return this.hostDisconnectRefreshPromise;
+    if(this.hostDisconnectRefreshPromise){this.hostDisconnectRefreshDirty=true;return this.hostDisconnectRefreshPromise}
     const run=async()=>{
       const pvp=room?.settings?.mode==='pvp'||state.mode==='pvp';
       if(!this.roomId||!this.localPlayerId||!this.isHost||!pvp||this.roomStatus!=='playing'){
@@ -3287,12 +3288,14 @@ const NetworkAdapter = {
         return false;
       }
       const code=this.roomId,uid=this.localPlayerId;
+      if(!room.players||!room.players[uid])return false;
       const successorUid=pvpNextHostCandidate(room,uid,false)?.uid||null;
       if(this.hostDisconnectOp&&this.hostDisconnectSuccessorUid===successorUid)return true;
       await this.cancelPVPHostDisconnect();
       const version=this.hostDisconnectVersion,F=await this.waitFirebase();
       const valid=()=>this.roomId===code&&this.localPlayerId===uid&&this.isHost&&
-        this.roomStatus==='playing'&&this.hostDisconnectVersion===version;
+        this.roomStatus==='playing'&&this.hostDisconnectVersion===version&&
+        (pvpNextHostCandidate(this.roomCache,uid,false)?.uid||null)===successorUid;
       if(!valid())return false;
       const op=F.onDisconnect(F.ref(F.firebaseDb,successorUid?`rooms/${code}/hostUid`:`rooms/${code}`));
       try{
@@ -3304,7 +3307,12 @@ const NetworkAdapter = {
     };
     this.hostDisconnectRefreshPromise=run();
     try{return await this.hostDisconnectRefreshPromise}
-    finally{this.hostDisconnectRefreshPromise=null}
+    finally{
+      this.hostDisconnectRefreshPromise=null;
+      const dirty=this.hostDisconnectRefreshDirty;this.hostDisconnectRefreshDirty=false;
+      if(dirty&&this.isHost&&this.roomStatus==='playing')
+        Promise.resolve().then(()=>this.refreshPVPHostDisconnect(this.roomCache)).catch(()=>{});
+    }
   },
   async handoffPVPHost(reason='hidden'){
     if(this.hostHandoffInFlight||!this.roomId||!this.localPlayerId||!this.isHost||this.roomStatus!=='playing')return false;
@@ -5251,7 +5259,8 @@ function serializeGame(){
  const pvpHostView=state.mode==='pvp'?pvpCurrentAuthorityView():null;
  return {seq:++state.netSeq,mode:state.mode,round:state.round,rounds:state.rounds,phase:state.phase,running:state.running,timeLeft:state.timeLeft,prepLeft:state.prepLeft,nextId:state.nextId,world:{w:state.world.w,h:state.world.h},players:networkPlayers,entities,dragonProjectiles,
    matchId:state.matchId,matchResult:state.matchResult,matchStats:state.matchStats,
-   warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents,pvpDamageEvents,pvpHostView};
+   warGoalSerial:state.warGoalSerial,warGoalEvents:state.warGoalEvents,pvpDamageEvents,pvpHostView,
+   ...(state.mode==='pvp'?{pvpCoordinatedUids:[...pvpCoordinatedUids]}:{})};
 }
 
 const REMOTE_WAR_RENDER_DELAY_MS=160;
@@ -5290,6 +5299,20 @@ let pvpRegionalSimulationUid=null,pvpRegionalEntityCounter=0,pvpRegionalProjecti
 const pvpRemoteRegionalAuthority=new Map();
 const pvpHostRegionState=new Map();
 const pvpHostRegionDamageSeen=new Map();
+const pvpCoordinatedUids=new Set();
+function pvpCoordinateNearbyHumans(){
+ const previous=new Set(pvpCoordinatedUids);pvpCoordinatedUids.clear();
+ const humans=state.entities.filter(e=>e.alive&&e.ownerId&&!e.pvpMinion&&!e.pvpAllyBot);
+ for(let i=0;i<humans.length;i++)for(let j=i+1;j<humans.length;j++){
+   const a=humans[i],b=humans[j],dx=a.x-b.x,dy=a.y-b.y;
+   const radius=PVP_REGION_SIM_MARGIN_PX*2+((previous.has(a.ownerId)&&previous.has(b.ownerId))?90:0);
+   if(dx*dx+dy*dy>radius*radius)continue;
+   // Nearby humans can fight each other. Run their shared combat on the host
+   // rather than delegating either human to the other guest or dropping hits
+   // at a region boundary. Separate distant bubbles stay distributed.
+   pvpCoordinatedUids.add(a.ownerId);pvpCoordinatedUids.add(b.ownerId);
+ }
+}
 
 function pvpCurrentAuthorityView(){
  if(state.mode!=='pvp')return null;
@@ -5345,6 +5368,7 @@ function pvpSetLocalRegionalAuthority(next){
 function pvpUpdateLocalRegionalAuthority(entity){
  if(state.mode!=='pvp'||!state.running||state.phase!=='combat'||!NetworkAdapter.online||NetworkAdapter.isHost||!entity?.alive)
    return pvpSetLocalRegionalAuthority(false);
+ if(pvpCoordinatedUids.has(NetworkAdapter.localPlayerId))return pvpSetLocalRegionalAuthority(false);
  const view=pvpLatestHostView;
  if(!pvpValidAuthorityView(view)||String(view.hostUid||'')!==String(NetworkAdapter.hostUid||''))
    return pvpSetLocalRegionalAuthority(false);
@@ -5364,12 +5388,13 @@ function pvpLocalSimulationView(){
  return pvpLastRegionalView;
 }
 function pvpLocalRegionOwnsEntity(entity){
- if(!pvpLocalRegionalAuthority||!entity)return false;
+ if(!pvpLocalRegionalAuthority||!entity||pvpCoordinatedUids.has(NetworkAdapter.localPlayerId))return false;
  if(entity.ownerId&&!entity.pvpMinion&&!entity.pvpAllyBot)
    return String(entity.ownerId)===String(NetworkAdapter.localPlayerId);
  // A camera is a proposal, not a grant. Overlapping guests must never both
  // simulate the same NPC or another human's movement/HP/attack timelines.
- if(String(entity.pvpRegionalAuthorityUid||'')!==String(NetworkAdapter.localPlayerId))return false;
+ if(String(entity.pvpRegionalAuthorityUid||'')!==String(NetworkAdapter.localPlayerId)||
+    Number(entity.pvpRegionalEpoch)!==pvpLocalRegionalEpoch)return false;
  const view=pvpLastRegionalView||pvpLocalSimulationView();
  return !!view&&pvpPointInAuthorityView(entity,view,0);
 }
@@ -5382,6 +5407,13 @@ function pvpLocalRegionOwnsProjectile(projectile){
 }
 function pvpHostShouldSimulateEntity(entity){
  return !entity?.pvpRegionalAuthorityUid||String(entity.pvpRegionalAuthorityUid)===String(NetworkAdapter.localPlayerId);
+}
+function pvpRetainRegionalEntityOnSnapshot(local,incoming){
+ if(!pvpLocalRegionalAuthority||!local||!pvpLocalRegionOwnsEntity(local))return false;
+ if(incoming.alive===false&&local.alive!==false)return false;
+ if(!local.pvpMinion&&!local.pvpAllyBot&&String(local.ownerId)===String(NetworkAdapter.localPlayerId))return true;
+ return String(incoming.pvpRegionalAuthorityUid||'')===String(NetworkAdapter.localPlayerId)&&
+   Number(incoming.pvpRegionalEpoch)===pvpLocalRegionalEpoch;
 }
 function pvpHostShouldSimulateProjectile(projectile){
  return !projectile?.pvpRegionalAuthorityUid||String(projectile.pvpRegionalAuthorityUid)===String(NetworkAdapter.localPlayerId);
@@ -5537,6 +5569,7 @@ function pvpApplyRegionalEntitySnapshot(local,decoded,uid,epoch,active,now){
 function pvpIntegrateRemoteRegions(now=performance.now()){
  if(!NetworkAdapter.isHost||state.mode!=='pvp'||!state.running||state.phase!=='combat')return;
  const hostView=pvpCurrentAuthorityView();
+ pvpCoordinateNearbyHumans();
  const previousOwners=new Map();
  for(const e of state.entities){previousOwners.set(String(e.id),e.pvpRegionalAuthorityUid);e.pvpRegionalAuthorityUid=null;e.pvpRegionalEpoch=0}
  for(const p of state.dragonProjectiles||[])p.pvpRegionalAuthorityUid=null;
@@ -5555,7 +5588,7 @@ function pvpIntegrateRemoteRegions(now=performance.now()){
    // a stale handoff used to win arbitration and roll HP/poses back repeatedly.
    if(epoch<remembered.epoch||(epoch===remembered.epoch&&seq<remembered.seq))continue;
    const newer=epoch>remembered.epoch||seq>remembered.seq;
-   const activeAllowed=!!packet.active&&pvpRegionalAuthorityDecision(probe,hostView,!!remembered.active);
+   const activeAllowed=!!packet.active&&!pvpCoordinatedUids.has(uid)&&pvpRegionalAuthorityDecision(probe,hostView,!!remembered.active);
    const takeover=!!packet.handoff||(!activeAllowed&&!!remembered.active);
    if(!activeAllowed&&!newer&&!remembered.active)continue;
    const slot=Number.isFinite(Number(players[uid]?.slot))?Number(players[uid].slot):999;
@@ -5660,7 +5693,7 @@ function resetPVPRegionalAuthority(){
  pvpLocalRegionalEpoch=0;pvpRegionalSnapshotSeq=0;pvpRegionLastPublishAt=0;
  pvpRegionHandoffPending=false;pvpRegionHandoffUntil=0;pvpLastRegionalView=null;
  pvpRegionalSimulationUid=null;pvpRegionalEntityCounter=0;pvpRegionalProjectileCounter=0;
- pvpRemoteRegionalAuthority.clear();pvpHostRegionState.clear();pvpHostRegionDamageSeen.clear();
+ pvpRemoteRegionalAuthority.clear();pvpHostRegionState.clear();pvpHostRegionDamageSeen.clear();pvpCoordinatedUids.clear();
 }
 function pvpRemoteRegionalState(ownerId){
  const key=String(ownerId||'');
@@ -5674,6 +5707,7 @@ function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvp
  // for the first packet so movement still feels immediate while a region lease forms.
  if(entity.pvpRegionalAuthorityUid&&String(entity.pvpRegionalAuthorityUid)===String(entity.ownerId))return true;
  const regional=pvpRemoteRegionalState(entity.ownerId);
+ if(pvpCoordinatedUids.has(entity.ownerId)){regional.active=false;return false}
  const pose=input?.pvpRegionalPose;
  const packetAt=Number(input?.t)||0,seq=Number(pose?.seq)||0;
  const proposed=pose&&Number.isFinite(Number(pose.x))&&Number.isFinite(Number(pose.y))
@@ -5754,9 +5788,12 @@ function applyRemoteGame(game){
  const remoteInterpMs=pvpRemote?clamp(remoteGapMs*1.02,52,108):clamp(remoteGapMs*1.18,105,190);
  const firstFrame=pvpRemote?!$('#gameScreen').classList.contains('active'):$('#gameScreen').style.display==='none';
  const previousRound=Number(state.round)||0;
+ if(pvpRemote&&(!game.running||game.phase!=='combat'||
+    (game.matchId&&game.matchId!==state.matchId)||Number(game.round)!==previousRound))resetPVPRegionalAuthority();
  state.mode=game.mode??state.mode;state.round=game.round??state.round;state.rounds=game.rounds??state.rounds;state.phase=game.phase??state.phase;state.running=!!game.running;state.timeLeft=game.timeLeft??0;state.prepLeft=game.prepLeft??0;state.nextId=game.nextId??state.nextId;
  if(game.world&&Number.isFinite(Number(game.world.w))&&Number.isFinite(Number(game.world.h))){state.world.w=Number(game.world.w);state.world.h=Number(game.world.h)}
  if(pvpRemote){
+   pvpCoordinatedUids.clear();for(const uid of game.pvpCoordinatedUids||[])pvpCoordinatedUids.add(uid);
    const incomingView=game.pvpHostView;
    if(pvpValidAuthorityView(incomingView))pvpLatestHostView={...incomingView};
    else if(incomingView===null)pvpLatestHostView=null;
@@ -5813,7 +5850,7 @@ function applyRemoteGame(game){
    const incomingRegionalEntityIds=new Set(game.entities.map(e=>String(e.id)));
    state.entities=game.entities.map(e=>{
      const old=previous.get(e.id),localNow=remoteNow;
-     if(pvpRemote&&pvpLocalRegionalAuthority&&old&&pvpLocalRegionOwnsEntity(old)){
+     if(pvpRemote&&pvpRetainRegionalEntityOnSnapshot(old,e)){
        old.netAuthX=Number(e.x)||0;old.netAuthY=Number(e.y)||0;old.netAuthAt=remoteNow;
        old.controlled=!old.pvpMinion&&old.ownerId===NetworkAdapter.localPlayerId;
        return old;
@@ -6134,7 +6171,10 @@ function applyRemoteGame(game){
    });
    if(pvpRemote&&pvpLocalRegionalAuthority){
      for(const old of previous.values()){
-       if(incomingRegionalEntityIds.has(String(old.id))||!pvpLocalRegionOwnsEntity(old))continue;
+       // Keep only new guest summons awaiting their first acknowledgement.
+       // A known troop omitted by the host has ended and must not be resurrected.
+       if(incomingRegionalEntityIds.has(String(old.id))||!pvpLocalRegionOwnsEntity(old)||
+          Number(old.id)>=0||Number.isFinite(old.netAuthAt))continue;
        state.entities.push(old);
      }
    }
@@ -6148,7 +6188,8 @@ function applyRemoteGame(game){
    const nextProjectiles=game.dragonProjectiles.map(p=>{
      incomingIds.add(String(p.id));
      const old=previousProjectiles.get(p.id),authX=Number(p.x)||0,authY=Number(p.y)||0;
-     if(pvpRemote&&pvpLocalRegionalAuthority&&old&&pvpLocalRegionOwnsProjectile(old))return old;
+     if(pvpRemote&&pvpLocalRegionalAuthority&&old&&pvpLocalRegionOwnsProjectile(old)&&
+        String(p.pvpRegionalAuthorityUid||'')===String(NetworkAdapter.localPlayerId))return old;
      const netHistory=appendRemotePositionSample(old,authX,authY,remoteNow);
      return {...p,x:old?.x??authX,y:old?.y??authY,netAuthX:authX,netAuthY:authY,netHistory,netRemovedAt:0};
    });
@@ -7972,7 +8013,7 @@ function pvpPrepareGifImage(img,src,requestedSrc){
  img._pvpGifLoadCleanup?.();
  const token=(img._pvpGifLoadToken||0)+1;img._pvpGifLoadToken=token;
  img.classList.add('pvp-gif-loading');img.classList.remove('pvp-gif-failed');
- let retried=false;
+ let retried=false,originalRetried=false;
  const cleanup=()=>{
    img.removeEventListener('load',onLoad);img.removeEventListener('error',onError);
    if(img._pvpGifLoadCleanup===cleanup)img._pvpGifLoadCleanup=null;
@@ -7987,6 +8028,11 @@ function pvpPrepareGifImage(img,src,requestedSrc){
    if(!retried&&img.getAttribute('src')===requestedSrc&&requestedSrc!==src){
      retried=true;img.src=src;return;
    }
+   const key=img.dataset.assetKey;
+   const original=typeof ORIGINAL_ASSETS==='object'?ORIGINAL_ASSETS[key]:null;
+   if(!originalRetried&&original&&original!==src){
+     originalRetried=true;img._gifFallbackSrc=original;img.src=original;return;
+   }
    cleanup();img.classList.remove('pvp-gif-loading');img.classList.add('pvp-gif-failed');
    const cycle=img.closest?.('.entity-visual')?._pvpGifCycle;
    if(cycle?.img===img)cycle.done=true;
@@ -7999,7 +8045,7 @@ let gifRestartIdentity=0;
 function restartGif(img,keyOrSrc,serial=0){
  if(!img)return;
  const key=ASSETS[keyOrSrc]?keyOrSrc:Object.keys(ASSETS).find(k=>ASSETS[k]===keyOrSrc);
- const src=key?ASSETS[key]:keyOrSrc;
+ const src=img._gifFallbackSrc||(key?ASSETS[key]:keyOrSrc);
  if(state.mode==='pvp'&&key&&!pvpMayRestartGif(img,key,serial))return false;
  if(key)img.dataset.assetKey=key;
  const instantWarriorPvp=state.mode==='pvp'&&key?.startsWith('pvpWarrior')&&String(src).startsWith('assets/');
@@ -10177,7 +10223,8 @@ function pvpLoadFlameFrames(){
    if(pvpFlameFrames.has(clan)||pvpFlameFrameFailed.has(clan))continue;
    let decoder=null;
    try{
-    const response=await fetch(ASSETS[key],{cache:'force-cache'});
+    const original=typeof ORIGINAL_ASSETS==='object'?ORIGINAL_ASSETS[key]:ASSETS[key];
+    const response=await fetch(original,{cache:'force-cache'});
     if(!response.ok)throw Error('HTTP '+response.status+' '+key);
     decoder=new ImageDecoder({data:new Uint8Array(await response.arrayBuffer()),type:'image/gif'});
     await decoder.tracks.ready;
@@ -11440,6 +11487,7 @@ const warEntityById=new Map();
 const warCombatGrid=new Map();
 const warGridBucketPool=[];
 let warSpatialGridMode=null;
+let warSpatialEntityCount=0;
 const warCandidateCache=new Map();
 const warCandidateLists=new Map();
 const warBurningEntities=new Set();
@@ -11476,7 +11524,7 @@ function rebuildWarFrameEnemyCache(living){
 function buildWarAIGrid(living){
  const cells=warCombatGrid;
  for(const bucket of cells.values()){bucket.length=0;warGridBucketPool.push(bucket)}
- cells.clear();warSpatialGridMode=state.mode;
+ cells.clear();warSpatialGridMode=state.mode;warSpatialEntityCount=state.entities.length;
  for(const e of living){
    const cx=Math.floor(e.x/WAR_AI_GRID_CELL),cy=Math.floor(e.y/WAR_AI_GRID_CELL),key=warGridKey(cx,cy);
    let bucket=cells.get(key);if(!bucket){bucket=warGridBucketPool.pop()||[];cells.set(key,bucket)}bucket.push(e);
@@ -11488,7 +11536,8 @@ function buildWarAIGrid(living){
 // acertos mesmo que as entidades tenham se movido alguns pixels após a grade
 // ter sido montada no início do frame; a hitbox final continua exatamente igual.
 function forEachWarSpatialCandidate(minX,minY,maxX,maxY,visit){
- if((state.mode!=='war'&&state.mode!=='pvp')||state.phase!=='combat'||!warCombatGrid.size||warSpatialGridMode!==state.mode){
+ if((state.mode!=='war'&&state.mode!=='pvp')||state.phase!=='combat'||!warCombatGrid.size||
+    warSpatialGridMode!==state.mode||warSpatialEntityCount!==state.entities.length){
    for(const t of state.entities)visit(t);
    return;
  }
@@ -13502,6 +13551,8 @@ function syncDragonProjectileEffects(left,top,zoom,screenW,screenH,cullLeft=left
        retried=true;
        const currentSrc=img.getAttribute('src')||'';
        const currentKey=img.dataset.assetKey||Object.keys(ASSETS).find(k=>ASSETS[k]===currentSrc.split('?')[0]);
+       const fallback=typeof ORIGINAL_ASSETS==='object'?ORIGINAL_ASSETS[currentKey]:null;
+       if(fallback&&fallback!==ASSETS[currentKey])img._gifFallbackSrc=fallback;
        const original=currentKey||currentSrc.split('?')[0];
        if(!original)return;
        const transientState=(img===el._golemAttack||img===el._brownAttack||img===el._najaAttack||img===el._anubisMelee||img===el._isisAttack)?'attack':
@@ -13567,7 +13618,7 @@ function ensureEntityLoopGif(el,stateName,img=null){
  clearEntityLoopSuspendTimer(el,stateName);
  img=img||entitySpriteForState(el,stateName);
  const key=el._gifKeys?.[stateName];
- const src=key?ASSETS[key]:null;
+ const src=img?._gifFallbackSrc||(key?ASSETS[key]:null);
  if(!img||!src)return;
  img.dataset.assetKey=key;
  img.decoding='async';

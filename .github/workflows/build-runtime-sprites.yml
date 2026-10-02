@@ -1,0 +1,39 @@
+name: Build display-size battle sprites
+on:
+  push:
+    branches: ['fix/battle-performance-regional-authority-20261002']
+    paths: ['.github/build_runtime_sprites.py', '.github/workflows/build-runtime-sprites.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - run: python -m pip install Pillow==11.3.0
+      - name: Build and verify every animation frame and duration
+        run: python .github/build_runtime_sprites.py
+      - name: Preserve mechanics and validate JavaScript
+        run: |
+          node tests/pvp-smoke.cjs
+          node tests/war-preservation.cjs
+          node tests/performance-network-smoke.cjs
+      - name: Commit runtime sprites on the correction branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/runtime index.html sw.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Build verified display-size sprites while preserving original GIFs'
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+      - name: Validate the generated commit in the real browser
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run validate-pvp.yml --ref '${{ github.ref_name }}'
