@@ -4,6 +4,8 @@ on:
     branches: [main, 'fix/**']
     paths:
       - 'index.html'
+      - 'history-server/src/index.js'
+      - 'tests/history-smoke.cjs'
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'
       - 'tests/pvp-browser-smoke.cjs'
@@ -19,6 +21,8 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'history-server/src/index.js'
+      - 'tests/history-smoke.cjs'
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'
       - 'tests/pvp-browser-smoke.cjs'
@@ -40,6 +44,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: PvP mechanics and UI regression
         run: node tests/pvp-smoke.cjs
+      - name: History mechanics, audio and Cloudflare syntax
+        run: |
+          node --check history-server/src/index.js
+          node tests/history-smoke.cjs
       - name: Ensure core War mechanics are unchanged
         run: node tests/war-preservation.cjs
       - name: Stress targeting, clock and regional network races
