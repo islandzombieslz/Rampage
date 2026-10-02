@@ -5705,7 +5705,9 @@ function pvpApplyDelegatedRemotePose(entity,input,now=performance.now(),view=pvp
  if(entity.pvpRegionalAuthorityUid&&String(entity.pvpRegionalAuthorityUid)===String(entity.ownerId))return true;
  const regional=pvpRemoteRegionalState(entity.ownerId);
  const pose=input?.pvpRegionalPose;
- const packetAt=Number(input?.t)||0,seq=Number(pose?.seq)||0;
+ const packetAt=Number(input?.t)||0,seq=Number(pose?.seq)||0,poseEpoch=Number(pose?.epoch)||0;
+ const hostLease=pvpHostRegionState.get(String(entity.ownerId));
+ if(NetworkAdapter.isHost&&poseEpoch>0&&poseEpoch<=Number(hostLease?.closedEpoch||0))return false;
  const proposed=pose&&Number.isFinite(Number(pose.x))&&Number.isFinite(Number(pose.y))
    ?{...entity,x:Number(pose.x),y:Number(pose.y)}:null;
  const requested=!!input?.pvpRegionalAuthority&&!!proposed;
@@ -9624,16 +9626,16 @@ function pvpSpawnNPC(heroId=null,owner=null){
  return e;
 }
 function pvpNearestEnemy(e,preferred=null){
- const regionalOnly=!!pvpRegionalSimulationUid;
- const allowed=t=>regionalOnly?pvpLocalRegionOwnsEntity(t):(NetworkAdapter.isHost?pvpHostShouldSimulateEntity(t):true);
+ const usePrepared=NetworkAdapter.isHost||!!pvpRegionalSimulationUid;
+ const candidates=usePrepared?pvpTargetsFor(e):state.entities;
  if(preferred!=null){
-   const target=state.entities.find(t=>String(t.id)===String(preferred)&&t.alive&&t.team!==e.team&&allowed(t));
+   const target=candidates.find(t=>String(t.id)===String(preferred)&&t.alive&&t!==e&&t.team!==e.team);
    if(target)return target;
  }
  let nearest=null,best=Infinity;
- for(const t of state.entities){
-   if(!t.alive||t===e||t.team===e.team||!allowed(t))continue;
-   const d=(t.x-e.x)**2+(t.y-e.y)**2;
+ for(const t of candidates){
+   if(!t?.alive||t===e||t.team===e.team)continue;
+   const dx=t.x-e.x,dy=t.y-e.y,d=dx*dx+dy*dy;
    if(d<best){nearest=t;best=d}
  }
  return nearest;
@@ -10321,21 +10323,23 @@ function pvpExpireSummons(now,shouldSimulate=null){
 }
 // Reuse per-team target arrays during a PvP frame rather than scanning all units
 // independently for each ally/NPC. Target eligibility and attack AI are unchanged.
-const pvpFrameTargetLists=new Map(),pvpFrameLiving=[];
-function pvpRebuildTargets(){
- pvpFrameTargetLists.clear();pvpFrameLiving.length=0;
- for(const e of state.entities)if(e.alive)pvpFrameLiving.push(e);
+const pvpFrameTargetLists=new Map(),pvpFrameLiving=[],pvpFrameEligibleTargets=[];
+const PVP_EMPTY_TARGETS=Object.freeze([]);
+function pvpRebuildTargets(shouldSimulate=null){
+ pvpFrameTargetLists.clear();pvpFrameLiving.length=0;pvpFrameEligibleTargets.length=0;
+ for(const e of state.entities){
+   if(!e.alive)continue;
+   pvpFrameLiving.push(e);
+   if(!shouldSimulate||shouldSimulate(e))pvpFrameEligibleTargets.push(e);
+ }
  for(const e of pvpFrameLiving)if(!pvpFrameTargetLists.has(e.team))pvpFrameTargetLists.set(e.team,[]);
+ // Filter authority once per simulation tick instead of allocating a new
+ // filtered array for every NPC target query.
  for(const [team,targets] of pvpFrameTargetLists){
-  for(const e of pvpFrameLiving)if(e.team!==team)targets.push(e);
+   for(const e of pvpFrameEligibleTargets)if(e.team!==team)targets.push(e);
  }
 }
-function pvpTargetsFor(e){
- const targets=pvpFrameTargetLists.get(e.team)||state.entities;
- if(pvpRegionalSimulationUid)return targets.filter(t=>pvpLocalRegionOwnsEntity(t));
- if(NetworkAdapter.isHost)return targets.filter(t=>pvpHostShouldSimulateEntity(t));
- return targets;
-}
+function pvpTargetsFor(e){return pvpFrameTargetLists.get(e.team)||PVP_EMPTY_TARGETS}
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
  if(e.type==='golem')return e.golemAttackSerial||0;
@@ -10613,7 +10617,7 @@ function updatePVP(dt){
  if(state.phase!=='combat')return;
  const now=performance.now();
  pvpIntegrateRemoteRegions(now);
- pvpRebuildTargets();
+ pvpRebuildTargets(pvpHostShouldSimulateEntity);
  const entityById=rebuildWarEntityIdMap();
  updateDragonProjectiles(dt,entityById,pvpHostShouldSimulateProjectile);updateDragonBurns(now,entityById,pvpHostShouldSimulateEntity);
  for(const e of state.entities){
@@ -10694,7 +10698,7 @@ function updatePVPRegional(dt){
  pvpRegionalSimulationUid=NetworkAdapter.localPlayerId;
  try{
    pvpLocalSimulationView();
-   pvpRebuildTargets();
+   pvpRebuildTargets(pvpLocalRegionOwnsEntity);
    const entityById=rebuildWarEntityIdMap();
    updateDragonProjectiles(dt,entityById,pvpLocalRegionOwnsProjectile);
    updateDragonBurns(now,entityById,pvpLocalRegionOwnsEntity);
