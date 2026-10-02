@@ -10,7 +10,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: "arena-pvp", maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 3;
+const HISTORY_SCHEMA_VERSION = 4;
 const PVP_WORLD = Object.freeze({ width: 1850, height: 1542 });
 const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1550, top: 305, bottom: 1267 });
 
@@ -26,7 +26,7 @@ const WARRIOR_SPECIAL_SPEED_MULTIPLIER = 1.45;
 
 const DRAGON_MAX_HP = 100;
 const DRAGON_MAX_SHIELD = 50;
-const DRAGON_SPEED = 195;
+const DRAGON_SPEED = 97.5;
 const DRAGON_TAKEOFF_MS = 1200;
 const DRAGON_ATTACK_VISUAL_MS = 1800;
 const DRAGON_SHOT_COOLDOWN_MS = 2000;
@@ -37,6 +37,12 @@ const DRAGON_DAMAGE = 10;
 const DRAGON_BURN_DAMAGE = 2.5;
 const DRAGON_BURN_TICK_MS = 1000;
 const DRAGON_BURN_DURATION_MS = 6000;
+const HISTORY_KNOCK_FORCE = 95;
+const HISTORY_KNOCK_TIME_MS = 100;
+const HISTORY_HIT_TILT = 7;
+const CLIENT_POSE_MAX_STEP_MS = 220;
+const CLIENT_POSE_SPEED_FACTOR = 2.0;
+const CLIENT_POSE_FIRST_ALLOWANCE_PX = 180;
 
 const HISTORY_HEROES = Object.freeze({
   warrior: { id: "warrior", type: "warrior", clan: "warriors", variant: "male" },
@@ -148,7 +154,8 @@ export class HistoryRoom extends DurableObject {
       alive: true, facing, heading: facing < 0 ? Math.PI : 0, moving: false, wave,
       flightState: "takeoff", takeoffSerial: wave, takeoffUntil: now + DRAGON_TAKEOFF_MS,
       attackSerial: 0, attackUntil: 0, nextShotAt: now + DRAGON_TAKEOFF_MS + 180,
-      closeShotAt: now + DRAGON_TAKEOFF_MS + 180
+      closeShotAt: now + DRAGON_TAKEOFF_MS + 180,
+      knockUntil: 0, knockVX: 0, knockVY: 0
     });
     return [
       make("history-dragon-a", 670, 760, 1),
@@ -188,7 +195,9 @@ export class HistoryRoom extends DurableObject {
       lastInputSeq: 0, attackCooldownUntil: 0,
       specialHits: 0, specialUnlocked: false, specialCooldownUntil: 0,
       specialActiveUntil: 0, specialAngle: 0, specialHitIds: [],
-      burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null
+      burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null,
+      knockUntil: 0, knockVX: 0, knockVY: 0,
+      lastPoseSeq: 0, lastPoseAt: 0
     };
     Object.assign(this.room.players[uid], { name, hero: hero.id, type: hero.type, clan: hero.clan, variant: hero.variant });
 
@@ -224,8 +233,10 @@ export class HistoryRoom extends DurableObject {
       let dy = clamp(Number(message.dy) || 0, -1, 1);
       const len = Math.hypot(dx, dy);
       if (len > 1) { dx /= len; dy /= len; }
+      const inputSeq = Math.max(Number(player.lastInputSeq) || 0, Number(message.seq) || 0);
+      this.applyClientPose(player, message.pose, inputSeq);
       player.input = { dx, dy };
-      player.lastInputSeq = Math.max(Number(player.lastInputSeq) || 0, Number(message.seq) || 0);
+      player.lastInputSeq = inputSeq;
       if (len > 0.05 && Date.now() >= Number(player.specialActiveUntil || 0)) {
         player.heading = Math.atan2(dy, dx);
         player.facing = dx < 0 ? -1 : dx > 0 ? 1 : player.facing;
@@ -244,15 +255,62 @@ export class HistoryRoom extends DurableObject {
     }
   }
 
-  emitDamage(targetKind, target, amount, kind, sourceId = null) {
+  applyClientPose(player, pose, seq) {
+    const now = Date.now();
+    if (!player?.alive || !pose || now < Number(player.knockUntil || 0) || now < Number(player.specialActiveUntil || 0)) return false;
+    if (!Number.isFinite(Number(pose.x)) || !Number.isFinite(Number(pose.y)) || seq <= Number(player.lastPoseSeq || 0)) return false;
+
+    const previousAt = Number(player.lastPoseAt) || now - 95;
+    const stepMs = clamp(now - previousAt, 16, CLIENT_POSE_MAX_STEP_MS);
+    let targetX = clamp(Number(pose.x), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+    let targetY = clamp(Number(pose.y), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+    const dx = targetX - player.x, dy = targetY - player.y, d = Math.hypot(dx, dy);
+    const normalAllowance = PLAYER_SPEED * (stepMs / 1000) * CLIENT_POSE_SPEED_FACTOR + 22;
+    const allowance = Number(player.lastPoseSeq) ? normalAllowance : Math.max(normalAllowance, CLIENT_POSE_FIRST_ALLOWANCE_PX);
+    if (d > allowance && d > 0) {
+      const scale = allowance / d;
+      targetX = player.x + dx * scale;
+      targetY = player.y + dy * scale;
+    }
+    player.x = targetX; player.y = targetY;
+    if (Number.isFinite(Number(pose.heading))) player.heading = Number(pose.heading);
+    if (Number(pose.facing)) player.facing = Number(pose.facing) < 0 ? -1 : 1;
+    player.lastPoseSeq = seq; player.lastPoseAt = now;
+    return true;
+  }
+
+  armKnockback(target, dirX, dirY, force = HISTORY_KNOCK_FORCE, timeMs = HISTORY_KNOCK_TIME_MS) {
+    if (!target?.alive || !(force > 0) || !(timeMs > 0)) return null;
+    let dx = Number(dirX) || 0, dy = Number(dirY) || 0, len = Math.hypot(dx, dy);
+    if (len < .001) { dx = Number(target.facing) < 0 ? -1 : 1; dy = 0; len = 1; }
+    dx /= len; dy /= len;
+    target.knockUntil = Date.now() + timeMs;
+    target.knockVX = dx * force; target.knockVY = dy * force;
+    target.moving = false;
+    return { dirX: dx, dirY: dy, force, timeMs, tilt: HISTORY_HIT_TILT };
+  }
+
+  stepKnockback(target, dt, now) {
+    if (!target?.alive || now >= Number(target.knockUntil || 0)) {
+      if (target) { target.knockUntil = 0; target.knockVX = 0; target.knockVY = 0; }
+      return false;
+    }
+    target.x = clamp(target.x + (Number(target.knockVX) || 0) * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+    target.y = clamp(target.y + (Number(target.knockVY) || 0) * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+    const damping = Math.pow(.16, dt);
+    target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
+    return true;
+  }
+
+  emitDamage(targetKind, target, amount, kind, sourceId = null, impact = null) {
     this.broadcast({
       type: "damage", targetKind, targetId: target.id, sourceId, amount,
       kind, hp: target.hp, shield: target.shield, alive: target.alive !== false,
-      respawnAt: Number(target.respawnAt) || 0, at: Date.now()
+      respawnAt: Number(target.respawnAt) || 0, impact, at: Date.now()
     });
   }
 
-  applyDamage(targetKind, target, amount, kind, sourceId = null) {
+  applyDamage(targetKind, target, amount, kind, sourceId = null, impact = null) {
     if (!target?.alive || !(amount > 0)) return 0;
     let remaining = Number(amount) || 0;
     const before = (Number(target.hp) || 0) + (Number(target.shield) || 0);
@@ -264,7 +322,7 @@ export class HistoryRoom extends DurableObject {
     if (remaining > 0) target.hp = Math.max(0, Number(target.hp) - remaining);
     const after = (Number(target.hp) || 0) + (Number(target.shield) || 0);
     const dealt = Math.max(0, before - after);
-    if (dealt > 0) this.emitDamage(targetKind, target, dealt, kind, sourceId);
+    if (dealt > 0) this.emitDamage(targetKind, target, dealt, kind, sourceId, impact);
     return dealt;
   }
 
@@ -302,7 +360,9 @@ export class HistoryRoom extends DurableObject {
     const target = living.slice().sort((a, b) => distance(player, a) - distance(player, b))[0];
     let hit = false;
     if (target && distance(player, target) <= 135) {
-      const dealt = this.damageDragon(target, 32, "melee", player.id);
+      const dx = target.x - player.x, dy = target.y - player.y;
+      const impact = this.armKnockback(target, dx, dy);
+      const dealt = this.damageDragon(target, 32, "melee", player.id, impact);
       hit = dealt > 0;
       if (hit) {
         player.specialHits = Math.min(WARRIOR_SPECIAL_UNLOCK_HITS, (Number(player.specialHits) || 0) + 1);
@@ -312,9 +372,9 @@ export class HistoryRoom extends DurableObject {
     this.broadcast({ type: "action", uid: player.id, action: "attack", targetId: target?.id || null, hit, at: now });
   }
 
-  damageDragon(dragon, amount, kind = "player", sourceId = null) {
+  damageDragon(dragon, amount, kind = "player", sourceId = null, impact = null) {
     if (!dragon?.alive) return 0;
-    const dealt = this.applyDamage("dragon", dragon, amount, kind, sourceId);
+    const dealt = this.applyDamage("dragon", dragon, amount, kind, sourceId, impact);
     if (dragon.hp <= 0) {
       dragon.alive = false;
       dragon.moving = false;
@@ -393,7 +453,8 @@ export class HistoryRoom extends DurableObject {
       projectile.x = nx; projectile.y = ny;
 
       if (hit) {
-        this.applyDamage("player", target, DRAGON_DAMAGE, "fireball", projectile.sourceId);
+        const impact = this.armKnockback(target, Number(projectile.vx) || 0, Number(projectile.vy) || 0);
+        this.applyDamage("player", target, DRAGON_DAMAGE, "fireball", projectile.sourceId, impact);
         if (target.hp <= 0) this.defeatPlayer(target, now);
         else this.igniteBurn(target, this.room.dragons.find(d => d.id === projectile.sourceId), now);
         list.splice(i, 1);
@@ -432,6 +493,7 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
+      if (this.stepKnockback(dragon, dt, now)) continue;
       const players = Object.values(this.room.players).filter(p => p.alive);
       if (!players.length) { dragon.moving = false; continue; }
 
@@ -495,6 +557,7 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
+      if (this.stepKnockback(player, dt, now)) continue;
       const specialActive = now < Number(player.specialActiveUntil || 0);
       let dx = Number(player.input?.dx) || 0, dy = Number(player.input?.dy) || 0;
       if (specialActive) {
@@ -514,7 +577,10 @@ export class HistoryRoom extends DurableObject {
         for (const dragon of this.room.dragons) {
           if (!dragon.alive || hitIds.includes(dragon.id) || distance(player, dragon) > 105) continue;
           hitIds.push(dragon.id);
-          this.damageDragon(dragon, 65, "special", player.id);
+          const angle = Number(player.specialAngle) || 0;
+          const impact = this.armKnockback(dragon, Math.cos(angle), Math.sin(angle), 560, 340);
+          if (impact) impact.tilt = 20;
+          this.damageDragon(dragon, 65, "special", player.id, impact);
         }
       }
     }
