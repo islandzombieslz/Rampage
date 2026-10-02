@@ -12235,6 +12235,10 @@ warCameraSurface.addEventListener('pointercancel',endTouch);
 
 /* ==================== RENDER ==================== */
 let last=performance.now(), messageUntil=0;
+const GAMEPLAY_SIM_STEP_SEC=1/60;
+const GAMEPLAY_MAX_SIM_STEPS=3;
+const GAMEPLAY_RENDER_MIN_MS=1000/120;
+let authoritativeSimAccumulator=0,regionalSimAccumulator=0,lastRenderedAt=0;
 const centerMessagePerfEl=$('#centerMessage');
 const gameScreenPerfEl=$('#gameScreen');
 const hudMainPerfEl=$('#hudMain'),hudSubPerfEl=$('#hudSub'),timerPerfEl=$('#timer'),aliveCountPerfEl=$('#aliveCount');
@@ -12285,40 +12289,52 @@ function updateSpectatorTransition(now){
 }
 
 function loop(now){
- const dt=Math.min(.033,(now-last)/1000);last=now;
-
- // contador de FPS leve
- state.fpsFrames++;
- if(now-state.fpsLast>=500){
-   state.fps=Math.round(state.fpsFrames*1000/(now-state.fpsLast));
-   state.fpsFrames=0; state.fpsLast=now;
- }
-
+ const dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;
  const authoritative=!NetworkAdapter.online||NetworkAdapter.isHost;
+
+ // Expensive AI/combat/physics is capped at 60 Hz. Rendering and local input
+ // prediction remain independent and can run up to 120 Hz. On 90/120/144 Hz
+ // displays this removes duplicate whole-army simulation work without changing
+ // time-based movement, cooldowns or attack timelines.
  if(state.running&&authoritative){
-   if(state.mode==='pve')updatePVE(dt);else if(state.mode==='pvp')updatePVP(dt);else updateWar(dt);
- }
+   authoritativeSimAccumulator=Math.min(GAMEPLAY_SIM_STEP_SEC*GAMEPLAY_MAX_SIM_STEPS,
+     authoritativeSimAccumulator+dt);
+   let steps=0;
+   while(authoritativeSimAccumulator+1e-6>=GAMEPLAY_SIM_STEP_SEC&&steps<GAMEPLAY_MAX_SIM_STEPS){
+     const step=GAMEPLAY_SIM_STEP_SEC;
+     if(state.mode==='pve')updatePVE(step);else if(state.mode==='pvp')updatePVP(step);else updateWar(step);
+     if(state.mode==='pvp'){
+       try{updateEntities(step,pvpHostShouldSimulateEntity);updateParticles(step)}catch(err){pvpReportError('entidades',err)}
+     }else{updateEntities(step);updateParticles(step)}
+     authoritativeSimAccumulator-=step;steps++;
+   }
+ }else authoritativeSimAccumulator=0;
+
  if(state.running&&NetworkAdapter.online&&!NetworkAdapter.isHost){
    if(state.mode==='pvp'){
+     // The controlled hero stays render-rate responsive even when combat ticks at 60 Hz.
      pvpPredictGuestLocal(dt);
      if(pvpLocalRegionalAuthority){
-       updatePVPRegional(dt);
-       try{updateEntities(dt,pvpLocalRegionOwnsEntity);updateParticles(dt)}catch(err){pvpReportError('física regional',err)}
-     }
+       regionalSimAccumulator=Math.min(GAMEPLAY_SIM_STEP_SEC*GAMEPLAY_MAX_SIM_STEPS,
+         regionalSimAccumulator+dt);
+       let steps=0;
+       while(regionalSimAccumulator+1e-6>=GAMEPLAY_SIM_STEP_SEC&&steps<GAMEPLAY_MAX_SIM_STEPS){
+         updatePVPRegional(GAMEPLAY_SIM_STEP_SEC);
+         try{updateEntities(GAMEPLAY_SIM_STEP_SEC,pvpLocalRegionOwnsEntity);updateParticles(GAMEPLAY_SIM_STEP_SEC)}
+         catch(err){pvpReportError('física regional',err)}
+         regionalSimAccumulator-=GAMEPLAY_SIM_STEP_SEC;steps++;
+       }
+     }else regionalSimAccumulator=0;
      sendLocalPVEInput(false);
      pvpMaybePublishRegion(now,false);
-   }else sendLocalPVEInput(false);
- }
+   }else{regionalSimAccumulator=0;sendLocalPVEInput(false)}
+ }else regionalSimAccumulator=0;
+
  if(NetworkAdapter.online&&!NetworkAdapter.isHost){
    const clientNow=performance.now();
    for(const e of state.entities){
-     // The guest's own PvP hero is client-predicted and softly reconciled.
-     // Never send it back through the delayed interpolation buffer.
      if(state.mode==='pvp'&&((!e.pvpMinion&&e.ownerId===NetworkAdapter.localPlayerId)||
         (pvpLocalRegionalAuthority&&pvpLocalRegionOwnsEntity(e))))continue;
-     // Walking units are rendered from a short authoritative history buffer.
-     // This is true snapshot interpolation: Firebase arrival jitter no longer
-     // restarts a tween or creates a tiny stop on every packet.
      const buffered=sampleRemotePosition(e,clientNow,!!e.moving&&Number(e.knockTime||0)<=0);
      if(buffered){e.x=buffered.x;e.y=buffered.y;continue}
      if(e.netToX==null)continue;
@@ -12336,22 +12352,26 @@ function loop(now){
      if(buffered){p.x=buffered.x;p.y=buffered.y}
    }
  }
- // Timers de golpe, knockback e remoção dos mortos continuam mesmo
- // durante transições de rodada/fim de jogo.
- if(authoritative){
-   if(state.mode==='pvp'){
-     try{updateEntities(dt,pvpHostShouldSimulateEntity);updateParticles(dt)}catch(err){pvpReportError('entidades',err)}
-   }else{updateEntities(dt);updateParticles(dt)}
- }
+
  updateWarCameraIntro(now);
  updateWarCameraInertia(dt);
  updateSpectatorTransition(now);
- updateGolemRockEffects(now);
- if(state.mode==='pvp'){
-   try{draw()}catch(err){pvpReportError('desenho',err);try{resetCameraComposite()}catch(_){}}
- }else draw();
- updateLayeredBattleSfx(now);
- updatePvpCombatSfx(now);
+
+ const shouldRender=lastRenderedAt===0||now-lastRenderedAt+0.15>=GAMEPLAY_RENDER_MIN_MS;
+ if(shouldRender){
+   lastRenderedAt=now;
+   state.fpsFrames++;
+   if(now-state.fpsLast>=500){
+     state.fps=Math.min(120,Math.round(state.fpsFrames*1000/(now-state.fpsLast)));
+     state.fpsFrames=0;state.fpsLast=now;
+   }
+   updateGolemRockEffects(now);
+   if(state.mode==='pvp'){
+     try{draw()}catch(err){pvpReportError('desenho',err);try{resetCameraComposite()}catch(_){}}
+   }else draw();
+   updateLayeredBattleSfx(now);
+   updatePvpCombatSfx(now);
+ }
 
  const networkPushInterval=state.mode==='pvp'?PVP_SNAPSHOT_INTERVAL_MS:120;
  if(NetworkAdapter.online&&NetworkAdapter.isHost&&NetworkAdapter.roomStatus==='playing'&&gameScreenPerfEl.style.display!=='none'&&now-NetworkAdapter.lastStateAt>=networkPushInterval&&!NetworkAdapter.pushing){
@@ -12362,14 +12382,12 @@ function loop(now){
    }else NetworkAdapter.pushState(serializeGame()).catch(console.error).finally(()=>NetworkAdapter.pushing=false);
  }
 
- // HUD não precisa atualizar 60 vezes por segundo.
  if(now-state.hudLast>100){
    if(state.mode==='pvp'){
      try{updateHUD()}catch(err){pvpReportError('HUD',err)}
    }else updateHUD();
    state.hudLast=now;
  }
-
  if(now>messageUntil&&centerMessagePerfEl.textContent)centerMessagePerfEl.textContent='';
  requestAnimationFrame(loop);
 }
