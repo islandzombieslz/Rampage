@@ -81,19 +81,19 @@ const pvpTestHook=`window.__pvpBrowserTest={
      knockTime:remote.knockTime,pvpWarriorChargeUntil:remote.pvpWarriorChargeUntil,pvpRegionalAuthorityUid:remote.pvpRegionalAuthorityUid};
    const uid=NetworkAdapter.localPlayerId,now=performance.now(),packetAt=NetworkAdapter.serverNow();
    const own=pvpLocalHero(),ownSaved={x:own.x,y:own.y};
-   own.x=300;own.y=300;remote.x=1700;remote.y=1100;remote.knockTime=0;remote.pvpWarriorChargeUntil=0;
+   own.x=300;own.y=300;remote.x=1400;remote.y=1150;remote.knockTime=0;remote.pvpWarriorChargeUntil=0;
    pvpCoordinateNearbyHumans();
    pvpRemoteRegionalAuthority.delete('remote-user');
    const farView={hostUid:uid,left:250,top:250,right:800,bottom:700};
    const accepted=pvpApplyDelegatedRemotePose(remote,{
      t:packetAt,pvpRegionalAuthority:true,
-     pvpRegionalPose:{seq:1,x:1760,y:1100,heading:0,facing:1,moving:true}
+     pvpRegionalPose:{seq:1,x:1460,y:1150,heading:0,facing:1,moving:true}
    },now,farView);
-   const moved=remote.x>1700;
-   const nearView={hostUid:uid,left:1500,top:900,right:2100,bottom:1400};
+   const moved=remote.x>1400;
+   const nearView={hostUid:uid,left:1200,top:900,right:1650,bottom:1300};
    const yielded=pvpApplyDelegatedRemotePose(remote,{
      t:packetAt+16,pvpRegionalAuthority:true,
-     pvpRegionalPose:{seq:2,x:1800,y:1100,heading:0,facing:1,moving:true}
+     pvpRegionalPose:{seq:2,x:1500,y:1150,heading:0,facing:1,moving:true}
    },now+16,nearView);
    Object.assign(remote,saved);Object.assign(own,ownSaved);pvpCoordinateNearbyHumans();pvpRemoteRegionalAuthority.delete('remote-user');
    return {accepted,moved,yielded};
