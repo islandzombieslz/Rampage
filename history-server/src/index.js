@@ -484,6 +484,13 @@ export class HistoryRoom extends DurableObject {
   applyAction(player, action, message = {}) {
     const now = Date.now();
     if (!player?.alive) return;
+
+    if (action === "combo_cancel") {
+      this.cancelWarriorCombo(player);
+      this.broadcast(this.actionPayload(player, "attack", "combo-cancel", {}, now));
+      return;
+    }
+
     const living = this.room.dragons.filter(d => d.alive);
     if (!living.length) return;
 
