@@ -6841,6 +6841,9 @@ const HISTORY_SERVER_FALLBACK=Object.freeze([
 function historyServerEndpoint(path=''){
  return historyServerBase?historyServerBase+path:'';
 }
+function historyEscape(value){
+ return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function renderHistoryServers(servers){
  const list=$('#historyServerList');if(!list)return;
  list.innerHTML='';
@@ -6850,8 +6853,8 @@ function renderHistoryServers(servers){
    const button=document.createElement('button');
    button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
    const status=historyServerBase&&server.online!==false;
-   button.innerHTML='<span><div class="history-server-name">'+escapeHtml(server.name||server.id)+'</div>'+
-     '<div class="history-server-meta">'+escapeHtml(server.map||'arena-pvp')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores</div></span>'+
+   button.innerHTML='<span><div class="history-server-name">'+historyEscape(server.name||server.id)+'</div>'+
+     '<div class="history-server-meta">'+historyEscape(server.map||'arena-pvp')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores</div></span>'+
      '<span class="history-server-status'+(status?'':' offline')+'">'+(status?'ONLINE':'AGUARDANDO')+'</span>';
    button.onclick=()=>{historySelectedServerId=server.id;renderHistoryServers(rows);updateHistoryServerConfirm(rows)};
    list.appendChild(button);
