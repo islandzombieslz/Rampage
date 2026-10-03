@@ -3991,7 +3991,7 @@ async function runBootLoader(){
 }
 
 const state = {
-  mode:'pvp', historyActive:false, historyServerId:null, pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
+  mode:'pvp', historyActive:false, historyLocal:false, historyServerId:null, pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
   roomCode:null, players:[{id:'p1',name:'Player 1',human:true,color:'#58a6ff',clan:'warriors'}],
   round:1, running:false, phase:'idle', timeLeft:0, prepLeft:45,
   matchId:null,matchStats:{},matchResult:null,warGoalSerial:0,warGoalEvents:[],warGoalSurvivalSecond:0,
@@ -5153,6 +5153,7 @@ function makeMatchResult(winnerId){
 }
 function matchResultMessage(result,uid){
  if(!result)return 'PARTIDA ENCERRADA';
+ if(result.mode==='history')return result.winnerId?'HISTORY CONCLUÍDO!':'HISTORY ENCERRADO';
  if(result.mode==='pvp'&&result.winnerId==='enemy')
    return 'Você foi derrotado, clã: '+clanLabel(result.winnerClan)+' venceu!';
  if(result.mode==='pve'){
@@ -6848,8 +6849,12 @@ const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.wor
 let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
 let historySelectedServerId=null;
 const HISTORY_SERVER_FALLBACK=Object.freeze([
- {id:'history-1',name:'Servidor História 1',map:'history-castle-v1',maxPlayers:8,players:0,online:false}
+ {id:'history-1',name:'Servidor História 1',map:'history-castle-v2',maxPlayers:8,players:0,online:false}
 ]);
+const HISTORY_LOCAL_SERVER=Object.freeze({
+ id:'history-local',name:'Servidor local • Solo',map:'history-castle-v2',maxPlayers:1,players:1,online:true,local:true
+});
+let historyServerRows=[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];
 const HISTORY_RENDER_DELAY_MIN_MS=35;
 const HISTORY_RENDER_DELAY_MAX_MS=80;
 const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
@@ -6870,15 +6875,33 @@ function historyPositionBlocked(x,y,r=30){
  for(let i=0;i<colliders.length;i++)if(historyCircleRectHit(x,y,r,colliders[i]))return true;
  return false;
 }
+function historyPointInArea(x,y,area,pad=0){
+ if(!area)return true;
+ return x>=Number(area.x)+pad&&x<=Number(area.x)+Number(area.w)-pad&&
+   y>=Number(area.y)+pad&&y<=Number(area.y)+Number(area.h)-pad;
+}
 function historyMoveEntity(e,dx,dy){
  if(!e)return false;
- const r=Math.max(1,Number(e.r)||30),b=historyMapBounds(r);
+ const r=Math.max(1,Number(e.r)||30),b=historyMapBounds(r),area=e.historyLeashArea||null;
+ const left=area?Math.max(b.left,Number(area.x)+r):b.left;
+ const right=area?Math.min(b.right,Number(area.x)+Number(area.w)-r):b.right;
+ const top=area?Math.max(b.top,Number(area.y)+r):b.top;
+ const bottom=area?Math.min(b.bottom,Number(area.y)+Number(area.h)-r):b.bottom;
  let moved=false;
- const oldX=Number(e.x)||0,nx=clamp(oldX+(Number(dx)||0),b.left,b.right);
+ const oldX=Number(e.x)||0,nx=clamp(oldX+(Number(dx)||0),left,right);
  if(!historyPositionBlocked(nx,Number(e.y)||0,r)){moved=moved||Math.abs(nx-oldX)>.001;e.x=nx}
- const oldY=Number(e.y)||0,ny=clamp(oldY+(Number(dy)||0),b.top,b.bottom);
+ const oldY=Number(e.y)||0,ny=clamp(oldY+(Number(dy)||0),top,bottom);
  if(!historyPositionBlocked(Number(e.x)||0,ny,r)){moved=moved||Math.abs(ny-oldY)>.001;e.y=ny}
  return moved;
+}
+function historyConstrainEnemy(e,oldX,oldY){
+ if(!e)return;
+ const r=Math.max(1,Number(e.r)||30),area=e.historyLeashArea||null;
+ if(historyPositionBlocked(Number(e.x)||0,Number(e.y)||0,r)||
+    (area&&!historyPointInArea(Number(e.x)||0,Number(e.y)||0,area,r))){
+   e.x=oldX;e.y=oldY;e.moving=false;
+ }
+ historyClampEntity(e);
 }
 function historyClampEntity(e){
  if(!e)return;
@@ -6902,7 +6925,8 @@ function historyCreatePvpEntity(hero,x,y,team,color,ownerId,minion){
  state.entities=current;return e;
 }
 function historyFindEntity(kind,id){
- return state.entities.find(e=>e.historyServerId===(kind==='dragon'?'dragon:':'player:')+String(id))||null;
+ const prefix=kind==='player'?'player:':'enemy:';
+ return state.entities.find(e=>e.historyServerId===prefix+String(id))||null;
 }
 function historyServerRemaining(until,serverAt){
  const end=Number(until)||0,at=Number(serverAt)||0;
@@ -7243,7 +7267,7 @@ const HistoryAdapter={
    }
  },
  begin(snapshot){
-   this.active=true;state.historyActive=true;state.historyServerId=this.serverId;
+   this.active=true;state.historyActive=true;state.historyLocal=false;state.historyServerId=this.serverId;
    state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
    state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.entities=[];
    warBurningEntities.clear();warFrameEnemiesByTeam.clear();clearEntityVisuals();pvpResetLocalSpectatorAfterRevive();
@@ -7251,6 +7275,7 @@ const HistoryAdapter={
    pvpControls.selected='attack';pvpControls.action='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null;
    preloadExtraPVPGifDurations();preloadPVPWarriorVisuals();preloadPVPExactGifDurations();pvpLoadFlameFrames();
    this.applySnapshot(snapshot,true);
+   beginMatchTracking();
    navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
    flash('HISTORY • '+(this.serverId||'SERVIDOR'),1.2);
  },
@@ -7301,7 +7326,7 @@ const HistoryAdapter={
      return;
    }
    if(data.type==='dragon_attack'){
-     const dragon=historyFindEntity('dragon',data.dragonId),now=performance.now();
+     const dragon=historyFindEntity('enemy',data.dragonId),now=performance.now();
      if(dragon){
        dragon.dragonAttackSerial=Math.max(Number(dragon.dragonAttackSerial)||0,Number(data.serial)||0);
        dragon.pendingDragonAttack={serial:dragon.dragonAttackSerial,startedAt:now,soundAt:now+1000,endAt:now+DRAGON_ATTACK_VISUAL_MS};
@@ -7309,8 +7334,16 @@ const HistoryAdapter={
      if(data.projectile)historyUpsertProjectile(data.projectile,Number(data.at)||Date.now());
      return;
    }
-   if(data.type==='dragons_defeated'){flash('OS DOIS DRAGÕES FORAM DERROTADOS • RETORNO EM 2s',1.8);return}
-   if(data.type==='dragons_respawned'){flash('OS DRAGÕES RETORNARAM',1.1);return}
+   if(data.type==='history_checkpoint'){
+     if(String(data.uid)===String(this.uid))flash('CHECKPOINT ATIVADO',1.15);
+     return;
+   }
+   if(data.type==='history_spawn')return;
+   if(data.type==='history_victory'){
+     if(String(data.uid)===String(this.uid))finishHistoryVictory(this.uid);
+     return;
+   }
+   if(data.type==='dragons_defeated'||data.type==='dragons_respawned')return;
    if(data.type==='player_defeated'){
      const e=historyFindEntity('player',data.uid);
      if(e){e.hp=0;e.moving=false;if(!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0)}
@@ -7378,31 +7411,42 @@ const HistoryAdapter={
      }else historyPushRemoteSample(e,Number(sp.x)||0,Number(sp.y)||0,arrival);
      next.push(e);
    }
-   const rawDragons=Array.isArray(snapshot.dragons)?snapshot.dragons:[];
-   for(const sd of rawDragons){
-     const sid='dragon:'+String(sd.id);let e=oldByServerId.get(sid),wasAlive=e?.alive;
-     if(!e)e=historyCreatePvpEntity(PVP_ENEMY_HEROES.dragon,Number(sd.x)||state.world.w/2,Number(sd.y)||state.world.h/2,'pvp-enemy','#d86543',null,true);
-     e.historyServerId=sid;e.team='pvp-enemy';e.ownerId=null;e.pvpMinion=true;e.pvpWarAI=true;e.pvpEnemy=true;
+   const rawEnemies=Array.isArray(snapshot.enemies)?snapshot.enemies:(Array.isArray(snapshot.dragons)?snapshot.dragons:[]);
+   for(const sd of rawEnemies){
+     const kind=PVP_ENEMY_HEROES[sd.type]?String(sd.type):'dragon',hero=PVP_ENEMY_HEROES[kind]||PVP_ENEMY_HEROES.dragon;
+     const sid='enemy:'+String(sd.id);let e=oldByServerId.get(sid),wasAlive=e?.alive;
+     if(!e)e=historyCreatePvpEntity({...hero,id:kind},Number(sd.x)||state.world.w/2,Number(sd.y)||state.world.h/2,'pvp-enemy','#d86543',null,true);
+     e.historyServerId=sid;e.historySpawnEventId=sd.historySpawnEventId||null;e.historyLeashArea=sd.historyLeashArea||null;
+     e.team='pvp-enemy';e.ownerId=null;e.pvpMinion=true;e.pvpWarAI=true;e.pvpEnemy=true;
      const serverAlive=sd.alive!==false;
      if(wasAlive===false&&serverAlive)historyResetDeathVisual(e);
      e.alive=serverAlive;e.hp=Math.max(0,Number(sd.hp)||0);e.maxHp=Math.max(1,Number(sd.maxHp)||100);
-     e.shield=Math.max(0,Number(sd.shield)||0);e.maxShield=Math.max(0,Number(sd.maxShield)||50);
+     e.shield=Math.max(0,Number(sd.shield)||0);e.maxShield=Math.max(0,Number(sd.maxShield)||0);
      e.heading=Number(sd.heading)||0;e.facing=Number(sd.facing)<0?-1:1;e.moving=!!sd.moving;
-     const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
-     if(e.dragonTakeoffSerial!==takeoffSerial&&flight==='takeoff'){
-       const remaining=Math.max(0,(Number(sd.takeoffUntil)||0)-this.lastServerTime);
-       e.dragonTakeoffStartedAt=arrival-Math.max(0,DRAGON_TAKEOFF_DURATION-remaining);e.dragonTakeoffEndAt=arrival+remaining;
+     const attackSerial=Number(sd.attackSerial)||0,previousAttack=Number(e.historyEnemyAttackSerial)||0;
+     if(attackSerial>previousAttack){
+       e.historyEnemyAttackSerial=attackSerial;e.attackSerial=Math.max(Number(e.attackSerial)||0,attackSerial);e.attackAnim=.42;
+       if(kind==='golem')e.golemAttackSerial=attackSerial;
+       else if(kind==='naja')e.najaAttackSerial=attackSerial;
+       else if(kind==='anubis')e.anubisAttackSerial=attackSerial;
+       else if(kind==='poseidon'||kind==='seahorse')e.waterAttackSerial=attackSerial;
      }
-     e.dragonTakeoffSerial=takeoffSerial;e.dragonFlightState=flight;
-     if(flight==='flying'){e.dragonTakeoffEndAt=0;e.dragonTakeoffStartedAt=0}
-     if(wasAlive===true&&!serverAlive&&!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0);
-     const attackSerial=Number(sd.attackSerial)||0,attackRemaining=Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime);
-     e.dragonAttackSerial=Math.max(Number(e.dragonAttackSerial)||0,attackSerial);
-     if(attackRemaining>0){
-       if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.serial)!==attackSerial){
-         e.pendingDragonAttack={serial:attackSerial,startedAt:arrival,soundAt:arrival+1000,endAt:arrival+DRAGON_ATTACK_VISUAL_MS};
+     if(kind==='dragon'){
+       const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
+       if(e.dragonTakeoffSerial!==takeoffSerial&&flight==='takeoff'){
+         const remaining=Math.max(0,(Number(sd.takeoffUntil)||0)-this.lastServerTime);
+         e.dragonTakeoffStartedAt=arrival-Math.max(0,DRAGON_TAKEOFF_DURATION-remaining);e.dragonTakeoffEndAt=arrival+remaining;
        }
-     }else if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.endAt)<=arrival)e.pendingDragonAttack=null;
+       e.dragonTakeoffSerial=takeoffSerial;e.dragonFlightState=flight;
+       if(flight==='flying'){e.dragonTakeoffEndAt=0;e.dragonTakeoffStartedAt=0}
+       const attackRemaining=Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime);
+       e.dragonAttackSerial=Math.max(Number(e.dragonAttackSerial)||0,attackSerial);
+       if(attackRemaining>0){
+         if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.serial)!==attackSerial)
+           e.pendingDragonAttack={serial:attackSerial,startedAt:arrival,soundAt:arrival+1000,endAt:arrival+DRAGON_ATTACK_VISUAL_MS};
+       }else if(!e.pendingDragonAttack||Number(e.pendingDragonAttack.endAt)<=arrival)e.pendingDragonAttack=null;
+     }
+     if(wasAlive===true&&!serverAlive&&!e.deathStarted)startEntityDeath(e,Number(e.hitDirX)||0,Number(e.hitDirY)||0);
      historyPushRemoteSample(e,Number(sd.x)||0,Number(sd.y)||0,arrival);next.push(e);
    }
    state.entities=next;
@@ -7501,46 +7545,203 @@ const HistoryAdapter={
  disconnect(showBrowser=false){
    this.manualClose=true;this.active=false;try{this.ws?.close()}catch(_){}
    stopPvpCombatSfxLoops();
-   this.ws=null;state.historyActive=false;state.historyServerId=null;state.running=false;
+   this.ws=null;state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.running=false;
+   if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
+ }
+};
+
+function historyVictoryResult(uid){
+ const player=state.players.find(p=>String(p.id)===String(uid))||state.players[0];
+ return {id:state.matchId||('m_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12)),
+   mode:'history',winnerId:String(uid),winnerName:player?.name||'Player',winnerClan:player?.clan||'warriors',
+   pvp:false,humanCount:Math.max(1,state.players.filter(p=>p.human).length),awards:{[String(uid)]:200}};
+}
+function finishHistoryVictory(uid){
+ if(state.phase==='finished')return;
+ flash('HISTORY CONCLUÍDO',1.2);
+ finishGame('',historyVictoryResult(uid));
+ if(!state.historyLocal)setTimeout(()=>{if(HistoryAdapter.active)HistoryAdapter.disconnect(false)},3900);
+}
+function historyMapEvents(kind){return (historyMapData().events||[]).filter(event=>event.kind===kind)}
+function historyLocalSpawnPoint(event,index){
+ const angle=index*2.399963229728653,r=index?34+(index%3)*18:0,area=event.area||null;
+ let x=Number(event.x)||0,y=Number(event.y)||0;
+ x+=Math.cos(angle)*r;y+=Math.sin(angle)*r;
+ if(area){
+   x=clamp(x,Number(area.x)+38,Number(area.x)+Number(area.w)-38);
+   y=clamp(y,Number(area.y)+38,Number(area.y)+Number(area.h)-38);
+ }
+ return {x,y};
+}
+const HistoryLocalAdapter={
+ active:false,serverId:'history-local',uid:null,spawnRuntime:new Map(),checkpointId:null,respawnPoint:null,reviveAt:0,victory:false,
+ async start(){
+   if(this.active)return true;
+   try{await NetworkAdapter.ensureAuth()}catch(_){}
+   this.uid=NetworkAdapter.localPlayerId||historyFallbackUid();
+   if(!NetworkAdapter.localPlayerId)NetworkAdapter.localPlayerId=this.uid;
+   NetworkAdapter.online=false;NetworkAdapter.isHost=true;NetworkAdapter.hostUid=this.uid;
+   NetworkAdapter.attackSeq=0;
+   const map=historyMapData(),spawn=map.spawn||{x:597,y:2049},now=performance.now();
+   this.active=true;this.spawnRuntime.clear();this.checkpointId=null;this.respawnPoint={x:Number(spawn.x),y:Number(spawn.y)};this.reviveAt=0;this.victory=false;
+   state.historyActive=true;state.historyLocal=true;state.historyServerId=this.serverId;
+   state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
+   state.world.w=Number(map.width)||3200;state.world.h=Number(map.height)||2200;
+   state.entities=[];state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.nextId=1;
+   warBurningEntities.clear();warFrameEnemiesByTeam.clear();clearEntityVisuals();pvpResetLocalSpectatorAfterRevive();
+   stopPvpCombatSfxLoops();pvpCombatSfxSeen.clear();pvpCombatSfxPending.clear();
+   state.players=[{id:String(this.uid),uid:String(this.uid),name:getCurrentNick(),human:true,local:true,color:COLORS[0],
+     clan:'warriors',pvpHero:'warrior',pvpConfirmed:true,pvpRoundDeaths:0,pvpReviveAt:0,pvpEliminated:false}];
+   const hero=PVP_SELECTABLE_BY_ID.warrior||PVP_SELECTABLE_HEROES[0];
+   const me=pvpBaseEntity(hero,this.respawnPoint.x,this.respawnPoint.y,'history-players',COLORS[0],String(this.uid),false);
+   me.controlled=true;me.historyLocalPlayer=true;
+   pvpControls.selected='attack';pvpControls.action='attack';pvpControls.targetId=null;pvpControls.aimAngle=null;pvpControls.aimManual=false;pvpControls.aimPointerId=null;
+   preloadExtraPVPGifDurations();preloadPVPWarriorVisuals();preloadPVPExactGifDurations();pvpLoadFlameFrames();
+   beginMatchTracking();
+   for(const event of historyMapEvents('enemy_spawn'))this.spawnRuntime.set(event.id,{count:0,nextAt:now});
+   navigateScreen('gameScreen');configureGameScreenForMode();$('#shop').classList.remove('open');
+   flash('HISTORY • SERVIDOR LOCAL',1.2);return true;
+ },
+ spawnWave(event,now){
+   const runtime=this.spawnRuntime.get(event.id)||{count:0,nextAt:now};
+   let offset=0,spawned=0;
+   for(const [type,rawCount] of Object.entries(event.troops||{})){
+     const count=Math.max(0,Math.floor(Number(rawCount)||0)),hero=PVP_ENEMY_HEROES[type];
+     if(!hero||!count)continue;
+     for(let i=0;i<count;i++){
+       const point=historyLocalSpawnPoint(event,offset++),npc=pvpBaseEntity({...hero,id:type},point.x,point.y,'pvp-enemy','#d86543',null,true);
+       npc.historySpawnEventId=event.id;npc.historyLeashArea=event.area?{...event.area}:null;
+       if(type==='dragon')beginDragonTakeoff(npc);
+       spawned++;
+     }
+   }
+   runtime.count++;runtime.nextAt=now+Math.max(200,Number(event.intervalMs)||3000);this.spawnRuntime.set(event.id,runtime);
+   return spawned;
+ },
+ updateSpawns(now){
+   for(const event of historyMapEvents('enemy_spawn')){
+     const runtime=this.spawnRuntime.get(event.id)||{count:0,nextAt:now};
+     const endless=event.spawnMode==='endless',limit=Math.max(1,Number(event.waves)||1);
+     if((!endless&&runtime.count>=limit)||now<Number(runtime.nextAt||0)){this.spawnRuntime.set(event.id,runtime);continue}
+     this.spawnWave(event,now);
+   }
+ },
+ spawnPlayer(){
+   const player=state.players.find(p=>String(p.id)===String(this.uid));if(!player)return null;
+   const hero=PVP_SELECTABLE_BY_ID.warrior||PVP_SELECTABLE_HEROES[0],p=this.respawnPoint||historyMapData().spawn;
+   const e=pvpBaseEntity(hero,Number(p.x),Number(p.y),'history-players',player.color||COLORS[0],String(this.uid),false);
+   e.controlled=true;e.historyLocalPlayer=true;player.pvpReviveAt=0;player.pvpEliminated=false;
+   this.reviveAt=0;pvpResetLocalSpectatorAfterRevive();return e;
+ },
+ updateProgress(now,me){
+   if(!me?.alive)return;
+   for(const event of historyMapEvents('checkpoint')){
+     if(this.checkpointId===event.id||!event.area||!historyPointInArea(me.x,me.y,event.area))continue;
+     this.checkpointId=event.id;const p=event.respawn||event;
+     this.respawnPoint={x:Number(p.x),y:Number(p.y)};flash('CHECKPOINT ATIVADO',1.15);
+   }
+   const victory=historyMapEvents('victory')[0];
+   if(!this.victory&&victory?.area&&historyPointInArea(me.x,me.y,victory.area)){
+     this.victory=true;finishHistoryVictory(this.uid);
+   }
+ },
+ tick(dt,now){
+   if(!this.active||!state.running)return;
+   this.updateSpawns(now);
+   pvpRebuildTargets();
+   const me=pvpLocalHero();
+   if(me?.alive){
+     historyTickLocalWarriorComboVisual(me,now);
+     const input=getLocalMovement();
+     if(pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now){
+       pvpTickWarriorSpecial(me,input,dt,now);
+     }else if(Number(me.knockTime)<=0){
+       let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
+       if(len>1){dx/=len;dy/=len}
+       if(dx||dy){
+         historyMoveEntity(me,dx*me.speed*dt,dy*me.speed*dt);me.heading=Math.atan2(dy,dx);
+         if(Math.abs(dx)>.08)me.facing=dx<0?-1:1;me.moving=true;
+       }else me.moving=false;
+     }
+     pvpTickPower(me,now,pvpControls.aimAngle);
+     this.updateProgress(now,me);
+   }
+   for(const e of state.entities){
+     if(!e.alive||e===me||!e.pvpEnemy)continue;
+     const ox=e.x,oy=e.y;
+     try{pvpBotAction(e,dt)}catch(err){pvpReportError('History local NPC '+e.type,err);e.moving=false}
+     historyConstrainEnemy(e,ox,oy);
+   }
+   const entityById=rebuildWarEntityIdMap();
+   updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
+   updateEntities(dt);updateParticles(dt);
+   const player=state.players.find(p=>String(p.id)===String(this.uid));
+   const body=state.entities.find(e=>String(e.ownerId)===String(this.uid)&&!e.pvpMinion);
+   if(body&&!body.alive&&!this.reviveAt){
+     this.reviveAt=now+3000;if(player)player.pvpReviveAt=this.reviveAt;flash('DERROTADO • REVIVENDO...',1.4);
+   }
+   if(this.reviveAt&&now>=this.reviveAt&&!state.entities.some(e=>e.alive&&!e.pvpMinion&&String(e.ownerId)===String(this.uid))){
+     this.spawnPlayer();flash('VOCÊ REVIVEU',.9);
+   }
+   state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
+ },
+ disconnect(showBrowser=false){
+   this.active=false;this.spawnRuntime.clear();this.reviveAt=0;this.victory=false;
+   state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.running=false;
+   stopPvpCombatSfxLoops();
    if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
  }
 };
 function renderHistoryServers(servers){
  const list=$('#historyServerList');if(!list)return;list.innerHTML='';
- const rows=Array.isArray(servers)&&servers.length?servers:HISTORY_SERVER_FALLBACK;
+ const rows=Array.isArray(servers)&&servers.length?servers:[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];
+ historyServerRows=rows;
  if(!historySelectedServerId||!rows.some(server=>server.id===historySelectedServerId))historySelectedServerId=rows[0]?.id||null;
  for(const server of rows){
    const button=document.createElement('button');button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
-   const status=historyServerBase&&server.online!==false;
+   const local=!!server.local,status=local||!!historyServerBase&&server.online!==false;
+   const meta=local?'mesmo mapa • solo • sem Cloudflare':historyEscape(server.map||'history-castle-v2')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores';
    button.innerHTML='<span><div class="history-server-name">'+historyEscape(server.name||server.id)+'</div>'+
-     '<div class="history-server-meta">'+historyEscape(server.map||'arena-pvp')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores</div></span>'+
-     '<span class="history-server-status'+(status?'':' offline')+'">'+(status?'ONLINE':'OFFLINE')+'</span>';
+     '<div class="history-server-meta">'+meta+'</div></span>'+
+     '<span class="history-server-status'+(status?'':' offline')+'">'+(local?'LOCAL':status?'ONLINE':'OFFLINE')+'</span>';
    button.onclick=()=>{historySelectedServerId=server.id;renderHistoryServers(rows);updateHistoryServerConfirm(rows)};list.appendChild(button);
  }
  updateHistoryServerConfirm(rows);
 }
-function updateHistoryServerConfirm(servers=HISTORY_SERVER_FALLBACK){
+function updateHistoryServerConfirm(servers=historyServerRows){
  const button=$('#historyServerConfirm'),message=$('#historyServerMessage'),selected=(servers||[]).find(server=>server.id===historySelectedServerId);
- if(!button||!message)return;const ready=!!historyServerBase&&!!selected&&selected.online!==false;
- button.disabled=!ready||HistoryAdapter.connecting;message.textContent=ready?'Servidor Cloudflare disponível. Selecione e entre.':'Servidor History indisponível.';
+ if(!button||!message)return;
+ const local=!!selected?.local,ready=local||!!historyServerBase&&!!selected&&selected.online!==false;
+ button.disabled=!ready||HistoryAdapter.connecting;
+ message.textContent=local?'Servidor local: esta máquina será o host da partida.':ready?'Servidor Cloudflare disponível. Selecione e entre.':'Servidor History Cloudflare indisponível.';
 }
 async function refreshHistoryServers(){
  const message=$('#historyServerMessage');if(message)message.textContent='Consultando servidores...';
  try{
    const response=await fetch(historyServerEndpoint('/servers'),{cache:'no-store'});if(!response.ok)throw Error('HTTP '+response.status);
-   const data=await response.json(),servers=Array.isArray(data?.servers)?data.servers:[];renderHistoryServers(servers);return servers;
+   const data=await response.json(),cloud=Array.isArray(data?.servers)?data.servers:[];
+   const rows=[HISTORY_LOCAL_SERVER,...cloud];renderHistoryServers(rows);return rows;
  }catch(err){
-   console.error('History servers:',err);renderHistoryServers(HISTORY_SERVER_FALLBACK);
-   if(message)message.textContent='Servidor History indisponível no momento.';return HISTORY_SERVER_FALLBACK;
+   console.error('History servers:',err);
+   const rows=[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];renderHistoryServers(rows);
+   if(message&&historySelectedServerId!=='history-local')message.textContent='Cloudflare indisponível. O servidor local continua disponível.';
+   return rows;
  }
 }
 async function openHistoryServerBrowser(){
  if(HistoryAdapter.active)HistoryAdapter.disconnect(false);
- state.historyActive=false;state.mode='history';preloadExtraPVPGifDurations();pvpLoadFlameFrames();
+ if(HistoryLocalAdapter.active)HistoryLocalAdapter.disconnect(false);
+ state.historyActive=false;state.historyLocal=false;state.mode='history';preloadExtraPVPGifDurations();pvpLoadFlameFrames();
  navigateScreen('historyServerScreen');await refreshHistoryServers();
 }
 $('#historyRefreshServers').onclick=()=>refreshHistoryServers();
-$('#historyServerConfirm').onclick=async()=>{if(!historyServerBase||!historySelectedServerId||HistoryAdapter.connecting)return;await HistoryAdapter.connect(historySelectedServerId)};
+$('#historyServerConfirm').onclick=async()=>{
+ if(!historySelectedServerId||HistoryAdapter.connecting)return;
+ const selected=historyServerRows.find(server=>server.id===historySelectedServerId);
+ if(selected?.local){await HistoryLocalAdapter.start();return}
+ if(!historyServerBase)return;
+ await HistoryAdapter.connect(historySelectedServerId);
+};
 
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
@@ -8388,7 +8589,7 @@ function stopPVPAttackHold(e=null){
    if(pvpIsWarriorHero(hero)&&Number(hero.pvpWarriorComboUntil)>now){
      pvpWarriorComboCancelSeq++;
      pvpCancelWarriorCombo(hero,now);
-     if(state.historyActive)HistoryAdapter.sendComboCancel();
+     if(state.historyActive){if(!state.historyLocal)HistoryAdapter.sendComboCancel()}
      else if(NetworkAdapter.online&&!NetworkAdapter.isHost)sendLocalPVEInput(true);
    }
  }
@@ -9615,6 +9816,7 @@ function spawnPoseidonSeahorses(e,p){
    const horse=spawnSeahorse(clamp(ox+Math.cos(a)*r,45,state.world.w-45),
      clamp(oy+Math.sin(a)*r,45,state.world.h-45),e.team,e.color,e.id);
    if(state.mode==='pvp'&&e.pvpWarAI)pvpConfigureWarMinion(horse);
+   if(state.historyActive&&e.historyLeashArea)horse.historyLeashArea={...e.historyLeashArea};
  }
 }
 function waterWavePosition(p,now){
@@ -10715,7 +10917,8 @@ function pvpSpawnNPC(heroId=null,owner=null){
 }
 function pvpNearestEnemy(e,preferred=null){
  const regionalOnly=!!pvpRegionalSimulationUid;
- const allowed=t=>regionalOnly?pvpLocalRegionOwnsEntity(t):(NetworkAdapter.isHost?pvpHostShouldSimulateEntity(t):true);
+ const allowed=t=>(!state.historyActive||!e?.historyLeashArea||historyPointInArea(t.x,t.y,e.historyLeashArea))&&
+   (regionalOnly?pvpLocalRegionOwnsEntity(t):(NetworkAdapter.isHost?pvpHostShouldSimulateEntity(t):true));
  if(preferred!=null){
    const target=state.entities.find(t=>String(t.id)===String(preferred)&&t.alive&&t.team!==e.team&&allowed(t));
    if(target)return target;
@@ -11123,9 +11326,12 @@ function pvpTickWarriorSpecial(e,input,dt,now=performance.now()){
    e.pvpWarriorChargeAngle=Math.atan2(dy,dx);
  }
  const angle=Number(e.pvpWarriorChargeAngle)||0,speed=e.speed*PVP_WARRIOR.specialSpeedMultiplier;
- const b=pvpArenaBounds(e.r||30);
- e.x=clamp(e.x+Math.cos(angle)*speed*dt,b.left,b.right);
- e.y=clamp(e.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+ if(state.historyActive)historyMoveEntity(e,Math.cos(angle)*speed*dt,Math.sin(angle)*speed*dt);
+ else{
+   const b=pvpArenaBounds(e.r||30);
+   e.x=clamp(e.x+Math.cos(angle)*speed*dt,b.left,b.right);
+   e.y=clamp(e.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+ }
  e.heading=angle;e.facing=Math.cos(angle)<0?-1:1;e.moving=true;
  e.knockTime=0;e.knockVX=0;e.knockVY=0;
  const touched=e.pvpWarriorChargeHitIds||(e.pvpWarriorChargeHitIds=[]);
@@ -11282,7 +11488,13 @@ function pvpTriggerAttack(override=null){
  NetworkAdapter.attackSeq++;
  const me=pvpLocalHero();
  if(state.historyActive){
-   if(!me||!historyPreviewLocalAction(me,action,pvpControls.targetId))return false;
+   if(!me)return false;
+   if(state.historyLocal){
+     me.pvpLastAttackSeq=NetworkAdapter.attackSeq;
+     try{return !!pvpHandleAction(me,action,pvpControls.targetId)}
+     catch(err){pvpReportError('ação History local',err);return false}
+   }
+   if(!historyPreviewLocalAction(me,action,pvpControls.targetId))return false;
    HistoryAdapter.sendAction(action);
    return true;
  }
@@ -11479,7 +11691,9 @@ function pvpRebuildTargets(){
  buildWarAIGrid(pvpFrameLiving);
 }
 function pvpTargetsFor(e){
- return pvpFrameTargetLists.get(e.team)||state.entities;
+ const list=pvpFrameTargetLists.get(e.team)||state.entities;
+ if(!state.historyActive||!e?.historyLeashArea)return list;
+ return list.filter(t=>historyPointInArea(t.x,t.y,e.historyLeashArea));
 }
 function pvpNPCSerial(e){
  if(e.type==='dragon')return e.dragonAttackSerial||0;
@@ -13510,7 +13724,7 @@ function updateSpectatorTransition(now){
 }
 
 function updateGameSimulation(dt,now){
- if(state.historyActive){if(state.running)HistoryAdapter.tick(dt,now);return}
+ if(state.historyActive){if(state.running)(state.historyLocal?HistoryLocalAdapter:HistoryAdapter).tick(dt,now);return}
  const authoritative=!NetworkAdapter.online||NetworkAdapter.isHost;
  if(state.running&&authoritative){
    if(state.mode==='pve')updatePVE(dt);else if(state.mode==='pvp')updatePVP(dt);else updateWar(dt);
@@ -13659,14 +13873,14 @@ function updateEntities(dt,shouldSimulate=null){
 
    if(e.knockTime>0){
      const step=Math.min(dt,e.knockTime);
-     e.x+=e.knockVX*step;
-     e.y+=e.knockVY*step;
+     if(state.historyActive)historyMoveEntity(e,e.knockVX*step,e.knockVY*step);
+     else{e.x+=e.knockVX*step;e.y+=e.knockVY*step}
      e.knockTime=Math.max(0,e.knockTime-dt);
      const damping=Math.pow(.16,dt); // desaceleração suave, independente do FPS
      e.knockVX*=damping;
      e.knockVY*=damping;
-     e.x=clamp(e.x,35,state.world.w-35);
-     e.y=clamp(e.y,35,state.world.h-35);
+     if(state.historyActive)historyClampEntity(e);
+     else{e.x=clamp(e.x,35,state.world.w-35);e.y=clamp(e.y,35,state.world.h-35)}
      if(e.knockTime<=0){e.knockVX=0;e.knockVY=0}
    }
  }
@@ -15608,7 +15822,11 @@ function finishGame(msg,result=null){
      await NetworkAdapter.pushLobbyState({status:'finished',game:serializeGame()});
    })().catch(console.error);
  }
- setTimeout(()=>{navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')},4200);
+ setTimeout(()=>{
+   if(HistoryLocalAdapter.active)HistoryLocalAdapter.disconnect(false);
+   if(HistoryAdapter.active)HistoryAdapter.disconnect(false);
+   navigateScreen('menuScreen');state.entities=[];state.particles=[];state.dragonProjectiles=[];clearEntityVisuals();$('#shop').classList.remove('open')
+ },4200);
 }
 
 })();
