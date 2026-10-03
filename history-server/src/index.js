@@ -571,7 +571,8 @@ export class HistoryRoom extends DurableObject {
       return false;
     }
     const knockDx = (Number(target.knockVX) || 0) * dt, knockDy = (Number(target.knockVY) || 0) * dt;
-    if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);\n    else moveHistoryEnemy(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);
+    if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);
+    else moveHistoryEnemy(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);
     const damping = Math.pow(.16, dt);
     target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
     return true;
