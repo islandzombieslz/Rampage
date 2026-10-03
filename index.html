@@ -7649,6 +7649,7 @@ function historyLocalSpawnPoint(event,index){
 }
 const HistoryLocalAdapter={
  active:false,serverId:'history-local',uid:null,spawnRuntime:new Map(),checkpointId:null,respawnPoint:null,reviveAt:0,victory:false,
+ doorState:{},countedDoorDefeats:new Set(),
  async start(){
    if(this.active)return true;
    try{await NetworkAdapter.ensureAuth()}catch(_){}
@@ -7658,7 +7659,8 @@ const HistoryLocalAdapter={
    NetworkAdapter.attackSeq=0;
    const map=historyMapData(),spawn=map.spawn||{x:597,y:2049},now=performance.now();
    this.active=true;this.spawnRuntime.clear();this.checkpointId=null;this.respawnPoint={x:Number(spawn.x),y:Number(spawn.y)};this.reviveAt=0;this.victory=false;
-   state.historyActive=true;state.historyLocal=true;state.historyServerId=this.serverId;
+   this.doorState=this.initialDoorState();this.countedDoorDefeats.clear();
+   state.historyActive=true;state.historyLocal=true;state.historyServerId=this.serverId;state.historyDoorState=this.doorState;
    state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
    state.world.w=Number(map.width)||3200;state.world.h=Number(map.height)||2200;
    state.entities=[];state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.nextId=1;
@@ -7701,6 +7703,45 @@ const HistoryLocalAdapter={
      this.spawnWave(event,now);
    }
  },
+ initialDoorState(){
+   return Object.fromEntries((historyMapData().doors||[]).map(door=>[door.id,{open:false,defeats:0,openedAt:0}]));
+ },
+ doorRuntime(door){
+   return this.doorState[door.id] ||= {open:false,defeats:0,openedAt:0};
+ },
+ openDoor(door){
+   const runtime=this.doorRuntime(door);if(runtime.open)return false;
+   runtime.open=true;runtime.openedAt=Date.now();state.historyDoorState=this.doorState;return true;
+ },
+ updateDoors(now,me=pvpLocalHero()){
+   for(const door of historyMapData().doors||[]){
+     const runtime=this.doorRuntime(door);if(runtime.open)continue;
+     const mode=String(door.openWhen||'proximity');
+     const usesProx=mode==='proximity'||mode==='proximity_or_defeat'||mode==='proximity_and_defeat';
+     const usesDefeats=mode==='defeat_count'||mode==='proximity_or_defeat'||mode==='proximity_and_defeat';
+     const near=usesProx&&me?.alive&&historyPointRectDistance(me.x,me.y,door)<=Math.max(0,Number(door.proximity)||0);
+     const enough=usesDefeats&&Number(runtime.defeats||0)>=Math.max(1,Number(door.enemyCount)||1);
+     const shouldOpen=mode==='proximity'?near:mode==='defeat_count'?enough:mode==='proximity_and_defeat'?near&&enough:near||enough;
+     if(shouldOpen)this.openDoor(door);
+   }
+ },
+ registerDoorDefeat(enemy){
+   if(!enemy)return;
+   for(const door of historyMapData().doors||[]){
+     const mode=String(door.openWhen||'proximity');
+     if(!(mode==='defeat_count'||mode==='proximity_or_defeat'||mode==='proximity_and_defeat'))continue;
+     const runtime=this.doorRuntime(door);
+     if(runtime.open||!door.enemyArea||!historyPointInArea(enemy.x,enemy.y,door.enemyArea))continue;
+     runtime.defeats=(Number(runtime.defeats)||0)+1;
+   }
+   state.historyDoorState=this.doorState;
+ },
+ scanDoorDefeats(){
+   for(const enemy of state.entities){
+     if(!enemy?.pvpEnemy||enemy.alive||this.countedDoorDefeats.has(enemy.id))continue;
+     this.countedDoorDefeats.add(enemy.id);this.registerDoorDefeat(enemy);
+   }
+ },
  spawnPlayer(){
    const player=state.players.find(p=>String(p.id)===String(this.uid));if(!player)return null;
    const hero=PVP_SELECTABLE_BY_ID.warrior||PVP_SELECTABLE_HEROES[0],p=this.respawnPoint||historyMapData().spawn;
@@ -7722,9 +7763,9 @@ const HistoryLocalAdapter={
  },
  tick(dt,now){
    if(!this.active||!state.running)return;
-   this.updateSpawns(now);
+   this.updateSpawns(now);this.scanDoorDefeats();
    pvpRebuildTargets();
-   const me=pvpLocalHero();
+   const me=pvpLocalHero();this.updateDoors(now,me);
    if(me?.alive){
      historyTickLocalWarriorComboVisual(me,now);
      const input=getLocalMovement();
@@ -7750,7 +7791,7 @@ const HistoryLocalAdapter={
    const entityById=rebuildWarEntityIdMap();
    updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
    const beforePhysics=new Map(state.entities.filter(e=>e.alive).map(e=>[e.id,{x:e.x,y:e.y}]));
-   updateEntities(dt);updateParticles(dt);
+   updateEntities(dt);updateParticles(dt);this.scanDoorDefeats();this.updateDoors(now,me);
    for(const e of state.entities){
      if(!e.alive)continue;
      const prev=beforePhysics.get(e.id);if(!prev)continue;
@@ -7768,9 +7809,9 @@ const HistoryLocalAdapter={
    state.pvpDamageEvents=(state.pvpDamageEvents||[]).filter(h=>now-h.at<PVP_DAMAGE_TEXT_MS);
  },
  disconnect(showBrowser=false){
-   this.active=false;this.spawnRuntime.clear();this.reviveAt=0;this.victory=false;
+   this.active=false;this.spawnRuntime.clear();this.reviveAt=0;this.victory=false;this.doorState={};this.countedDoorDefeats.clear();
    NetworkAdapter.localHost=false;
-   state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.running=false;
+   state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.historyDoorState={};state.running=false;
    stopPvpCombatSfxLoops();
    if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
  }
