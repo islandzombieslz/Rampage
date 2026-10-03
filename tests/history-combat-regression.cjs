@@ -36,9 +36,10 @@ assert.equal(e.pvpWarriorChargeUntil,specialUntil,'pre-action snapshot must not 
 ctx.historyApplyAuthoritativeAction(e,{action:'special',specialSerial:4,specialActiveUntil:53900,at:50000});
 assert.equal(e.pvpSpecialSerial,special,'confirmation must not replay special');
 let serverClock=50000;const events=[];
-const worker=fs.readFileSync('history-server/src/index.js','utf8').replace(/^import .*;\n/,'').replace('export default','const workerDefault=').replace('export class HistoryRoom','class HistoryRoom');
+const historyMap=fs.readFileSync('history-server/src/map.js','utf8').replaceAll('export const','const');
+const worker=fs.readFileSync('history-server/src/index.js','utf8').replace(/^import .*;\n/gm,'').replace('export default','const workerDefault=').replace('export class HistoryRoom','class HistoryRoom');
 const server=vm.createContext({DurableObject:class{},Date:{now:()=>serverClock},console});
-vm.runInContext(worker+'\n globalThis.Room=HistoryRoom;',server);
+vm.runInContext(historyMap+'\n'+worker+'\n globalThis.Room=HistoryRoom;',server);
 load('pvpParsedGifCycleMs');
 for(const [key,file,constant] of [
  ['pvpWarriorAttack','guerreiro-ataque-unico.gif','WARRIOR_SINGLE_VISUAL_MS'],
