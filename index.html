@@ -7816,7 +7816,7 @@ async function enterModeFromCard(card){
  if(state.mode==='history'){await openHistoryServerBrowser();return}
  if(state.mode==='war'){
    state.rounds=Math.max(2,Number(state.rounds)||2);
-   await createCurrentRoom(card);
+   await createCurrentRoom(null);
    return;
  }
  if(state.mode==='pvp'){
