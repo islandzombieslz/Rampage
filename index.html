@@ -13777,8 +13777,8 @@ function draw(){
  const floorRight=Math.min(state.world.w,right),floorBottom=Math.min(state.world.h,bottom);
  const floorW=Math.max(0,floorRight-floorLeft),floorH=Math.max(0,floorBottom-floorTop);
  if(floorW>0&&floorH>0){
-   const sceneFloor=state.mode==='pvp'&&!state.historyActive?pvpFloorImage:state.mode==='war'?warFloorImage:null;
-   if(sceneFloor&&sceneFloor.complete&&sceneFloor.naturalWidth>0){
+   const sceneFloor=state.mode==='pvp'?pvpFloorImage:state.mode==='war'?warFloorImage:null;
+   if(!state.historyActive&&sceneFloor&&sceneFloor.complete&&sceneFloor.naturalWidth>0){
      ctx.drawImage(sceneFloor,
        floorLeft/state.world.w*sceneFloor.naturalWidth,
        floorTop/state.world.h*sceneFloor.naturalHeight,
