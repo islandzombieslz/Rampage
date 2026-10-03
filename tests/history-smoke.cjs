@@ -33,7 +33,7 @@ assert(worker.includes('rounds: null')&&worker.includes('mode: "history"'),
   'History snapshots must not contain round progression');
 assert(worker.includes('const PVP_WORLD = HISTORY_MAP_WORLD')&&historyMapServer.includes('width: 3200, height: 2200'),
   'History must use the final editor map dimensions without changing PvP geometry');
-assert(historyMapClient.includes('visualCount:127')&&historyMapClient.includes('colliderCount:55')&&
+assert(historyMapClient.includes('"visualCount":127')&&historyMapClient.includes('"colliderCount":55')&&
   historyMapServer.includes('HISTORY_MAP_COLLIDERS'),
   'History must load all final-map visuals and server-authoritative collision rectangles');
 assert(html.includes('historyMoveEntity(me')&&worker.includes('moveHistoryPlayer(player'),
