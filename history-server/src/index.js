@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { HISTORY_MAP_ID, HISTORY_MAP_WORLD, HISTORY_MAP_SPAWN, HISTORY_MAP_PLAY_BOUNDS, HISTORY_MAP_COLLIDERS, HISTORY_DRAGON_SPAWNS } from "./map.js";
+import { HISTORY_MAP_ID, HISTORY_MAP_WORLD, HISTORY_MAP_SPAWN, HISTORY_MAP_PLAY_BOUNDS, HISTORY_MAP_COLLIDERS, HISTORY_MAP_EVENTS } from "./map.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +11,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 6;
+const HISTORY_SCHEMA_VERSION = 7;
 const PVP_WORLD = HISTORY_MAP_WORLD;
 const PVP_PLAY_BOUNDS = HISTORY_MAP_PLAY_BOUNDS;
 
@@ -67,6 +67,22 @@ const HISTORY_HEROES = Object.freeze({
   warrior: { id: "warrior", type: "warrior", clan: "warriors", variant: "male" },
   mageFemale: { id: "mageFemale", type: "mage", clan: "warriors", variant: "female" }
 });
+const HISTORY_ENEMY_STATS = Object.freeze({
+  naja: Object.freeze({ hp: 300, shield: 250, speed: 117, damage: 25, range: 112, cooldown: 1450 }),
+  poseidon: Object.freeze({ hp: 300, shield: 250, speed: 117, damage: 22, range: 255, cooldown: 1750 }),
+  anubis: Object.freeze({ hp: 100, shield: 50, speed: 97.5, damage: 20, range: 285, cooldown: 1550 }),
+  golem: Object.freeze({ hp: 150, shield: 100, speed: 117, damage: 30, range: 112, cooldown: 1800 }),
+  dragon: Object.freeze({ hp: DRAGON_MAX_HP, shield: DRAGON_MAX_SHIELD, speed: DRAGON_SPEED, damage: DRAGON_DAMAGE, range: 285, cooldown: DRAGON_SHOT_COOLDOWN_MS }),
+  seahorse: Object.freeze({ hp: 100, shield: 50, speed: 97.5, damage: 18, range: 120, cooldown: 1350 })
+});
+function pointInArea(x, y, area, pad = 0) {
+  if (!area) return true;
+  return x >= Number(area.x) + pad && x <= Number(area.x) + Number(area.w) - pad &&
+    y >= Number(area.y) + pad && y <= Number(area.y) + Number(area.h) - pad;
+}
+function mapEvent(kind) { return HISTORY_MAP_EVENTS.find(event => event.kind === kind) || null; }
+function mapEvents(kind) { return HISTORY_MAP_EVENTS.filter(event => event.kind === kind); }
+
 function historyHero(id) { return HISTORY_HEROES[id] || HISTORY_HEROES.warrior; }
 
 function json(data, status = 200) {
@@ -103,6 +119,19 @@ function moveHistoryPlayer(player, dx, dy, r = COMBAT_ENTITY_RADIUS) {
   }
   return moved;
 }
+function moveHistoryEnemy(enemy, dx, dy, r = COMBAT_ENTITY_RADIUS) {
+  if (!enemy) return false;
+  const area = enemy.historyLeashArea || null;
+  let moved = false;
+  let nx = clamp((Number(enemy.x) || 0) + (Number(dx) || 0), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+  if (area) nx = clamp(nx, Number(area.x) + r, Number(area.x) + Number(area.w) - r);
+  if (!historyPositionBlocked(nx, Number(enemy.y) || 0, r)) { moved ||= Math.abs(nx - Number(enemy.x || 0)) > .001; enemy.x = nx; }
+  let ny = clamp((Number(enemy.y) || 0) + (Number(dy) || 0), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+  if (area) ny = clamp(ny, Number(area.y) + r, Number(area.y) + Number(area.h) - r);
+  if (!historyPositionBlocked(Number(enemy.x) || 0, ny, r)) { moved ||= Math.abs(ny - Number(enemy.y || 0)) > .001; enemy.y = ny; }
+  return moved;
+}
+
 
 function warriorDamageForRange(d) {
   return WARRIOR_DAMAGE_MIN + (WARRIOR_DAMAGE_MAX - WARRIOR_DAMAGE_MIN) *
@@ -190,7 +219,10 @@ export class HistoryRoom extends DurableObject {
     this.room = saved;
     this.room.players ||= {};
     this.room.projectiles ||= [];
-    this.room.dragons ||= this.spawnDragons(Number(this.room.dragonWave) || 1);
+    this.room.dragons ||= [];
+    this.room.spawnState ||= {};
+    this.room.finished ||= false;
+    this.room.enemySeq ||= 0;
   }
 
   createRoom() {
@@ -199,27 +231,132 @@ export class HistoryRoom extends DurableObject {
       seq: 0,
       startedAt: Date.now(),
       players: {},
-      dragons: this.spawnDragons(1),
+      dragons: [],
       projectiles: [],
+      spawnState: {},
+      enemySeq: 0,
+      finished: false,
+      victoryAt: 0,
       dragonWave: 1,
       respawnAt: 0
     };
   }
 
   spawnDragons(wave) {
-    const now = Date.now();
-    const make = (id, x, y, facing) => ({
-      id, type: "dragon", x, y,
-      hp: DRAGON_MAX_HP, maxHp: DRAGON_MAX_HP,
-      shield: DRAGON_MAX_SHIELD, maxShield: DRAGON_MAX_SHIELD,
-      alive: true, facing, heading: facing < 0 ? Math.PI : 0, moving: false, wave,
-      flightState: "takeoff", takeoffSerial: wave, takeoffUntil: now + DRAGON_TAKEOFF_MS,
-      attackSerial: 0, attackUntil: 0, nextShotAt: now + DRAGON_TAKEOFF_MS + 180,
-      closeShotAt: now + DRAGON_TAKEOFF_MS + 180, npcNextAttackAt: 0,
+    // Kept as a compatibility method for old tests/state names. Gameplay spawns
+    // now come entirely from the editor's enemy_spawn events.
+    return [];
+  }
+
+  createEnemy(type, event, wave, index, now = Date.now()) {
+    const stats = HISTORY_ENEMY_STATS[type] || HISTORY_ENEMY_STATS.naja;
+    const angle = index * 2.399963229728653;
+    const radius = index ? 34 + (index % 3) * 18 : 0;
+    const area = event.area || null;
+    let x = Number(event.x) + Math.cos(angle) * radius;
+    let y = Number(event.y) + Math.sin(angle) * radius;
+    if (area) {
+      x = clamp(x, Number(area.x) + 34, Number(area.x) + Number(area.w) - 34);
+      y = clamp(y, Number(area.y) + 34, Number(area.y) + Number(area.h) - 34);
+    }
+    const id = "history-enemy-" + (++this.room.enemySeq) + "-" + String(event.id || "spawn");
+    return {
+      id, type, x, y, hp: stats.hp, maxHp: stats.hp, shield: stats.shield, maxShield: stats.shield,
+      damage: stats.damage, speed: stats.speed, alive: true, facing: 1, heading: 0, moving: false,
+      wave, historySpawnEventId: event.id, historyLeashArea: area ? { ...area } : null,
+      attackSerial: 0, attackUntil: 0, npcNextAttackAt: now + 450,
+      flightState: type === "dragon" ? "takeoff" : "ground",
+      takeoffSerial: type === "dragon" ? wave : 0,
+      takeoffUntil: type === "dragon" ? now + DRAGON_TAKEOFF_MS : 0,
+      nextShotAt: type === "dragon" ? now + DRAGON_TAKEOFF_MS + 180 : 0,
+      closeShotAt: type === "dragon" ? now + DRAGON_TAKEOFF_MS + 180 : 0,
       firstHitSeen: false, retaliatePending: false, retaliateImmediate: false, retaliateTargetId: null,
-      knockUntil: 0, knockVX: 0, knockVY: 0
-    });
-    return HISTORY_DRAGON_SPAWNS.map(spawn => make(spawn.id, spawn.x, spawn.y, spawn.facing));
+      knockUntil: 0, knockVX: 0, knockVY: 0, removeAt: 0
+    };
+  }
+
+  spawnEditorWave(event, now = Date.now()) {
+    const state = this.room.spawnState[event.id] || { count: 0, nextAt: now };
+    const wave = state.count + 1;
+    let offset = 0, spawned = 0;
+    for (const [type, rawCount] of Object.entries(event.troops || {})) {
+      const count = Math.max(0, Math.floor(Number(rawCount) || 0));
+      if (!HISTORY_ENEMY_STATS[type]) continue;
+      for (let i = 0; i < count; i++) {
+        this.room.dragons.push(this.createEnemy(type, event, wave, offset++, now));
+        spawned++;
+      }
+    }
+    state.count = wave;
+    state.nextAt = now + Math.max(200, Number(event.intervalMs) || 3000);
+    this.room.spawnState[event.id] = state;
+    if (spawned) this.broadcast({ type: "history_spawn", eventId: event.id, wave, spawned, at: now });
+    return spawned;
+  }
+
+  updateSpawnEvents(now = Date.now()) {
+    if (this.room.finished) return;
+    for (const event of mapEvents("enemy_spawn")) {
+      const state = this.room.spawnState[event.id] || { count: 0, nextAt: now };
+      const endless = event.spawnMode === "endless";
+      const maxWaves = Math.max(1, Number(event.waves) || 1);
+      if ((!endless && state.count >= maxWaves) || now < Number(state.nextAt || 0)) {
+        this.room.spawnState[event.id] = state;
+        continue;
+      }
+      this.spawnEditorWave(event, now);
+    }
+  }
+
+  checkpointForPlayer(player) {
+    if (!player?.checkpointId) return HISTORY_MAP_SPAWN;
+    const event = HISTORY_MAP_EVENTS.find(item => item.kind === "checkpoint" && item.id === player.checkpointId);
+    return event?.respawn || event || HISTORY_MAP_SPAWN;
+  }
+
+  updateMapProgress(now = Date.now()) {
+    if (this.room.finished) return;
+    const checkpoints = mapEvents("checkpoint"), victory = mapEvent("victory");
+    for (const player of Object.values(this.room.players)) {
+      if (!player.alive) continue;
+      for (const event of checkpoints) {
+        if (!event.area || player.checkpointId === event.id || !pointInArea(player.x, player.y, event.area)) continue;
+        player.checkpointId = event.id;
+        const spawn = event.respawn || event;
+        player.checkpointX = Number(spawn.x); player.checkpointY = Number(spawn.y);
+        this.broadcast({ type: "history_checkpoint", uid: player.id, checkpointId: event.id, x: player.checkpointX, y: player.checkpointY, at: now });
+      }
+      if (victory?.area && pointInArea(player.x, player.y, victory.area)) {
+        this.room.finished = true; this.room.victoryAt = now;
+        this.broadcast({ type: "history_victory", uid: player.id, eventId: victory.id, xp: 200, at: now });
+        break;
+      }
+    }
+  }
+
+  updateGroundEnemy(enemy, dt, now) {
+    if (!enemy?.alive) return;
+    if (this.stepKnockback(enemy, dt, now)) return;
+    const stats = HISTORY_ENEMY_STATS[enemy.type] || HISTORY_ENEMY_STATS.naja;
+    const players = Object.values(this.room.players).filter(p => p.alive && pointInArea(p.x, p.y, enemy.historyLeashArea));
+    if (!players.length) { enemy.moving = false; return; }
+    const target = players.reduce((best, p) => !best || distance(enemy, p) < distance(enemy, best) ? p : best, null);
+    if (!target) { enemy.moving = false; return; }
+    const dx = target.x - enemy.x, dy = target.y - enemy.y, d = Math.hypot(dx, dy) || 1;
+    enemy.heading = Math.atan2(dy, dx); enemy.facing = dx < 0 ? -1 : 1;
+    if (now < Number(enemy.attackUntil || 0)) { enemy.moving = false; return; }
+    if (d > stats.range) {
+      moveHistoryEnemy(enemy, dx / d * stats.speed * dt, dy / d * stats.speed * dt);
+      enemy.moving = true; return;
+    }
+    enemy.moving = false;
+    if (now < Number(enemy.npcNextAttackAt || 0)) return;
+    enemy.attackSerial = (Number(enemy.attackSerial) || 0) + 1;
+    enemy.attackUntil = now + Math.min(1100, stats.cooldown);
+    enemy.npcNextAttackAt = now + stats.cooldown;
+    const impact = this.armKnockback(target, dx, dy, enemy.type === "golem" ? 125 : 82, enemy.type === "golem" ? 120 : 75);
+    this.applyDamage("player", target, stats.damage, enemy.type + "_attack", enemy.id, impact);
+    if (target.hp <= 0) this.defeatPlayer(target, now);
   }
 
   async fetch(request) {
@@ -227,7 +364,7 @@ export class HistoryRoom extends DurableObject {
     const url = new URL(request.url);
 
     if (url.pathname === "/info") {
-      return json({ players: this.clients.size, dragonsAlive: this.room.dragons.filter(d => d.alive).length });
+      return json({ players: this.clients.size, enemiesAlive: this.room.dragons.filter(d => d.alive).length });
     }
 
     if ((request.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
@@ -260,7 +397,8 @@ export class HistoryRoom extends DurableObject {
       regenSerial: 0,
       burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null, burnSourceX: 0, burnSourceY: 0,
       knockUntil: 0, knockVX: 0, knockVY: 0,
-      lastPoseSeq: 0, lastPoseAt: 0
+      lastPoseSeq: 0, lastPoseAt: 0,
+      checkpointId: null, checkpointX: HISTORY_MAP_SPAWN.x, checkpointY: HISTORY_MAP_SPAWN.y
     };
     Object.assign(this.room.players[uid], { name, hero: hero.id, type: hero.type, clan: hero.clan, variant: hero.variant });
 
@@ -279,7 +417,11 @@ export class HistoryRoom extends DurableObject {
     this.clients.delete(uid);
     if (this.room?.players?.[uid]) delete this.room.players[uid];
     this.broadcast({ type: "presence", uid, joined: false, players: this.publicPlayers() });
-    if (!this.clients.size) this.stopLoop();
+    if (!this.clients.size) {
+      this.stopLoop();
+      this.room = this.createRoom();
+      this.ctx.storage.put("room", this.room).catch(() => {});
+    }
   }
 
   onMessage(uid, raw) {
@@ -362,10 +504,7 @@ export class HistoryRoom extends DurableObject {
     }
     const knockDx = (Number(target.knockVX) || 0) * dt, knockDy = (Number(target.knockVY) || 0) * dt;
     if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy);
-    else {
-      target.x = clamp(target.x + knockDx, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-      target.y = clamp(target.y + knockDy, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
-    }
+    else moveHistoryEnemy(target, knockDx, knockDy);
     const damping = Math.pow(.16, dt);
     target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
     return true;
@@ -594,27 +733,16 @@ export class HistoryRoom extends DurableObject {
 
   damageDragon(dragon, amount, kind = "player", sourceId = null, impact = null) {
     if (!dragon?.alive) return 0;
-    const dealt = this.applyDamage("dragon", dragon, amount, kind, sourceId, impact);
-    if (dealt > 0 && dragon.alive && dragon.hp > 0 && sourceId) {
+    const dealt = this.applyDamage("enemy", dragon, amount, kind, sourceId, impact);
+    if (dragon.type === "dragon" && dealt > 0 && dragon.alive && dragon.hp > 0 && sourceId) {
       const first = !dragon.firstHitSeen;
-      dragon.firstHitSeen = true;
-      dragon.retaliatePending = true;
-      dragon.retaliateTargetId = sourceId;
+      dragon.firstHitSeen = true; dragon.retaliatePending = true; dragon.retaliateTargetId = sourceId;
       if (first) {
-        dragon.retaliateImmediate = true;
-        dragon.npcNextAttackAt = 0;
-        dragon.nextShotAt = 0;
-        dragon.closeShotAt = 0;
+        dragon.retaliateImmediate = true; dragon.npcNextAttackAt = 0; dragon.nextShotAt = 0; dragon.closeShotAt = 0;
       }
     }
     if (dragon.hp <= 0) {
-      dragon.alive = false;
-      dragon.moving = false;
-    }
-    if (this.room.dragons.every(d => !d.alive) && !this.room.respawnAt) {
-      this.room.respawnAt = Date.now() + 2000;
-      this.room.projectiles = [];
-      this.broadcast({ type: "dragons_defeated", respawnAt: this.room.respawnAt });
+      dragon.alive = false; dragon.moving = false; dragon.removeAt = Date.now() + 1400;
     }
     return dealt;
   }
@@ -732,6 +860,7 @@ export class HistoryRoom extends DurableObject {
   updateDragons(dt, now) {
     for (const dragon of this.room.dragons) {
       if (!dragon.alive) continue;
+      if (dragon.type !== "dragon") { this.updateGroundEnemy(dragon, dt, now); continue; }
 
       if (dragon.flightState === "takeoff") {
         dragon.moving = false;
@@ -743,7 +872,7 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
-      const players = Object.values(this.room.players).filter(p => p.alive);
+      const players = Object.values(this.room.players).filter(p => p.alive && pointInArea(p.x, p.y, dragon.historyLeashArea));
       if (dragon.retaliatePending && dragon.flightState === "flying" && now >= Number(dragon.attackUntil || 0) &&
           (dragon.retaliateImmediate || now >= Number(dragon.npcNextAttackAt || 0))) {
         const retaliationTarget = this.room.players[dragon.retaliateTargetId];
@@ -817,7 +946,8 @@ export class HistoryRoom extends DurableObject {
         if (player.respawnAt && now >= player.respawnAt) {
           player.alive = true; player.respawnAt = 0;
           player.hp = player.maxHp; player.shield = player.maxShield;
-          player.x = HISTORY_MAP_SPAWN.x; player.y = HISTORY_MAP_SPAWN.y;
+          const respawn = this.checkpointForPlayer(player);
+          player.x = Number(respawn.x) || HISTORY_MAP_SPAWN.x; player.y = Number(respawn.y) || HISTORY_MAP_SPAWN.y;
           player.input = { dx: 0, dy: 0 };
           player.attackCooldownUntil = 0; player.singleUntil = 0; player.lastBasicAt = 0;
           player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
@@ -885,17 +1015,12 @@ export class HistoryRoom extends DurableObject {
       }
     }
 
+    this.updateSpawnEvents(now);
     this.updateDragons(dt, now);
     this.updateProjectiles(dt, now);
     this.updateBurns(now);
-
-    if (this.room.respawnAt && now >= this.room.respawnAt) {
-      this.room.dragonWave++;
-      this.room.dragons = this.spawnDragons(this.room.dragonWave);
-      this.room.projectiles = [];
-      this.room.respawnAt = 0;
-      this.broadcast({ type: "dragons_respawned", wave: this.room.dragonWave, dragons: this.room.dragons });
-    }
+    this.updateMapProgress(now);
+    this.room.dragons = this.room.dragons.filter(enemy => enemy.alive || now < Number(enemy.removeAt || 0));
 
     this.room.seq++;
     if (now - this.lastBroadcastAt >= 50) {
@@ -936,7 +1061,11 @@ export class HistoryRoom extends DurableObject {
       playBounds: PVP_PLAY_BOUNDS,
       rounds: null,
       players: this.publicPlayers(),
-      dragons: this.room.dragons,
+      enemies: this.room.dragons,
+      dragons: this.room.dragons.filter(enemy => enemy.type === "dragon"),
+      finished: !!this.room.finished,
+      victoryAt: Number(this.room.victoryAt) || 0,
+      spawnState: this.room.spawnState,
       projectiles: this.room.projectiles.map(p => ({
         id: p.id, kind: p.kind, serial: p.serial, x: p.x, y: p.y, vx: p.vx, vy: p.vy,
         speed: p.speed, damage: p.damage, burn: p.burn, targetId: p.targetId, team: p.team, sourceId: p.sourceId,
