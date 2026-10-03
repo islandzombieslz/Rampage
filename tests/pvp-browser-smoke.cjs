@@ -69,6 +69,20 @@ const pvpTestHook=`window.__pvpBrowserTest={
      checkpoints:events.filter(e=>e.kind==='checkpoint').length,
      victories:events.filter(e=>e.kind==='victory').length};
  },
+ historyLocalDoors(){
+   const doors=historyMapData().doors||[],prox=doors.find(d=>d.openWhen==='proximity'),defeat=doors.find(d=>d.openWhen==='defeat_count');
+   const me=pvpLocalHero();if(!me||!prox||!defeat)return null;
+   me.x=Number(prox.x)-20;me.y=Number(prox.y)+Number(prox.h)/2;HistoryLocalAdapter.updateDoors(performance.now(),me);
+   const area=defeat.enemyArea,enemy={x:Number(area.x)+Number(area.w)/2,y:Number(area.y)+Number(area.h)/2};
+   for(let i=0;i<Number(defeat.enemyCount||0);i++)HistoryLocalAdapter.registerDoorDefeat({...enemy,id:'door-test-'+i});
+   HistoryLocalAdapter.updateDoors(performance.now(),me);
+   return {
+     count:doors.length,
+     proximity:{id:prox.id,open:!!HistoryLocalAdapter.doorState[prox.id]?.open,collision:historyDoorCollisionActive(prox)},
+     defeat:{id:defeat.id,required:Number(defeat.enemyCount)||0,defeats:Number(HistoryLocalAdapter.doorState[defeat.id]?.defeats)||0,
+       open:!!HistoryLocalAdapter.doorState[defeat.id]?.open,collision:historyDoorCollisionActive(defeat)}
+   };
+ },
  historyLocalCheckpoint(){
    const me=pvpLocalHero();if(!me)return null;
    me.x=599;me.y=656;HistoryLocalAdapter.updateProgress(performance.now(),me);
@@ -565,6 +579,12 @@ async function main(){
      active:true,historyActive:true,local:true,serverId:'history-local',online:false,host:true,
      x:597,y:2049,enemies:14,spawns:3,checkpoints:2,victories:1
    },'local History must start from the editor origin, host locally and spawn the three configured waves');
+   const localDoors=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalDoors());
+   assert.deepEqual(localDoors,{
+     count:2,
+     proximity:{id:'obj218',open:true,collision:false},
+     defeat:{id:'obj228',required:5,defeats:5,open:true,collision:false}
+   },'local History must open the proximity door and the five-defeat door, removing collision in both open states');
    const checkpoint=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalCheckpoint());
    assert.deepEqual(checkpoint,{id:'event3',x:599,y:656},'reaching checkpoint 1 must update the local respawn point');
    assert(await page.evaluate(()=>window.__pvpBrowserTest.leaveLocalHistory()),'local History must disconnect without a cloud room');

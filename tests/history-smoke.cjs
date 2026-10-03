@@ -23,12 +23,22 @@ assert(localStart>=0&&localEnd>localStart&&!localBlock.includes('new WebSocket('
 
 assert(worker.includes('class HistoryRoom extends DurableObject')&&worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'Cloudflare History must keep a Durable Object authority');
-assert(worker.includes('const HISTORY_SCHEMA_VERSION = 7')&&worker.includes('HISTORY_MAP_EVENTS'),
+assert(worker.includes('const HISTORY_SCHEMA_VERSION = 8')&&worker.includes('HISTORY_MAP_EVENTS'),
   'History server schema must be upgraded for editor gameplay events');
-assert(historyMapClient.includes('"id":"history-castle-v2"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v2"'),
+assert(historyMapClient.includes('"id":"history-castle-v3"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v3"'),
   'client and Cloudflare must use the updated editor map version');
-assert(historyMapClient.includes('"visualCount":127')&&historyMapClient.includes('"colliderCount":55')&&historyMapClient.includes('"eventCount":7'),
-  'updated map must contain all 127 visuals, 55 colliders and 7 gameplay events');
+assert(historyMapClient.includes('"visualCount":131')&&historyMapClient.includes('"colliderCount":57')&&
+  historyMapClient.includes('"doorCount":2')&&historyMapClient.includes('"eventCount":7'),
+  'updated map must contain 131 visuals, 57 static colliders, two dynamic doors and 7 gameplay events');
+assert(historyMapServer.includes('HISTORY_MAP_DOORS')&&
+  (historyMapServer.match(/"openWhen":"proximity"/g)||[]).length===1&&
+  (historyMapServer.match(/"openWhen":"defeat_count"/g)||[]).length===1&&historyMapServer.includes('"enemyCount":5'),
+  'v3 map must preserve the proximity door and the five-defeat door from the editor');
+assert(worker.includes('updateDoors(now')&&worker.includes('registerDoorDefeat(enemy')&&worker.includes('historyDoorCollisionActive')&&
+  worker.includes('doorState: this.room.doorState'),
+  'Cloudflare must authoritatively open doors and change their collision state');
+assert(html.includes('historyDoorCollisionActive')&&html.includes('scanDoorDefeats')&&html.includes('doorByObject')&&html.includes('door.openAsset'),
+  'local History must evaluate the same door triggers, collision and open artwork');
 assert(historyMapServer.includes('HISTORY_MAP_SPAWN = Object.freeze({"x":597,"y":2049})'),
   'player origin must come from the editor player_start event');
 assert((historyMapServer.match(/"kind":"enemy_spawn"/g)||[]).length===3&&
