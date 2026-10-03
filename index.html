@@ -7563,6 +7563,14 @@ function finishHistoryVictory(uid){
  if(!state.historyLocal)setTimeout(()=>{if(HistoryAdapter.active)HistoryAdapter.disconnect(false)},3900);
 }
 function historyMapEvents(kind){return (historyMapData().events||[]).filter(event=>event.kind===kind)}
+const HISTORY_LOCAL_ENEMY_STATS=Object.freeze({
+ naja:Object.freeze({hp:300,shield:250,speed:117}),
+ poseidon:Object.freeze({hp:300,shield:250,speed:117}),
+ anubis:Object.freeze({hp:100,shield:50,speed:97.5}),
+ golem:Object.freeze({hp:150,shield:100,speed:117}),
+ dragon:Object.freeze({hp:100,shield:50,speed:97.5}),
+ seahorse:Object.freeze({hp:100,shield:50,speed:97.5})
+});
 function historyLocalSpawnPoint(event,index){
  const angle=index*2.399963229728653,r=index?34+(index%3)*18:0,area=event.area||null;
  let x=Number(event.x)||0,y=Number(event.y)||0;
@@ -7610,6 +7618,7 @@ const HistoryLocalAdapter={
      if(!hero||!count)continue;
      for(let i=0;i<count;i++){
        const point=historyLocalSpawnPoint(event,offset++),npc=pvpBaseEntity({...hero,id:type},point.x,point.y,'pvp-enemy','#d86543',null,true);
+       const stats=HISTORY_LOCAL_ENEMY_STATS[type];if(stats){npc.hp=npc.maxHp=stats.hp;npc.shield=npc.maxShield=stats.shield;npc.speed=stats.speed}
        npc.historySpawnEventId=event.id;npc.historyLeashArea=event.area?{...event.area}:null;
        if(type==='dragon')beginDragonTakeoff(npc);
        spawned++;
@@ -13236,7 +13245,7 @@ function beginDragonTakeoff(e){
              if(shouldSimulate&&!shouldSimulate(target))continue;
              while(target.alive&&target.dragonBurnNextTick&&now>=target.dragonBurnNextTick&&target.dragonBurnNextTick<=target.dragonBurnUntil){
                const burnSource=dragonBurnAttacker(target,entityById);
-               applyCombatHit(target,burnSource,DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:burnSource.type==='king'});
+               applyCombatHit(target,burnSource,state.historyActive&&state.historyLocal?2.5:DRAGON_BURN_DAMAGE,{knockForce:0,knockTime:0,tilt:4,allowFlying:burnSource.type==='king'});
                target.dragonBurnNextTick+=DRAGON_BURN_TICK_MS;
              }
              if(now>target.dragonBurnUntil||!target.alive){
@@ -13263,7 +13272,7 @@ function beginDragonTakeoff(e){
              e.dragonCloseShotAt=Math.max(Number(e.dragonCloseShotAt)||0,now+DRAGON_CLOSE_SHOT_COOLDOWN_MS);
            }
            const startX=e.x+Math.cos(angle)*42,startY=e.y-16+Math.sin(angle)*18;
-           state.dragonProjectiles.push({id:pvpRegionalSimulationUid?pvpNextRegionalProjectileId('df'):'df_'+(++state.dragonProjectileSeq),kind:'dragon',serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,speed:DRAGON_FIREBALL_SPEED,damage:DRAGON_FIREBALL_DAMAGE,burn:true,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
+           state.dragonProjectiles.push({id:pvpRegionalSimulationUid?pvpNextRegionalProjectileId('df'):'df_'+(++state.dragonProjectileSeq),kind:'dragon',serial:e.dragonAttackSerial,x:startX,y:startY,vx:Math.cos(angle)*DRAGON_FIREBALL_SPEED,vy:Math.sin(angle)*DRAGON_FIREBALL_SPEED,speed:DRAGON_FIREBALL_SPEED,damage:state.historyActive&&state.historyLocal?10:DRAGON_FIREBALL_DAMAGE,burn:true,targetId:target.id,targetX:target.x,targetY:target.y,team:e.team,sourceId:e.id,createdAt:now,expireAt:now+4500});
            addWarGoalProgress(e.team,'ranged');
            return true;
           }
