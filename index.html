@@ -14233,6 +14233,7 @@ function historyMapVisualZ(o,top,zoom){
 function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  if(!state.historyActive){if(historyMapNodes.size)clearHistoryMapVisuals();return}
  const map=historyMapData(),objects=map.objects||[],assets=map.assets||[];
+ const doorByObject=new Map((map.doors||[]).map(door=>[Number(door.objectIndex),door]));
  for(let i=0;i<objects.length;i++){
    const o=objects[i],x=Number(o[1])||0,y=Number(o[2])||0,w=Math.max(1,Number(o[3])||1),h=Math.max(1,Number(o[4])||1);
    const cx=(x-cullLeft)*cullZoom,cy=(y-cullTop)*cullZoom,cw=w*cullZoom,ch=h*cullZoom;
@@ -14241,8 +14242,18 @@ function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullT
    if(!onScreen){if(img)img.style.visibility='hidden';continue}
    if(!img){
      img=document.createElement('img');img.className='history-map-object';img.draggable=false;img.decoding='async';
-     img.src=assets[Number(o[0])||0]||'';entityCameraLayer.appendChild(img);historyMapNodes.set(i,img);
+     entityCameraLayer.appendChild(img);historyMapNodes.set(i,img);
    }
+   const door=doorByObject.get(i),runtime=door?historyDoorStateFor(door):null;
+   let assetIndex=Number(o[0])||0;
+   if(door&&runtime?.open&&door.swapOnOpen){
+     const elapsed=Math.max(0,Date.now()-Number(runtime.openedAt||0));
+     const transitionMs=Math.max(50,Number(door.transitionSeconds||1)*1000);
+     if(door.transitionEnabled&&door.transitionAsset!=null&&elapsed<transitionMs)assetIndex=Number(door.transitionAsset);
+     else if(door.openAsset!=null)assetIndex=Number(door.openAsset);
+   }
+   const source=assets[assetIndex]||'';
+   if(img._historySrc!==source){img._historySrc=source;img.src=source}
    img.style.visibility='visible';
    const sx=(x-left)*zoom,sy=(y-top)*zoom,sw=w*zoom,sh=h*zoom;
    if(img._hx!==sx){img._hx=sx;img.style.left=sx+'px'}
