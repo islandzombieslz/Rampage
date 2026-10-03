@@ -7810,7 +7810,7 @@ $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
 async function enterModeFromCard(card){
- $('.mode-card').forEach(x=>x.classList.remove('selected'));card.classList.add('selected');
+ document.querySelectorAll('.mode-card').forEach(x=>x.classList.remove('selected'));card.classList.add('selected');
  state.mode=card.dataset.mode;
  if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}
  if(state.mode==='history'){await openHistoryServerBrowser();return}
@@ -7830,7 +7830,7 @@ async function enterModeFromCard(card){
    navigateScreen('configScreen');
  }
 }
-$('.mode-card').forEach(c=>c.onclick=()=>enterModeFromCard(c).catch(console.error));
+document.querySelectorAll('.mode-card').forEach(c=>c.onclick=()=>enterModeFromCard(c).catch(console.error));
 let warLobbySettingsSyncTimer=null;
 function scheduleWarLobbySettingsSync(){
   if(!NetworkAdapter.online||!NetworkAdapter.isHost||state.mode!=='war')return;
