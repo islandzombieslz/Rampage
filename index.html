@@ -185,7 +185,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 }
 #modeScreen .mode-actions{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:1fr;
   gap:22px;
   align-items:center;
 }
@@ -3054,7 +3054,6 @@ window.dispatchEvent(new Event('firebase-ready'));
     </div>
     <div class="mode-actions">
       <button data-back="menuScreen">Voltar</button>
-      <button id="configureBtn" class="primary">Configurar partida</button>
     </div>
   </div>
 </section>
@@ -4836,7 +4835,41 @@ function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function rand(a,b){return a+Math.random()*(b-a)}
-function getCurrentNick(){const input=$('#nickInput'),stored=localStorage.getItem('rampageNick'),authName=window.FirebaseBridge?.firebaseAuth?.currentUser?.displayName;const v=(input?.value||stored||authName||'Player').trim().slice(0,18);return v||'Player'}
+function accountNickStorageKey(uid){return uid?'rampageNick:'+uid:'rampageNick'}
+function normalizeAccountNick(value,fallback='Player'){const v=String(value||'').trim().slice(0,18);return v||fallback}
+function getCurrentNick(){
+ const input=$('#nickInput'),user=window.FirebaseBridge?.firebaseAuth?.currentUser;
+ const stored=localStorage.getItem(accountNickStorageKey(user?.uid));
+ return normalizeAccountNick(input?.value||stored||user?.displayName||(user?.isAnonymous?'Convidado':'Player'));
+}
+async function loadAccountNick(F,user){
+ if(!user)return null;
+ let profileNick='';
+ try{
+   const snap=await F.get(F.ref(F.firebaseDb,'profiles/'+user.uid));
+   profileNick=String(snap.val()?.nick||'');
+ }catch(err){console.warn('Não foi possível carregar o nick da conta:',err)}
+ const cached=localStorage.getItem(accountNickStorageKey(user.uid));
+ const nick=normalizeAccountNick(profileNick||cached||user.displayName||(user.isAnonymous?'Convidado':'Player'));
+ localStorage.setItem(accountNickStorageKey(user.uid),nick);
+ const input=$('#nickInput'),name=$('#accountName');
+ if(input)input.value=nick;if(name)name.textContent=nick;
+ return nick;
+}
+async function saveAccountNick(F,user,nick){
+ if(!user)return false;
+ const n=normalizeAccountNick(nick,user.isAnonymous?'Convidado':'Player');
+ const ref=F.ref(F.firebaseDb,'profiles/'+user.uid);
+ const tx=await F.runTransaction(ref,current=>{
+   const profile=current&&typeof current==='object'?current:{};
+   const total=Number(profile.totalXp);
+   return {...profile,totalXp:Number.isSafeInteger(total)&&total>=0?total:0,nick:n};
+ },{applyLocally:false});
+ if(!tx.committed)throw new Error('Nick não confirmado pelo Firebase');
+ localStorage.setItem(accountNickStorageKey(user.uid),n);
+ try{await F.updateProfile(user,{displayName:n})}catch(_){}
+ return true;
+}
 /* Account progression: one monotonic Firebase profile per authenticated UID, outside ephemeral rooms. */
 /* Account progression: write-ahead XP ledger plus authenticated RTDB profile.
    A denied/offline database never silently discards an earned match. */
@@ -6714,12 +6747,14 @@ async function initFirebaseAccountUI(){
    NetworkAdapter.localPlayerId=user?.uid||null;
    watchAccountXP(user);
    if(user){
-     const saved=localStorage.getItem('rampageNick'),display=saved||user.displayName||(user.isAnonymous?'Convidado':'Player');
+     const cached=localStorage.getItem(accountNickStorageKey(user.uid));
+     const display=normalizeAccountNick(cached||user.displayName||(user.isAnonymous?'Convidado':'Player'));
      nick.value=display;name.textContent=display;status.textContent=user.isAnonymous?'Conectado como convidado':'Conectado com Google';
      $('#guestLogin').style.display='none';$('#googleLogin').style.display='none';
      $('#saveNick').style.display='block';$('#logoutBtn').style.display='block';
+     loadAccountNick(F,user).catch(console.error);
    }else{
-     name.textContent='Entrar';status.textContent='Conectando à conta…';
+     name.textContent='Entrar';nick.value='';status.textContent='Conectando à conta…';
      $('#guestLogin').style.display='block';$('#googleLogin').style.display='block';
      $('#saveNick').style.display='none';$('#logoutBtn').style.display='none';
    }
@@ -6729,9 +6764,18 @@ async function initFirebaseAccountUI(){
 window.addEventListener('firebase-ready',()=>{const s=$('#firebaseStatus');if(s)s.textContent='Firebase: online';NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)});if(window.FirebaseBridge){NetworkAdapter.startRoomMaintenance();initFirebaseAccountUI().catch(console.error)}
 $('#retryAccountXpBtn').onclick=()=>{if(accountProgress.uid)void verifyAccountXP(accountProgress.uid,accountProgress.epoch)};
 $('#accountButton').onclick=e=>{e.stopPropagation();$('#accountMenu').classList.toggle('open')};$('#accountMenu').onclick=e=>e.stopPropagation();document.addEventListener('click',()=>$('#accountMenu')?.classList.remove('open'));
-$('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#accountName').textContent=n};
-$('#googleLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();try{const cred=await F.signInWithPopup(F.firebaseAuth,F.googleProvider);NetworkAdapter.localPlayerId=cred.user.uid;if(cred.user.displayName&&!localStorage.getItem('rampageNick'))localStorage.setItem('rampageNick',cred.user.displayName.slice(0,18))}catch(err){if(/popup|blocked|operation-not-supported/i.test(String(err?.code||err?.message)))await F.signInWithRedirect(F.firebaseAuth,F.googleProvider);else{$('#accountStatus').textContent='Erro no login Google.';console.error(err)}}};
-$('#saveNick').onclick=async()=>{const n=getCurrentNick();localStorage.setItem('rampageNick',n);$('#nickInput').value=n;$('#accountName').textContent=n;const F=await NetworkAdapter.waitFirebase(),u=F.firebaseAuth.currentUser;try{if(u)await F.updateProfile(u,{displayName:n})}catch(_){}if(NetworkAdapter.roomId&&u){try{await F.update(F.ref(F.firebaseDb,`rooms/${NetworkAdapter.roomId}/players/${u.uid}`),{name:n})}catch(_){}}};
+$('#guestLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase(),cred=await F.signInAnonymously(F.firebaseAuth);NetworkAdapter.localPlayerId=cred.user.uid;await loadAccountNick(F,cred.user)};
+$('#googleLogin').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();try{const cred=await F.signInWithPopup(F.firebaseAuth,F.googleProvider);NetworkAdapter.localPlayerId=cred.user.uid;await loadAccountNick(F,cred.user)}catch(err){if(/popup|blocked|operation-not-supported/i.test(String(err?.code||err?.message)))await F.signInWithRedirect(F.firebaseAuth,F.googleProvider);else{$('#accountStatus').textContent='Erro no login Google.';console.error(err)}}};
+$('#saveNick').onclick=async()=>{
+ const F=await NetworkAdapter.waitFirebase(),u=F.firebaseAuth.currentUser;if(!u)return;
+ const n=getCurrentNick(),status=$('#accountStatus');status.textContent='Salvando nick na conta…';
+ try{
+   await saveAccountNick(F,u,n);
+   $('#nickInput').value=n;$('#accountName').textContent=n;
+   if(NetworkAdapter.roomId)try{await F.update(F.ref(F.firebaseDb,`rooms/${NetworkAdapter.roomId}/players/${u.uid}`),{name:n})}catch(_){}
+   status.textContent=u.isAnonymous?'Nick salvo no convidado':'Nick salvo na sua conta';
+ }catch(err){status.textContent='Não foi possível salvar o nick na conta';console.error('Nick save:',err)}
+};
 $('#logoutBtn').onclick=async()=>{const F=await NetworkAdapter.waitFirebase();await NetworkAdapter.leaveRoom();await F.signOut(F.firebaseAuth)};
 
 
@@ -7765,24 +7809,28 @@ $('#historyServerConfirm').onclick=async()=>{
 $('#createBtn').onclick=()=>navigateScreen('modeScreen');
 $('#joinBtn').onclick=()=>navigateScreen('joinScreen');
 $$('[data-back]').forEach(b=>b.onclick=async()=>{if(b.closest('#lobbyScreen')&&NetworkAdapter.online)await NetworkAdapter.leaveRoom();navigateScreen(b.dataset.back)});
-$$('.mode-card').forEach(c=>c.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');state.mode=c.dataset.mode;if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}if(state.mode==='history')openHistoryServerBrowser().catch(console.error)});
-$('#configureBtn').onclick=async()=>{
-  if(state.mode==='history'){await openHistoryServerBrowser();return}
-  if(state.mode==='war'){
-    state.rounds=Math.max(2,Number(state.rounds)||2);
-    await createCurrentRoom($('#configureBtn'));
-    return;
-  }
-  if(state.mode==='pvp')pvpLoadFlameFrames();
-  const pveConfig=$('#pveConfig');
-  pveConfig.style.display='grid';
-  pveConfig.classList.toggle('pvp-simple-config',state.mode==='pvp');
-  $('#configTitle').textContent=state.mode==='pvp'?'Configurar PvP':'Configurar Players vs Inimigos';
-  const configScreen=$('#configScreen');
-  configScreen.classList.add('pve-config');
-  configScreen.classList.remove('war-config');
-  navigateScreen('configScreen');
-};
+async function enterModeFromCard(card){
+ document.querySelectorAll('.mode-card').forEach(x=>x.classList.remove('selected'));card.classList.add('selected');
+ state.mode=card.dataset.mode;
+ if(state.mode==='pvp'||state.mode==='history'){preloadExtraPVPGifDurations();pvpLoadFlameFrames()}
+ if(state.mode==='history'){await openHistoryServerBrowser();return}
+ if(state.mode==='war'){
+   state.rounds=Math.max(2,Number(state.rounds)||2);
+   await createCurrentRoom(null);
+   return;
+ }
+ if(state.mode==='pvp'){
+   const pveConfig=$('#pveConfig');
+   pveConfig.style.display='grid';
+   pveConfig.classList.add('pvp-simple-config');
+   $('#configTitle').textContent='Configurar PvP';
+   const configScreen=$('#configScreen');
+   configScreen.classList.add('pve-config');
+   configScreen.classList.remove('war-config');
+   navigateScreen('configScreen');
+ }
+}
+document.querySelectorAll('.mode-card').forEach(c=>c.onclick=()=>enterModeFromCard(c).catch(console.error));
 let warLobbySettingsSyncTimer=null;
 function scheduleWarLobbySettingsSync(){
   if(!NetworkAdapter.online||!NetworkAdapter.isHost||state.mode!=='war')return;
