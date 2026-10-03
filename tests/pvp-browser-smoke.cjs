@@ -572,8 +572,8 @@ async function main(){
    await page.locator('#createBtn').click();
    await page.locator('#modeScreen.active').waitFor({timeout:8000});
    await page.locator('.mode-card[data-mode="pvp"]').click();
-   await page.locator('#configureBtn').click();
    await page.locator('#configScreen.active').waitFor({timeout:8000});
+   assert.equal(await page.locator('#configureBtn').count(),0,'mode screen no longer needs a configure button');
    assert.equal(await page.locator('#pveConfig .config:visible').count(),2,'PvP config shows only rounds and difficulty');
    assert.equal(await page.locator('#pvpTimeConfig:visible').count(),0,'PvP time selector is removed from the visible menu');
    assert.equal(await page.locator('#pvpSpeedConfig:visible').count(),0,'PvP speed selector is removed from the visible menu');
