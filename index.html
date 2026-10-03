@@ -7340,7 +7340,7 @@ const HistoryAdapter={
    }
    if(data.type==='history_spawn')return;
    if(data.type==='history_victory'){
-     if(String(data.uid)===String(this.uid))finishHistoryVictory(this.uid);
+     finishHistoryVictory(this.uid);
      return;
    }
    if(data.type==='dragons_defeated'||data.type==='dragons_respawned')return;
@@ -7674,7 +7674,14 @@ const HistoryLocalAdapter={
    }
    const entityById=rebuildWarEntityIdMap();
    updateDragonProjectiles(dt,entityById);updateDragonBurns(now,entityById);
+   const beforePhysics=new Map(state.entities.filter(e=>e.alive).map(e=>[e.id,{x:e.x,y:e.y}]));
    updateEntities(dt);updateParticles(dt);
+   for(const e of state.entities){
+     if(!e.alive)continue;
+     const prev=beforePhysics.get(e.id);if(!prev)continue;
+     if(e.pvpEnemy)historyConstrainEnemy(e,prev.x,prev.y);
+     else if(historyPositionBlocked(e.x,e.y,e.r||30)){e.x=prev.x;e.y=prev.y}
+   }
    const player=state.players.find(p=>String(p.id)===String(this.uid));
    const body=state.entities.find(e=>String(e.ownerId)===String(this.uid)&&!e.pvpMinion);
    if(body&&!body.alive&&!this.reviveAt){
