@@ -7723,7 +7723,9 @@ function updateHistoryServerConfirm(servers=historyServerRows){
  message.textContent=local?'Servidor local: esta máquina será o host da partida.':ready?'Servidor Cloudflare disponível. Selecione e entre.':'Servidor History Cloudflare indisponível.';
 }
 async function refreshHistoryServers(){
- const message=$('#historyServerMessage');if(message)message.textContent='Consultando servidores...';
+ const message=$('#historyServerMessage');
+ const immediate=[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];renderHistoryServers(immediate);
+ if(message&&historySelectedServerId!=='history-local')message.textContent='Consultando servidores Cloudflare...';
  try{
    const response=await fetch(historyServerEndpoint('/servers'),{cache:'no-store'});if(!response.ok)throw Error('HTTP '+response.status);
    const data=await response.json(),cloud=Array.isArray(data?.servers)?data.servers:[];
