@@ -6893,17 +6893,17 @@ const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.wor
 let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
 let historySelectedServerId=null;
 const HISTORY_SERVER_FALLBACK=Object.freeze([
- {id:'history-1',name:'Servidor História 1',map:'history-castle-v2',maxPlayers:8,players:0,online:false}
+ {id:'history-1',name:'Servidor História 1',map:'history-castle-v3',maxPlayers:8,players:0,online:false}
 ]);
 const HISTORY_LOCAL_SERVER=Object.freeze({
- id:'history-local',name:'Servidor local • Solo',map:'history-castle-v2',maxPlayers:1,players:1,online:true,local:true
+ id:'history-local',name:'Servidor local • Solo',map:'history-castle-v3',maxPlayers:1,players:1,online:true,local:true
 });
 let historyServerRows=[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];
 const HISTORY_RENDER_DELAY_MIN_MS=35;
 const HISTORY_RENDER_DELAY_MAX_MS=80;
 const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
 const HISTORY_INPUT_KEEPALIVE_MS=50;
-const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v1',width:3200,height:2200,spawn:Object.freeze({x:511.6183399912587,y:1001.9159986085518}),assets:[],objects:[],colliders:[]});
+const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v3',width:3200,height:2200,spawn:Object.freeze({x:511.6183399912587,y:1001.9159986085518}),assets:[],objects:[],colliders:[]});
 function historyMapData(){return window.RAMPAGE_HISTORY_MAP||HISTORY_MAP_FALLBACK}
 function historyMapBounds(r=0){
  const m=historyMapData();
@@ -6914,9 +6914,24 @@ function historyCircleRectHit(cx,cy,r,rect){
  const qx=Math.max(x,Math.min(cx,x+w)),qy=Math.max(y,Math.min(cy,y+h));
  const dx=cx-qx,dy=cy-qy;return dx*dx+dy*dy<r*r;
 }
+function historyDoorStateFor(door){
+ return state.historyDoorState&&door?state.historyDoorState[door.id]||null:null;
+}
+function historyDoorCollisionActive(door){
+ const runtime=historyDoorStateFor(door),open=!!runtime?.open;
+ return open?!!door.openCollision:door.closedCollision!==false;
+}
+function historyPointRectDistance(px,py,rect){
+ const x=Number(rect?.x)||0,y=Number(rect?.y)||0,w=Math.max(0,Number(rect?.w)||0),h=Math.max(0,Number(rect?.h)||0);
+ const qx=clamp(Number(px)||0,x,x+w),qy=clamp(Number(py)||0,y,y+h);
+ return Math.hypot((Number(px)||0)-qx,(Number(py)||0)-qy);
+}
 function historyPositionBlocked(x,y,r=30){
- const colliders=historyMapData().colliders||[];
+ const map=historyMapData(),colliders=map.colliders||[];
  for(let i=0;i<colliders.length;i++)if(historyCircleRectHit(x,y,r,colliders[i]))return true;
+ for(const door of map.doors||[]){
+   if(historyDoorCollisionActive(door)&&historyCircleRectHit(x,y,r,[door.x,door.y,door.w,door.h]))return true;
+ }
  return false;
 }
 function historyPointInArea(x,y,area,pad=0){
@@ -7311,7 +7326,7 @@ const HistoryAdapter={
    }
  },
  begin(snapshot){
-   this.active=true;state.historyActive=true;state.historyLocal=false;state.historyServerId=this.serverId;
+   this.active=true;state.historyActive=true;state.historyLocal=false;state.historyServerId=this.serverId;state.historyDoorState={};
    state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
    state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.entities=[];
    warBurningEntities.clear();warFrameEnemiesByTeam.clear();clearEntityVisuals();pvpResetLocalSpectatorAfterRevive();
@@ -7382,6 +7397,12 @@ const HistoryAdapter={
      if(String(data.uid)===String(this.uid))flash('CHECKPOINT ATIVADO',1.15);
      return;
    }
+   if(data.type==='history_door'){
+     state.historyDoorState ||= {};
+     state.historyDoorState[data.doorId]={...(state.historyDoorState[data.doorId]||{}),open:data.open!==false,
+       defeats:Number(data.defeats)||0,openedAt:Number(data.openedAt)||Number(data.at)||Date.now()};
+     return;
+   }
    if(data.type==='history_spawn')return;
    if(data.type==='history_victory'){
      finishHistoryVictory(this.uid);
@@ -7412,6 +7433,7 @@ const HistoryAdapter={
      this.renderDelayMs=clamp(38+this.rttMs*.12+this.jitterMs*1.35,HISTORY_RENDER_DELAY_MIN_MS,HISTORY_RENDER_DELAY_MAX_MS);
    }
    this.lastSnapshotAt=arrival;this.lastSnapshotSeq=seq;this.lastServerTime=Number(snapshot.serverTime)||Date.now();
+   state.historyDoorState=snapshot.doorState&&typeof snapshot.doorState==='object'?snapshot.doorState:{};
    const world=snapshot.world||{};state.world.w=Number(world.width)||PVP_ARENA.w;state.world.h=Number(world.height)||PVP_ARENA.h;
    const rawPlayers=Array.isArray(snapshot.players)?snapshot.players:[];
    const oldPlayers=new Map(state.players.map(p=>[String(p.id),p]));
@@ -7761,7 +7783,7 @@ function renderHistoryServers(servers){
  for(const server of rows){
    const button=document.createElement('button');button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
    const local=!!server.local,status=local||!!historyServerBase&&server.online!==false;
-   const meta=local?'mesmo mapa • solo • sem Cloudflare':historyEscape(server.map||'history-castle-v2')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores';
+   const meta=local?'mesmo mapa • solo • sem Cloudflare':historyEscape(server.map||'history-castle-v3')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores';
    button.innerHTML='<span><div class="history-server-name">'+historyEscape(server.name||server.id)+'</div>'+
      '<div class="history-server-meta">'+meta+'</div></span>'+
      '<span class="history-server-status'+(status?'':' offline')+'">'+(local?'LOCAL':status?'ONLINE':'OFFLINE')+'</span>';
