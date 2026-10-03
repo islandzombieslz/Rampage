@@ -876,7 +876,7 @@ export class HistoryRoom extends DurableObject {
       if (dragon.retaliatePending && dragon.flightState === "flying" && now >= Number(dragon.attackUntil || 0) &&
           (dragon.retaliateImmediate || now >= Number(dragon.npcNextAttackAt || 0))) {
         const retaliationTarget = this.room.players[dragon.retaliateTargetId];
-        const target = retaliationTarget?.alive
+        const target = retaliationTarget?.alive && pointInArea(retaliationTarget.x, retaliationTarget.y, dragon.historyLeashArea)
           ? retaliationTarget
           : players.reduce((best, p) => !best || distance(dragon, p) < distance(dragon, best) ? p : best, null);
         if (target) {
@@ -913,8 +913,7 @@ export class HistoryRoom extends DurableObject {
         if (dragon.x < edge) mx += .85; else if (dragon.x > PVP_WORLD.width - edge) mx -= .85;
         if (dragon.y < edge) my += .85; else if (dragon.y > PVP_WORLD.height - edge) my -= .85;
         const ml = Math.hypot(mx, my) || 1; mx /= ml; my /= ml;
-        dragon.x = clamp(dragon.x + mx * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-        dragon.y = clamp(dragon.y + my * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+        moveHistoryEnemy(dragon, mx * DRAGON_SPEED * dt, my * DRAGON_SPEED * dt);
         dragon.moving = true;
         continue;
       }
@@ -924,12 +923,10 @@ export class HistoryRoom extends DurableObject {
       }
 
       if (d > 285) {
-        dragon.x = clamp(dragon.x + dx / d * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-        dragon.y = clamp(dragon.y + dy / d * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+        moveHistoryEnemy(dragon, dx / d * DRAGON_SPEED * dt, dy / d * DRAGON_SPEED * dt);
         dragon.moving = true;
       } else if (d < 185) {
-        dragon.x = clamp(dragon.x - dx / d * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-        dragon.y = clamp(dragon.y - dy / d * DRAGON_SPEED * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+        moveHistoryEnemy(dragon, -dx / d * DRAGON_SPEED * dt, -dy / d * DRAGON_SPEED * dt);
         dragon.moving = true;
       } else dragon.moving = false;
     }
