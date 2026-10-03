@@ -3302,7 +3302,7 @@ window.dispatchEvent(new Event('firebase-ready'));
    BACKEND / REDE — FIREBASE RTDB, HOST AUTORITATIVO
    ========================================================= */
 const NetworkAdapter = {
-  enabled:true,roomId:null,localPlayerId:null,hostUid:null,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
+  enabled:true,roomId:null,localPlayerId:null,hostUid:null,localHost:false,roomStatus:'idle',roomUnsubscribes:[],roomCache:{},
   remoteInputs:{},processedCommands:new Set(),commandSeq:0,attackSeq:0,lastInputAt:0,lastStateAt:0,lastRemoteSeq:0,lastSnapshotReceivedAt:0,pushing:false,remoteFinishScheduled:false,
   inputSending:false,inputQueue:[],inputSendPromise:null,lastInputSignature:'',lastInputSentAt:0,
   pvpInputSeq:0,pvpRenderDelayMs:120,pvpSnapshotGapEwma:0,pvpSnapshotJitterEwma:0,pvpLastSampleAt:0,
@@ -3327,7 +3327,7 @@ const NetworkAdapter = {
      try{return await this.authPromise}finally{this.authPromise=null}
    },
   get online(){return !!this.roomId},
-  get isHost(){return !!this.roomId&&this.hostUid===this.localPlayerId},
+  get isHost(){return !!this.localHost||(!!this.roomId&&this.hostUid===this.localPlayerId)},
   async createRoom(snapshot){
     if(this.createPromise)return this.createPromise;
     this.createPromise=(async()=>{
@@ -7236,7 +7236,7 @@ const HistoryAdapter={
  rttMs:0,jitterMs:0,renderDelayMs:60,lastPingAt:0,lastPongAt:0,
  async connect(serverId){
    if(this.connecting)return false;
-   this.connecting=true;this.manualClose=false;
+   this.connecting=true;this.manualClose=false;NetworkAdapter.localHost=false;
    const message=$('#historyServerMessage'),button=$('#historyServerConfirm');
    if(button)button.disabled=true;if(message)message.textContent='Conectando ao servidor...';
    try{
@@ -7588,7 +7588,7 @@ const HistoryLocalAdapter={
    try{await NetworkAdapter.ensureAuth()}catch(_){}
    this.uid=NetworkAdapter.localPlayerId||historyFallbackUid();
    if(!NetworkAdapter.localPlayerId)NetworkAdapter.localPlayerId=this.uid;
-   NetworkAdapter.online=false;NetworkAdapter.isHost=true;NetworkAdapter.hostUid=this.uid;
+   NetworkAdapter.localHost=true;NetworkAdapter.hostUid=this.uid;
    NetworkAdapter.attackSeq=0;
    const map=historyMapData(),spawn=map.spawn||{x:597,y:2049},now=performance.now();
    this.active=true;this.spawnRuntime.clear();this.checkpointId=null;this.respawnPoint={x:Number(spawn.x),y:Number(spawn.y)};this.reviveAt=0;this.victory=false;
@@ -7703,6 +7703,7 @@ const HistoryLocalAdapter={
  },
  disconnect(showBrowser=false){
    this.active=false;this.spawnRuntime.clear();this.reviveAt=0;this.victory=false;
+   NetworkAdapter.localHost=false;
    state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.running=false;
    stopPvpCombatSfxLoops();
    if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
