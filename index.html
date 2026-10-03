@@ -3990,7 +3990,7 @@ async function runBootLoader(){
 }
 
 const state = {
-  mode:'pvp', historyActive:false, historyLocal:false, historyServerId:null, pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
+  mode:'pvp', historyActive:false, historyLocal:false, historyServerId:null, historyDoorState:{}, pveTime:60, warTime:120, rounds:2, difficulty:'easy', speed:'normal', gems:500,
   roomCode:null, players:[{id:'p1',name:'Player 1',human:true,color:'#58a6ff',clan:'warriors'}],
   round:1, running:false, phase:'idle', timeLeft:0, prepLeft:45,
   matchId:null,matchStats:{},matchResult:null,warGoalSerial:0,warGoalEvents:[],warGoalSurvivalSecond:0,
@@ -6903,7 +6903,7 @@ const HISTORY_RENDER_DELAY_MIN_MS=35;
 const HISTORY_RENDER_DELAY_MAX_MS=80;
 const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
 const HISTORY_INPUT_KEEPALIVE_MS=50;
-const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v3',width:3200,height:2200,spawn:Object.freeze({x:511.6183399912587,y:1001.9159986085518}),assets:[],objects:[],colliders:[]});
+const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v3',width:3200,height:2200,spawn:Object.freeze({x:597,y:2049}),assets:[],objects:[],colliders:[],doors:[],events:[]});
 function historyMapData(){return window.RAMPAGE_HISTORY_MAP||HISTORY_MAP_FALLBACK}
 function historyMapBounds(r=0){
  const m=historyMapData();
@@ -7605,13 +7605,13 @@ const HistoryAdapter={
    if(this.manualClose)return;
    if(wasActive){
      state.running=false;flash('CONEXÃO COM O HISTORY PERDIDA',1.8);
-     setTimeout(()=>{if(!this.active){state.historyActive=false;state.mode='history';navigateScreen('historyServerScreen');refreshHistoryServers()}},1400);
+     setTimeout(()=>{if(!this.active){state.historyActive=false;state.historyDoorState={};state.mode='history';navigateScreen('historyServerScreen');refreshHistoryServers()}},1400);
    }
  },
  disconnect(showBrowser=false){
    this.manualClose=true;this.active=false;try{this.ws?.close()}catch(_){}
    stopPvpCombatSfxLoops();
-   this.ws=null;state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.running=false;
+   this.ws=null;state.historyActive=false;state.historyLocal=false;state.historyServerId=null;state.historyDoorState={};state.running=false;
    if(showBrowser){state.mode='history';state.entities=[];state.dragonProjectiles=[];clearEntityVisuals();navigateScreen('historyServerScreen');refreshHistoryServers()}
  }
 };
