@@ -25,7 +25,7 @@ assert(worker.includes('class HistoryRoom extends DurableObject'),
   'History must use a Durable Object as the server authority');
 assert(worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'History server must accept WebSocket clients');
-assert(worker.includes('spawnDragons(wave)')&&worker.includes('history-dragon-a')&&worker.includes('history-dragon-b'),
+assert(worker.includes('spawnDragons(wave)')&&historyMapServer.includes('history-dragon-a')&&historyMapServer.includes('history-dragon-b'),
   'History server must own exactly two dragon slots');
 assert(worker.includes('this.room.dragons.every(d => !d.alive)')&&worker.includes('Date.now() + 2000'),
   'both dragons must respawn two seconds after both are defeated');
