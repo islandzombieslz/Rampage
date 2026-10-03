@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { HISTORY_MAP_ID, HISTORY_MAP_WORLD, HISTORY_MAP_SPAWN, HISTORY_MAP_PLAY_BOUNDS, HISTORY_MAP_COLLIDERS, HISTORY_DRAGON_SPAWNS } from "./map.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -7,12 +8,12 @@ const CORS = {
 };
 
 const SERVER_CATALOG = Object.freeze([
-  { id: "history-1", name: "Servidor História 1", map: "arena-pvp", maxPlayers: 8 }
+  { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 5;
-const PVP_WORLD = Object.freeze({ width: 1850, height: 1542 });
-const PVP_PLAY_BOUNDS = Object.freeze({ left: 300, right: 1550, top: 305, bottom: 1267 });
+const HISTORY_SCHEMA_VERSION = 6;
+const PVP_WORLD = HISTORY_MAP_WORLD;
+const PVP_PLAY_BOUNDS = HISTORY_MAP_PLAY_BOUNDS;
 
 const PLAYER_MAX_HP = 350;
 const PLAYER_MAX_SHIELD = 250;
@@ -76,6 +77,33 @@ function json(data, status = 200) {
 }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function historyCircleRectHit(cx, cy, r, rect) {
+  const x = Number(rect?.[0]) || 0, y = Number(rect?.[1]) || 0;
+  const w = Math.max(0, Number(rect?.[2]) || 0), h = Math.max(0, Number(rect?.[3]) || 0);
+  const qx = Math.max(x, Math.min(cx, x + w)), qy = Math.max(y, Math.min(cy, y + h));
+  const dx = cx - qx, dy = cy - qy;
+  return dx * dx + dy * dy < r * r;
+}
+function historyPositionBlocked(x, y, r = COMBAT_ENTITY_RADIUS) {
+  for (const rect of HISTORY_MAP_COLLIDERS) if (historyCircleRectHit(x, y, r, rect)) return true;
+  return false;
+}
+function moveHistoryPlayer(player, dx, dy, r = COMBAT_ENTITY_RADIUS) {
+  if (!player) return false;
+  let moved = false;
+  const nx = clamp((Number(player.x) || 0) + (Number(dx) || 0), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+  if (!historyPositionBlocked(nx, Number(player.y) || 0, r)) {
+    moved = moved || Math.abs(nx - Number(player.x || 0)) > .001;
+    player.x = nx;
+  }
+  const ny = clamp((Number(player.y) || 0) + (Number(dy) || 0), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+  if (!historyPositionBlocked(Number(player.x) || 0, ny, r)) {
+    moved = moved || Math.abs(ny - Number(player.y || 0)) > .001;
+    player.y = ny;
+  }
+  return moved;
+}
+
 function warriorDamageForRange(d) {
   return WARRIOR_DAMAGE_MIN + (WARRIOR_DAMAGE_MAX - WARRIOR_DAMAGE_MIN) *
     clamp(1 - Number(d || 0) / WARRIOR_MELEE_RANGE, 0, 1);
@@ -191,10 +219,7 @@ export class HistoryRoom extends DurableObject {
       firstHitSeen: false, retaliatePending: false, retaliateImmediate: false, retaliateTargetId: null,
       knockUntil: 0, knockVX: 0, knockVY: 0
     });
-    return [
-      make("history-dragon-a", 670, 760, 1),
-      make("history-dragon-b", 1180, 760, -1)
-    ];
+    return HISTORY_DRAGON_SPAWNS.map(spawn => make(spawn.id, spawn.x, spawn.y, spawn.facing));
   }
 
   async fetch(request) {
@@ -222,7 +247,7 @@ export class HistoryRoom extends DurableObject {
     const previous = this.room.players[uid];
     this.room.players[uid] = previous || {
       id: uid, name, hero: hero.id, type: hero.type, clan: hero.clan, variant: hero.variant,
-      x: PVP_WORLD.width / 2, y: 1040,
+      x: HISTORY_MAP_SPAWN.x, y: HISTORY_MAP_SPAWN.y,
       hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP,
       shield: PLAYER_MAX_SHIELD, maxShield: PLAYER_MAX_SHIELD,
       alive: true, respawnAt: 0, facing: 1, heading: 0, moving: false, input: { dx: 0, dy: 0 },
@@ -312,7 +337,7 @@ export class HistoryRoom extends DurableObject {
       targetX = player.x + dx * scale;
       targetY = player.y + dy * scale;
     }
-    player.x = targetX; player.y = targetY;
+    moveHistoryPlayer(player, targetX - player.x, targetY - player.y);
     if (Number.isFinite(Number(pose.heading))) player.heading = Number(pose.heading);
     if (Number(pose.facing)) player.facing = Number(pose.facing) < 0 ? -1 : 1;
     player.lastPoseSeq = seq; player.lastPoseAt = now;
@@ -335,8 +360,12 @@ export class HistoryRoom extends DurableObject {
       if (target) { target.knockUntil = 0; target.knockVX = 0; target.knockVY = 0; }
       return false;
     }
-    target.x = clamp(target.x + (Number(target.knockVX) || 0) * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-    target.y = clamp(target.y + (Number(target.knockVY) || 0) * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+    const knockDx = (Number(target.knockVX) || 0) * dt, knockDy = (Number(target.knockVY) || 0) * dt;
+    if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy);
+    else {
+      target.x = clamp(target.x + knockDx, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
+      target.y = clamp(target.y + knockDy, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+    }
     const damping = Math.pow(.16, dt);
     target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
     return true;
@@ -788,7 +817,7 @@ export class HistoryRoom extends DurableObject {
         if (player.respawnAt && now >= player.respawnAt) {
           player.alive = true; player.respawnAt = 0;
           player.hp = player.maxHp; player.shield = player.maxShield;
-          player.x = PVP_WORLD.width / 2; player.y = 1040;
+          player.x = HISTORY_MAP_SPAWN.x; player.y = HISTORY_MAP_SPAWN.y;
           player.input = { dx: 0, dy: 0 };
           player.attackCooldownUntil = 0; player.singleUntil = 0; player.lastBasicAt = 0;
           player.comboStartedAt = 0; player.comboUntil = 0; player.comboHitIndex = 0; player.comboSfxIndex = 0; player.comboRequestUntil = 0;
@@ -811,8 +840,7 @@ export class HistoryRoom extends DurableObject {
       player.moving = moving;
       if (moving) {
         const speed = PLAYER_SPEED * (specialActive ? WARRIOR_SPECIAL_SPEED_MULTIPLIER : 1);
-        player.x = clamp(player.x + dx * speed * dt, PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-        player.y = clamp(player.y + dy * speed * dt, PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
+        moveHistoryPlayer(player, dx * speed * dt, dy * speed * dt);
       }
 
       if (specialActive) {
@@ -903,7 +931,7 @@ export class HistoryRoom extends DurableObject {
       seq: this.room.seq,
       serverTime: Date.now(),
       mode: "history",
-      map: "arena-pvp",
+      map: HISTORY_MAP_ID,
       world: PVP_WORLD,
       playBounds: PVP_PLAY_BOUNDS,
       rounds: null,

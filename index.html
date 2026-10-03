@@ -407,6 +407,7 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 #world{position:absolute;inset:0;width:100%;height:100%;display:block;background:#080b10;touch-action:none}
 #entityLayer{position:absolute;inset:0;overflow:hidden;overflow:clip;pointer-events:none;z-index:2;contain:layout paint;transform:translateZ(0)}
 #entityCameraLayer,#combatCameraLayer,#golemRockLayer{position:absolute;inset:0;pointer-events:none;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.history-map-object{position:absolute;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #entityCameraLayer,#combatCameraLayer{will-change:auto}
 #warBarrierTopSprite,#warBarrierSprite,#pvpBarrierTopSprite,#pvpBarrierSprite{position:absolute;left:0;top:0;display:none;pointer-events:none;user-select:none;-webkit-user-drag:none;object-fit:fill;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 #warBarrierTopSprite,#pvpBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
@@ -3292,6 +3293,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   </div>
 </section>
 
+<script src="assets/history/map-config.js"></script>
 <script>
 (() => {
 'use strict';
@@ -6846,12 +6848,44 @@ const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.wor
 let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
 let historySelectedServerId=null;
 const HISTORY_SERVER_FALLBACK=Object.freeze([
- {id:'history-1',name:'Servidor História 1',map:'arena-pvp',maxPlayers:8,players:0,online:false}
+ {id:'history-1',name:'Servidor História 1',map:'history-castle-v1',maxPlayers:8,players:0,online:false}
 ]);
 const HISTORY_RENDER_DELAY_MIN_MS=35;
 const HISTORY_RENDER_DELAY_MAX_MS=80;
 const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
 const HISTORY_INPUT_KEEPALIVE_MS=50;
+const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v1',width:3200,height:2200,spawn:Object.freeze({x:511.6183399912587,y:1001.9159986085518}),assets:[],objects:[],colliders:[]});
+function historyMapData(){return window.RAMPAGE_HISTORY_MAP||HISTORY_MAP_FALLBACK}
+function historyMapBounds(r=0){
+ const m=historyMapData();
+ return {left:r,right:Math.max(r,Number(m.width||3200)-r),top:r,bottom:Math.max(r,Number(m.height||2200)-r)};
+}
+function historyCircleRectHit(cx,cy,r,rect){
+ const x=Number(rect?.[0])||0,y=Number(rect?.[1])||0,w=Math.max(0,Number(rect?.[2])||0),h=Math.max(0,Number(rect?.[3])||0);
+ const qx=Math.max(x,Math.min(cx,x+w)),qy=Math.max(y,Math.min(cy,y+h));
+ const dx=cx-qx,dy=cy-qy;return dx*dx+dy*dy<r*r;
+}
+function historyPositionBlocked(x,y,r=30){
+ const colliders=historyMapData().colliders||[];
+ for(let i=0;i<colliders.length;i++)if(historyCircleRectHit(x,y,r,colliders[i]))return true;
+ return false;
+}
+function historyMoveEntity(e,dx,dy){
+ if(!e)return false;
+ const r=Math.max(1,Number(e.r)||30),b=historyMapBounds(r);
+ let moved=false;
+ const oldX=Number(e.x)||0,nx=clamp(oldX+(Number(dx)||0),b.left,b.right);
+ if(!historyPositionBlocked(nx,Number(e.y)||0,r)){moved=moved||Math.abs(nx-oldX)>.001;e.x=nx}
+ const oldY=Number(e.y)||0,ny=clamp(oldY+(Number(dy)||0),b.top,b.bottom);
+ if(!historyPositionBlocked(Number(e.x)||0,ny,r)){moved=moved||Math.abs(ny-oldY)>.001;e.y=ny}
+ return moved;
+}
+function historyClampEntity(e){
+ if(!e)return;
+ const r=Math.max(1,Number(e.r)||30),b=historyMapBounds(r);
+ e.x=clamp(Number(e.x)||b.left,b.left,b.right);e.y=clamp(Number(e.y)||b.top,b.top,b.bottom);
+}
+
 function historyServerEndpoint(path=''){return historyServerBase?historyServerBase+path:''}
 function historyEscape(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function historyFallbackUid(){
@@ -7400,9 +7434,8 @@ const HistoryAdapter={
      if(len>1){dx/=len;dy/=len}
      let knocked=false;
    if(Number(me.knockTime)>0){
-     const step=Math.min(dt,Number(me.knockTime)||0),b=pvpArenaBounds(me.r||30);
-     me.x=clamp(me.x+(Number(me.knockVX)||0)*step,b.left,b.right);
-     me.y=clamp(me.y+(Number(me.knockVY)||0)*step,b.top,b.bottom);
+     const step=Math.min(dt,Number(me.knockTime)||0);
+     historyMoveEntity(me,(Number(me.knockVX)||0)*step,(Number(me.knockVY)||0)*step);
      me.knockTime=Math.max(0,(Number(me.knockTime)||0)-dt);
      const damping=Math.pow(.16,dt);me.knockVX=(Number(me.knockVX)||0)*damping;me.knockVY=(Number(me.knockVY)||0)*damping;
      if(me.knockTime<=0){me.knockVX=0;me.knockVY=0}
@@ -7411,12 +7444,11 @@ const HistoryAdapter={
    const charging=pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now,locked=knocked;
      if(charging&&!locked){
        if(len>.12)me.pvpWarriorChargeAngle=Math.atan2(dy,dx);
-       const angle=Number(me.pvpWarriorChargeAngle)||0,b=pvpArenaBounds(me.r||30),speed=me.speed*PVP_WARRIOR.specialSpeedMultiplier;
-       me.x=clamp(me.x+Math.cos(angle)*speed*dt,b.left,b.right);me.y=clamp(me.y+Math.sin(angle)*speed*dt,b.top,b.bottom);
+       const angle=Number(me.pvpWarriorChargeAngle)||0,speed=me.speed*PVP_WARRIOR.specialSpeedMultiplier;
+       historyMoveEntity(me,Math.cos(angle)*speed*dt,Math.sin(angle)*speed*dt);
        me.heading=angle;me.facing=Math.cos(angle)<0?-1:1;me.moving=true;
      }else if(!locked&&(dx||dy)){
-       const b=pvpArenaBounds(me.r||30);
-       me.x=clamp(me.x+dx*me.speed*dt,b.left,b.right);me.y=clamp(me.y+dy*me.speed*dt,b.top,b.bottom);
+       historyMoveEntity(me,dx*me.speed*dt,dy*me.speed*dt);
        me.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)me.facing=dx<0?-1:1;me.moving=true;
      }else if(!locked)me.moving=false;
 
@@ -7427,8 +7459,8 @@ const HistoryAdapter={
        const authAge=Math.max(0,now-Number(me.historyAuthArrivalAt||now));
        if(!(unacked&&authAge<650)){
          if(error>760){me.x=ax;me.y=ay}
-         else if(!me.moving&&error>3){const a=1-Math.exp(-7*dt);me.x+=ex*a;me.y+=ey*a}
-         else if(me.moving&&error>320){const a=1-Math.exp(-.45*dt),excess=(error-320)/Math.max(1,error);me.x+=ex*a*excess;me.y+=ey*a*excess}
+         else if(!me.moving&&error>3){const a=1-Math.exp(-7*dt);historyMoveEntity(me,ex*a,ey*a)}
+         else if(me.moving&&error>320){const a=1-Math.exp(-.45*dt),excess=(error-320)/Math.max(1,error);historyMoveEntity(me,ex*a*excess,ey*a*excess)}
          pvpClampEntity(me);
        }
      }
@@ -8119,7 +8151,7 @@ function syncWarArenaOverlay(left,top,zoom){
 
 function syncPVPArenaOverlay(left,top,zoom){
  if(!pvpBarrierSprite)return;
- if(state.mode!=='pvp'){
+ if(state.mode!=='pvp'||state.historyActive){
   hideWarBarrierNode(pvpBarrierTopSprite);hideWarBarrierNode(pvpBarrierSprite);return;
  }
  const x=-left*zoom,y=-top*zoom,w=state.world.w*zoom,h=state.world.h*zoom;
@@ -10519,7 +10551,7 @@ function advancePVERound(message='RODADA CONCLUÍDA'){
 // PvP map geometry does not depend on future Clan War map changes.
 const PVP_ARENA=Object.freeze({w:1850,h:1542,inset:Object.freeze({left:270,right:270,top:275,bottom:245})});
 function pvpArenaBounds(r=0){const b=PVP_ARENA.inset;return {left:b.left+r,right:state.world.w-b.right-r,top:b.top+r,bottom:state.world.h-b.bottom-r}}
-function pvpClampEntity(e){if(state.mode!=='pvp'||!e?.alive)return;const b=pvpArenaBounds(e.r||30);e.x=clamp(e.x,b.left,b.right);e.y=clamp(e.y,b.top,b.bottom)}
+function pvpClampEntity(e){if(state.mode!=='pvp'||!e?.alive)return;if(state.historyActive){historyClampEntity(e);return}const b=pvpArenaBounds(e.r||30);e.x=clamp(e.x,b.left,b.right);e.y=clamp(e.y,b.top,b.bottom)}
 function pvpClampAllEntities(){if(state.mode==='pvp')for(const e of state.entities)pvpClampEntity(e)}
 const PVP_BASE=Object.freeze({hp:250,shield:150,speed:195,damageMin:25,damageMax:40,
  meleeRange:112,meleeCooldown:.30,knockForce:95,knockTime:.10,
@@ -13745,7 +13777,7 @@ function draw(){
  const floorRight=Math.min(state.world.w,right),floorBottom=Math.min(state.world.h,bottom);
  const floorW=Math.max(0,floorRight-floorLeft),floorH=Math.max(0,floorBottom-floorTop);
  if(floorW>0&&floorH>0){
-   const sceneFloor=state.mode==='pvp'?pvpFloorImage:state.mode==='war'?warFloorImage:null;
+   const sceneFloor=state.mode==='pvp'&&!state.historyActive?pvpFloorImage:state.mode==='war'?warFloorImage:null;
    if(sceneFloor&&sceneFloor.complete&&sceneFloor.naturalWidth>0){
      ctx.drawImage(sceneFloor,
        floorLeft/state.world.w*sceneFloor.naturalWidth,
@@ -13754,7 +13786,7 @@ function draw(){
        floorH/state.world.h*sceneFloor.naturalHeight,
        floorLeft,floorTop,floorW,floorH);
    }else{
-     ctx.fillStyle='#665642';
+     ctx.fillStyle=state.historyActive?'#686356':'#665642';
      ctx.fillRect(floorLeft,floorTop,floorW,floorH);
    }
  }
@@ -13815,6 +13847,7 @@ function draw(){
  syncWarArenaOverlay(left,top,zoom);
  syncPVPArenaOverlay(left,top,zoom);
  const domCamera=prepareCameraComposite(left,top,zoom);
+ syncHistoryMapVisuals(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncIsisPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
@@ -13840,6 +13873,43 @@ const combatFxLayer=$('#combatFxLayer');
 const entityCameraLayer=$('#entityCameraLayer');
 const combatCameraLayer=$('#combatCameraLayer');
 const golemRockLayer=$('#golemRockLayer');
+const historyMapNodes=new Map();
+function clearHistoryMapVisuals(){
+ for(const node of historyMapNodes.values())node.remove();
+ historyMapNodes.clear();
+}
+function historyMapVisualZ(o,top,zoom){
+ const depth=Number(o?.[5])||0,z=Number(o?.[6])||0;
+ if(depth===0)return -2000+Math.max(0,Math.min(999,z));
+ if(depth===1)return 20+Math.max(0,Math.min(20,z-180));
+ if(depth===3)return 6000+Math.max(0,Math.min(999,z));
+ if(depth===4)return 9000+Math.max(0,Math.min(999,z));
+ return 100+Math.round(((Number(o?.[2])||0)+(Number(o?.[4])||0)-top)*zoom);
+}
+function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
+ if(!state.historyActive){if(historyMapNodes.size)clearHistoryMapVisuals();return}
+ const map=historyMapData(),objects=map.objects||[],assets=map.assets||[];
+ for(let i=0;i<objects.length;i++){
+   const o=objects[i],x=Number(o[1])||0,y=Number(o[2])||0,w=Math.max(1,Number(o[3])||1),h=Math.max(1,Number(o[4])||1);
+   const cx=(x-cullLeft)*cullZoom,cy=(y-cullTop)*cullZoom,cw=w*cullZoom,ch=h*cullZoom;
+   const onScreen=cx+cw>=-100&&cy+ch>=-100&&cx<=screenW+100&&cy<=screenH+100;
+   let img=historyMapNodes.get(i);
+   if(!onScreen){if(img)img.style.visibility='hidden';continue}
+   if(!img){
+     img=document.createElement('img');img.className='history-map-object';img.draggable=false;img.decoding='async';
+     img.src=assets[Number(o[0])||0]||'';entityCameraLayer.appendChild(img);historyMapNodes.set(i,img);
+   }
+   img.style.visibility='visible';
+   const sx=(x-left)*zoom,sy=(y-top)*zoom,sw=w*zoom,sh=h*zoom;
+   if(img._hx!==sx){img._hx=sx;img.style.left=sx+'px'}
+   if(img._hy!==sy){img._hy=sy;img.style.top=sy+'px'}
+   if(img._hw!==sw){img._hw=sw;img.style.width=sw+'px'}
+   if(img._hh!==sh){img._hh=sh;img.style.height=sh+'px'}
+   const vz=historyMapVisualZ(o,top,zoom);
+   if(img._hz!==vz){img._hz=vz;img.style.zIndex=String(vz)}
+ }
+}
+
 
 // WAR CAMERA COMPOSITOR 2026-09-09
 // Durante pan/zoom, a câmera move duas subcamadas compostas pela GPU.
@@ -15471,6 +15541,7 @@ function clearEntityVisuals(){
    stopGif(img);
  }
  if(entityCameraLayer)entityCameraLayer.innerHTML='';
+ historyMapNodes.clear();
  if(combatCameraLayer)combatCameraLayer.innerHTML='';
  if(golemRockLayer)golemRockLayer.innerHTML='';
  resetCameraComposite();
