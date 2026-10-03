@@ -59,6 +59,23 @@ const firebaseStub=String.raw`
 // the production build and no production code is changed for browser tests.
 const pvpTestHook=`window.__pvpBrowserTest={
  accountXpReady(){return accountProgress.verified&&accountProgress.status==='ready'},
+ historyLocalState(){
+   const me=pvpLocalHero(),events=historyMapData().events||[];
+   return {active:HistoryLocalAdapter.active,historyActive:state.historyActive,local:state.historyLocal,
+     serverId:state.historyServerId,online:NetworkAdapter.online,host:NetworkAdapter.isHost,
+     x:me?Math.round(me.x):null,y:me?Math.round(me.y):null,
+     enemies:state.entities.filter(e=>e.alive&&e.pvpEnemy).length,
+     spawns:events.filter(e=>e.kind==='enemy_spawn').length,
+     checkpoints:events.filter(e=>e.kind==='checkpoint').length,
+     victories:events.filter(e=>e.kind==='victory').length};
+ },
+ historyLocalCheckpoint(){
+   const me=pvpLocalHero();if(!me)return null;
+   me.x=599;me.y=656;HistoryLocalAdapter.updateProgress(performance.now(),me);
+   return {id:HistoryLocalAdapter.checkpointId,x:HistoryLocalAdapter.respawnPoint?.x,y:HistoryLocalAdapter.respawnPoint?.y};
+ },
+ leaveLocalHistory(){HistoryLocalAdapter.disconnect(false);navigateScreen('menuScreen');return !state.historyActive&&!HistoryLocalAdapter.active},
+
  roundClock(){return {duration:state.pvpRoundDuration,left:state.timeLeft}},
  humanRoster(){return state.players.filter(p=>p.human).map(p=>p.id)},
  remoteHumanLabel(){
@@ -490,6 +507,10 @@ const server=http.createServer((req,res)=>{
    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(testHTML);return;
  }
  if(name==='/sw.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.end('self.addEventListener("install",()=>self.skipWaiting());');return}
+ if(/\.js$/i.test(name)){
+   const file=path.join(root,name.slice(1));
+   if(fs.existsSync(file)){res.writeHead(200,{'Content-Type':'application/javascript; charset=utf-8','Cache-Control':'no-store'});res.end(fs.readFileSync(file));return}
+ }
  // Exercise the one-time canonical fallback when a cache-busted GIF fails.
  if((name==='/assets/mage/poder-mago-especial.gif'||name==='/assets/runtime/magePowerSpecial.gif')&&new URL(req.url,'http://127.0.0.1').searchParams.has('gifStart')){
    res.writeHead(404);res.end('test-only cache-buster failure');return;
@@ -528,6 +549,26 @@ async function main(){
      console.error('Browser startup diagnostics:',status,'Page errors:',errors);
      throw err;
    }
+   // History local: same map/gameplay, but the browser itself is the host and no Cloudflare room is opened.
+   await page.locator('#createBtn').click();
+   await page.locator('#modeScreen.active').waitFor({timeout:8000});
+   await page.locator('.mode-card[data-mode="history"]').click();
+   await page.locator('#historyServerScreen.active').waitFor({timeout:8000});
+   const localRow=page.locator('.history-server-item').filter({hasText:'Servidor local • Solo'});
+   await localRow.waitFor({timeout:4000});
+   assert((await localRow.textContent()).includes('LOCAL'),'History browser must expose the local server immediately');
+   await localRow.click();await page.locator('#historyServerConfirm:not([disabled])').click();
+   await page.locator('#gameScreen.active.history-mode').waitFor({timeout:10000});
+   await page.waitForFunction(()=>window.__pvpBrowserTest.historyLocalState().enemies>=14,null,{timeout:6000});
+   const localHistory=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalState());
+   assert.deepEqual(localHistory,{
+     active:true,historyActive:true,local:true,serverId:'history-local',online:false,host:true,
+     x:597,y:2049,enemies:14,spawns:3,checkpoints:2,victories:1
+   },'local History must start from the editor origin, host locally and spawn the three configured waves');
+   const checkpoint=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalCheckpoint());
+   assert.deepEqual(checkpoint,{id:'event3',x:599,y:656},'reaching checkpoint 1 must update the local respawn point');
+   assert(await page.evaluate(()=>window.__pvpBrowserTest.leaveLocalHistory()),'local History must disconnect without a cloud room');
+
    await page.locator('#createBtn').click();
    await page.locator('#modeScreen.active').waitFor({timeout:8000});
    await page.locator('.mode-card[data-mode="pvp"]').click();
