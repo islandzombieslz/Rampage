@@ -328,7 +328,7 @@ export class HistoryRoom extends DurableObject {
       }
       if (victory?.area && pointInArea(player.x, player.y, victory.area)) {
         this.room.finished = true; this.room.victoryAt = now;
-        this.broadcast({ type: "history_victory", uid: player.id, eventId: victory.id, xp: 200, at: now });
+        this.broadcast({ type: "history_victory", reachedBy: player.id, eventId: victory.id, xp: 200, at: now });
         break;
       }
     }
