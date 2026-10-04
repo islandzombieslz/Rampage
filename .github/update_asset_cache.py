@@ -35,6 +35,9 @@ external_urls = set(re.findall(r'''['"](https://i\.postimg\.cc/[^'"<>\s]+)['"]''
 # Version the script itself so an older service worker cannot execute a stale map.
 history_map_url = 'assets/history/map-config.js'
 local_urls.add(history_map_url)
+local_urls.add('assets/history/rules.js')
+# Map artwork and break animations are referenced by the generated map config.
+local_urls.update(re.findall(r'"(assets/history/[^"]+)"', Path(history_map_url).read_text()))
 
 # Keep the boot cache aligned with the generated display sprites. Original art
 # remains in the repository as a fallback; eagerly downloading both versions
@@ -63,13 +66,14 @@ for url in sorted(external_urls):
 manifest_json = json.dumps(manifest, ensure_ascii=False, separators=(',', ':'))
 new_manifest = 'const BOOT_ASSET_MANIFEST=Object.freeze(' + manifest_json + ');'
 text = manifest_pattern.sub(lambda _m: new_manifest, text, count=1)
-text, history_script_count = re.subn(
-    r'<script src="assets/history/map-config\.js(?:\?[^"<>]*)?"></script>',
-    '<script src="' + history_map_url + '?rampageRev=' + manifest[history_map_url] + '"></script>',
-    text,
-)
-if history_script_count != 1:
-    raise SystemExit(f'Expected one History map script, found {history_script_count}')
+for history_url in (history_map_url, 'assets/history/rules.js'):
+    text, history_script_count = re.subn(
+        r'<script src="' + re.escape(history_url) + r'(?:\?[^"<>]*)?"></script>',
+        '<script src="' + history_url + '?rampageRev=' + manifest[history_url] + '"></script>',
+        text,
+    )
+    if history_script_count != 1:
+        raise SystemExit(f'Expected one History script for {history_url}, found {history_script_count}')
 INDEX.write_text(text, encoding='utf-8')
 
 sw = r'''/* GENERATED PERSISTENT ASSET CACHE - DO NOT EDIT BY HAND */

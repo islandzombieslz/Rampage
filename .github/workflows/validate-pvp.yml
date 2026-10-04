@@ -5,6 +5,9 @@ on:
     paths:
       - 'index.html'
       - 'history-server/src/index.js'
+      - 'history-server/src/map.js'
+      - 'assets/history/**'
+      - 'tests/history-rules-regression.cjs'
       - 'tests/history-smoke.cjs'
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'
@@ -22,6 +25,9 @@ on:
     paths:
       - 'index.html'
       - 'history-server/src/index.js'
+      - 'history-server/src/map.js'
+      - 'assets/history/**'
+      - 'tests/history-rules-regression.cjs'
       - 'tests/history-smoke.cjs'
       - 'tests/pvp-smoke.cjs'
       - 'tests/war-preservation.cjs'

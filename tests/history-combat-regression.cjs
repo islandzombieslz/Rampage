@@ -39,7 +39,7 @@ let serverClock=50000;const events=[];
 const historyMap=fs.readFileSync('history-server/src/map.js','utf8').replaceAll('export const','const');
 const worker=fs.readFileSync('history-server/src/index.js','utf8').replace(/^import .*;\n/gm,'').replace('export default','const workerDefault=').replace('export class HistoryRoom','class HistoryRoom');
 const server=vm.createContext({DurableObject:class{},Date:{now:()=>serverClock},console});
-vm.runInContext(historyMap+'\n'+worker+'\n globalThis.Room=HistoryRoom;',server);
+vm.runInContext(fs.readFileSync('assets/history/rules.js','utf8')+'\n'+historyMap+'\n'+worker+'\n globalThis.Room=HistoryRoom;',server);
 load('pvpParsedGifCycleMs');
 for(const [key,file,constant] of [
  ['pvpWarriorAttack','guerreiro-ataque-unico.gif','WARRIOR_SINGLE_VISUAL_MS'],
@@ -50,7 +50,7 @@ for(const [key,file,constant] of [
  assert.equal(ctx.historyWarriorDuration(key),actual,'History preview must match actual PvP GIF');
  assert.equal(vm.runInContext(constant,server),actual,'Cloudflare must match actual PvP GIF');
 }
-const room=Object.create(server.Room.prototype);room.room={dragons:[]};room.broadcast=event=>events.push(event);
+const room=Object.create(server.Room.prototype);room.room=room.createRoom();room.broadcast=event=>events.push(event);
 const player={id:'local',alive:true,attackSerial:1,singleSerial:1};
 room.startWarriorCombo(player,serverClock);assert.equal(player.comboUntil-serverClock,3130);
 for(let elapsed=100;elapsed<=3100;elapsed+=100){serverClock=50000+elapsed;player.comboRequestUntil=serverClock+460;room.updateWarriorCombo(player,serverClock);}

@@ -23,17 +23,17 @@ assert(localStart>=0&&localEnd>localStart&&!localBlock.includes('new WebSocket('
 
 assert(worker.includes('class HistoryRoom extends DurableObject')&&worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'Cloudflare History must keep a Durable Object authority');
-assert(worker.includes('const HISTORY_SCHEMA_VERSION = 8')&&worker.includes('HISTORY_MAP_EVENTS'),
+assert(worker.includes('const HISTORY_SCHEMA_VERSION = 9')&&worker.includes('HISTORY_MAP_EVENTS'),
   'History server schema must be upgraded for editor gameplay events');
-assert(historyMapClient.includes('"id":"history-castle-v3"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v3"'),
+assert(historyMapClient.includes('"id":"history-castle-v4"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v4"'),
   'client and Cloudflare must use the updated editor map version');
-assert(historyMapClient.includes('"visualCount":131')&&historyMapClient.includes('"colliderCount":57')&&
+assert(historyMapClient.includes('"visualCount":138')&&historyMapClient.includes('"colliderCount":57')&&
   historyMapClient.includes('"doorCount":2')&&historyMapClient.includes('"eventCount":7'),
-  'updated map must contain 131 visuals, 57 static colliders, two dynamic doors and 7 gameplay events');
+  'updated map must contain 138 visuals, 57 static colliders, two dynamic doors and 7 gameplay events');
 assert(historyMapServer.includes('HISTORY_MAP_DOORS')&&
   (historyMapServer.match(/"openWhen":"proximity"/g)||[]).length===1&&
   (historyMapServer.match(/"openWhen":"defeat_count"/g)||[]).length===1&&historyMapServer.includes('"enemyCount":5'),
-  'v3 map must preserve the proximity door and the five-defeat door from the editor');
+  'v4 map must preserve the proximity door and the five-defeat door from the editor');
 assert(worker.includes('updateDoors(now')&&worker.includes('registerDoorDefeat(enemy')&&worker.includes('historyDoorCollisionActive')&&
   worker.includes('doorState: this.room.doorState'),
   'Cloudflare must authoritatively open doors and change their collision state');
@@ -58,10 +58,10 @@ assert(worker.includes('checkpointForPlayer(player)')&&worker.includes('type: "h
   'checkpoints, respawn and victory must be wired from the editor');
 assert(html.includes("this.checkpointId=event.id")&&html.includes("this.respawnPoint={x:Number(p.x),y:Number(p.y)}"),
   'local History must respawn at the latest reached checkpoint');
-assert(html.includes("awards:{[String(uid)]:200}")&&html.includes("mode:'history'"),
+assert(html.includes("[String(uid)]:200+(Number(player?.historyObjectXP)||0)")&&html.includes("mode:'history'"),
   'History victory must produce an XP-eligible match result');
 
-assert(worker.includes('const PVP_WORLD = HISTORY_MAP_WORLD')&&historyMapServer.includes('width: 3200, height: 2200'),
+assert(worker.includes('const PVP_WORLD = HISTORY_MAP_WORLD')&&historyMapServer.includes('"width":3200,"height":2200'),
   'History must use the editor world dimensions without changing PvP arena constants');
 assert(html.includes('historyMoveEntity(me')&&worker.includes('moveHistoryPlayer(player')&&
   html.includes('historyPositionBlocked')&&worker.includes('historyPositionBlocked'),
@@ -104,3 +104,5 @@ assert(wrangler.includes('"HISTORY_ROOMS"')&&wrangler.includes('"new_sqlite_clas
   'Wrangler must keep the History Durable Object binding');
 console.log('History smoke checks passed.');
 require('./history-combat-regression.cjs');
+
+require('./history-rules-regression.cjs');
