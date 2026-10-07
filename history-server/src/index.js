@@ -12,14 +12,14 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 9;
+const HISTORY_SCHEMA_VERSION = 10;
 const HistoryRules = globalThis.RampageHistoryRules;
-const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS};
+const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS,destructibles:HISTORY_MAP_OBJECTS};
 const historyNavigation = HistoryRules.createNavigator(HISTORY_GEOMETRY);
-function historyLineOfSight(a,b,doors,r=0) { return HistoryRules.firstWallHit(HISTORY_GEOMETRY,doors,a.x,a.y,b.x,b.y,r) === null; }
-function pursueHistoryEnemy(enemy,target,dt,doors,now) {
-  const v=historyNavigation.direction(enemy,target,COMBAT_ENTITY_RADIUS,doors,now);
-  enemy.moving=moveHistoryEnemy(enemy,v.x*enemy.speed*dt,v.y*enemy.speed*dt,COMBAT_ENTITY_RADIUS,doors);
+function historyLineOfSight(a,b,doors,r=0,objects={}) { return HistoryRules.firstWallHit(HISTORY_GEOMETRY,doors,a.x,a.y,b.x,b.y,r,objects) === null; }
+function pursueHistoryEnemy(enemy,target,dt,doors,now,objects={}) {
+  const v=historyNavigation.direction(enemy,target,COMBAT_ENTITY_RADIUS,doors,now,objects);
+  enemy.moving=moveHistoryEnemy(enemy,v.x*enemy.speed*dt,v.y*enemy.speed*dt,COMBAT_ENTITY_RADIUS,doors,objects);
   if(enemy.moving){enemy.heading=Math.atan2(v.y,v.x);if(Math.abs(v.x)>.01)enemy.facing=v.x<0?-1:1;}
   return enemy.moving;
 }
@@ -115,39 +115,37 @@ function historyDoorCollisionActive(door, doorState) {
   const open = !!doorState?.[door.id]?.open;
   return open ? !!door.openCollision : door.closedCollision !== false;
 }
-function historyPositionBlocked(x, y, r = COMBAT_ENTITY_RADIUS, doorState = null) {
-  for (const rect of HISTORY_MAP_COLLIDERS) if (historyCircleRectHit(x, y, r, rect)) return true;
-  for (const door of HISTORY_MAP_DOORS) {
-    if (!historyDoorCollisionActive(door, doorState)) continue;
-    if (historyCircleRectHit(x, y, r, [door.x, door.y, door.w, door.h])) return true;
+function historyPositionBlocked(x, y, r = COMBAT_ENTITY_RADIUS, doorState = null, objects = {}) {
+  for(const rect of HistoryRules.obstacles(HISTORY_GEOMETRY,doorState||{},objects)) {
+    if(rect[4]==='circle' ? HistoryRules.rectHitTime(x,y,x,y,rect,r)!==null : historyCircleRectHit(x,y,r,rect))return true;
   }
   return false;
 }
-function moveHistoryPlayer(player, dx, dy, r = COMBAT_ENTITY_RADIUS, doorState = null) {
+function moveHistoryPlayer(player, dx, dy, r = COMBAT_ENTITY_RADIUS, doorState = null, objects = {}) {
   if (!player) return false;
   let moved = false;
   const nx = clamp((Number(player.x) || 0) + (Number(dx) || 0), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
-  if (!historyPositionBlocked(nx, Number(player.y) || 0, r, doorState)) {
+  if (!historyPositionBlocked(nx, Number(player.y) || 0, r, doorState, objects)) {
     moved = moved || Math.abs(nx - Number(player.x || 0)) > .001;
     player.x = nx;
   }
   const ny = clamp((Number(player.y) || 0) + (Number(dy) || 0), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
-  if (!historyPositionBlocked(Number(player.x) || 0, ny, r, doorState)) {
+  if (!historyPositionBlocked(Number(player.x) || 0, ny, r, doorState, objects)) {
     moved = moved || Math.abs(ny - Number(player.y || 0)) > .001;
     player.y = ny;
   }
   return moved;
 }
-function moveHistoryEnemy(enemy, dx, dy, r = COMBAT_ENTITY_RADIUS, doorState = null) {
+function moveHistoryEnemy(enemy, dx, dy, r = COMBAT_ENTITY_RADIUS, doorState = null, objects = {}) {
   if (!enemy) return false;
   const area = enemy.historyLeashArea || null;
   let moved = false;
   let nx = clamp((Number(enemy.x) || 0) + (Number(dx) || 0), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
   if (area) nx = clamp(nx, Number(area.x) + r, Number(area.x) + Number(area.w) - r);
-  if (!historyPositionBlocked(nx, Number(enemy.y) || 0, r, doorState)) { moved ||= Math.abs(nx - Number(enemy.x || 0)) > .001; enemy.x = nx; }
+  if (!historyPositionBlocked(nx, Number(enemy.y) || 0, r, doorState, objects)) { moved ||= Math.abs(nx - Number(enemy.x || 0)) > .001; enemy.x = nx; }
   let ny = clamp((Number(enemy.y) || 0) + (Number(dy) || 0), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
   if (area) ny = clamp(ny, Number(area.y) + r, Number(area.y) + Number(area.h) - r);
-  if (!historyPositionBlocked(Number(enemy.x) || 0, ny, r, doorState)) { moved ||= Math.abs(ny - Number(enemy.y || 0)) > .001; enemy.y = ny; }
+  if (!historyPositionBlocked(Number(enemy.x) || 0, ny, r, doorState, objects)) { moved ||= Math.abs(ny - Number(enemy.y || 0)) > .001; enemy.y = ny; }
   return moved;
 }
 
@@ -266,7 +264,7 @@ export class HistoryRoom extends DurableObject {
   }
 
   initialObjectState() {
-    return Object.fromEntries(HISTORY_MAP_OBJECTS.map(o=>[o.id,{hp:o.hp,broken:false,brokenAt:0,respawnAt:0}]));
+    return HistoryRules.initialObjects(HISTORY_GEOMETRY);
   }
 
   updateObjects(now) {
@@ -276,17 +274,12 @@ export class HistoryRoom extends DurableObject {
     }
   }
 
-  hitMapObjects(player,damage,range,now=Date.now()) {
+  hitMapObjects(player,damage,range,now=Date.now(),hitIntervalMs=0) {
     for(const o of HISTORY_MAP_OBJECTS) {
       const state=this.room.objectState[o.id];
-      if(!state||state.broken)continue;
-      const q={x:clamp(player.x,o.x,o.x+o.w),y:clamp(player.y,o.y,o.y+o.h)};
-      if(distance(player,q)>range||!historyLineOfSight(player,q,this.room.doorState))continue;
-      state.hp=Math.max(0,state.hp-damage);
-      if(state.hp>0)continue;
-      Object.assign(state,{broken:true,brokenAt:now,respawnAt:now+Math.max(1,Number(o.respawnSeconds)||10)*1000});
-      player.historyObjectXP=(Number(player.historyObjectXP)||0)+(Number(o.xp)||0);
-      this.broadcast({type:"history_object",objectId:o.id,state:{...state},uid:player.id,xp:player.historyObjectXP,at:now});
+      if(!HistoryRules.hitObject(HISTORY_GEOMETRY,o,state,player,damage,range,this.room.doorState,this.room.objectState,now,hitIntervalMs))continue;
+      if(state.broken)player.historyObjectXP=(Number(player.historyObjectXP)||0)+(Number(o.xp)||0);
+      this.broadcast({type:"history_object",objectId:o.id,state:{...state},uid:player.id,xp:Number(player.historyObjectXP)||0,at:now});
     }
   }
 
@@ -365,7 +358,7 @@ export class HistoryRoom extends DurableObject {
       x = clamp(x, Number(area.x) + 34, Number(area.x) + Number(area.w) - 34);
       y = clamp(y, Number(area.y) + 34, Number(area.y) + Number(area.h) - 34);
     }
-    const point=historyNavigation.spawnPoint({x,y},COMBAT_ENTITY_RADIUS,this.room.doorState,area);
+    const point=historyNavigation.spawnPoint({x,y},COMBAT_ENTITY_RADIUS,this.room.doorState,area,this.room.objectState);
     if(!point)return null;
     x=point.x;y=point.y;
     const id = "history-enemy-" + (++this.room.enemySeq) + "-" + String(event.id || "spawn");
@@ -449,14 +442,14 @@ export class HistoryRoom extends DurableObject {
     const stats = HISTORY_ENEMY_STATS[enemy.type] || HISTORY_ENEMY_STATS.naja;
     const players = Object.values(this.room.players).filter(p => p.alive && pointInArea(p.x, p.y, enemy.historyLeashArea));
     if (!players.length) { enemy.moving = false; return; }
-    const visible=players.filter(p=>historyLineOfSight(enemy,p,this.room.doorState,8));
+    const visible=players.filter(p=>historyLineOfSight(enemy,p,this.room.doorState,8,this.room.objectState));
     const target = (visible.length?visible:players).reduce((best, p) => !best || distance(enemy, p) < distance(enemy, best) ? p : best, null);
     if (!target) { enemy.moving = false; return; }
     const dx = target.x - enemy.x, dy = target.y - enemy.y, d = Math.hypot(dx, dy) || 1;
     enemy.heading = Math.atan2(dy, dx); enemy.facing = dx < 0 ? -1 : 1;
     if (now < Number(enemy.attackUntil || 0)) { enemy.moving = false; return; }
-    if (d > stats.range || !historyLineOfSight(enemy,target,this.room.doorState,8)) {
-      pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now);
+    if (d > stats.range || !historyLineOfSight(enemy,target,this.room.doorState,8,this.room.objectState)) {
+      pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState);
       return;
     }
     enemy.moving = false;
@@ -466,7 +459,7 @@ export class HistoryRoom extends DurableObject {
     enemy.npcNextAttackAt = now + stats.cooldown;
     if(enemy.type === "anubis") {
       const angle=Math.atan2(dy,dx),start={x:enemy.x+Math.cos(angle)*40,y:enemy.y-14+Math.sin(angle)*16};
-      if(!historyLineOfSight(enemy,start,this.room.doorState,8))return;
+      if(!historyLineOfSight(enemy,start,this.room.doorState,8,this.room.objectState))return;
       enemy.attackKind="ranged";
       this.room.projectiles.push({id:"hap_"+(++this.projectileSeq)+"_"+now,kind:"anubis",serial:enemy.attackSerial,
         x:start.x,y:start.y,vx:Math.cos(angle)*430,vy:Math.sin(angle)*430,speed:430,damage:stats.damage,burn:false,
@@ -598,7 +591,7 @@ export class HistoryRoom extends DurableObject {
       targetX = player.x + dx * scale;
       targetY = player.y + dy * scale;
     }
-    moveHistoryPlayer(player, targetX - player.x, targetY - player.y, COMBAT_ENTITY_RADIUS, this.room.doorState);
+    moveHistoryPlayer(player, targetX - player.x, targetY - player.y, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
     if (Number.isFinite(Number(pose.heading))) player.heading = Number(pose.heading);
     if (Number(pose.facing)) player.facing = Number(pose.facing) < 0 ? -1 : 1;
     player.lastPoseSeq = seq; player.lastPoseAt = now;
@@ -622,8 +615,8 @@ export class HistoryRoom extends DurableObject {
       return false;
     }
     const knockDx = (Number(target.knockVX) || 0) * dt, knockDy = (Number(target.knockVY) || 0) * dt;
-    if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);
-    else moveHistoryEnemy(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState);
+    if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
+    else moveHistoryEnemy(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
     const damping = Math.pow(.16, dt);
     target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
     return true;
@@ -747,7 +740,7 @@ export class HistoryRoom extends DurableObject {
     const hitFractions = [.18, .50, .82];
     while ((Number(player.comboHitIndex) || 0) < hitFractions.length &&
            now >= start + duration * hitFractions[Number(player.comboHitIndex) || 0]) {
-      const living = this.room.dragons.filter(d => d.alive && historyLineOfSight(player,d,this.room.doorState));
+      const living = this.room.dragons.filter(d => d.alive && historyLineOfSight(player,d,this.room.doorState,0,this.room.objectState));
       const target = living.slice().sort((a, b) => distance(player, a) - distance(player, b))[0];
       if (target) {
         const d = distance(player, target);
@@ -785,7 +778,7 @@ export class HistoryRoom extends DurableObject {
       return;
     }
 
-    const living = this.room.dragons.filter(d => d.alive && historyLineOfSight(player,d,this.room.doorState));
+    const living = this.room.dragons.filter(d => d.alive && historyLineOfSight(player,d,this.room.doorState,0,this.room.objectState));
     // Empty space still permits attacking editor destructibles.
 
 
@@ -890,9 +883,9 @@ export class HistoryRoom extends DurableObject {
     const gate = emergency ? Number(dragon.closeShotAt || 0) : Number(dragon.nextShotAt || 0);
     if (now < gate || now < Number(dragon.attackUntil || 0)) return false;
 
-    if(!historyLineOfSight(dragon,target,this.room.doorState,8))return false;
+    if(!historyLineOfSight(dragon,target,this.room.doorState,8,this.room.objectState))return false;
     const muzzleAngle=Math.atan2(target.y-dragon.y,target.x-dragon.x);
-    if(!historyLineOfSight(dragon,{x:dragon.x+Math.cos(muzzleAngle)*42,y:dragon.y-16+Math.sin(muzzleAngle)*18},this.room.doorState,8))return false;
+    if(!historyLineOfSight(dragon,{x:dragon.x+Math.cos(muzzleAngle)*42,y:dragon.y-16+Math.sin(muzzleAngle)*18},this.room.doorState,8,this.room.objectState))return false;
     const angle = Math.atan2(target.y - dragon.y, target.x - dragon.x);
     dragon.heading = angle;
     dragon.facing = target.x < dragon.x ? -1 : 1;
@@ -942,7 +935,7 @@ export class HistoryRoom extends DurableObject {
       const sx = Number(projectile.x) || 0, sy = Number(projectile.y) || 0;
       const nx = sx + (Number(projectile.vx) || 0) * dt;
       const ny = sy + (Number(projectile.vy) || 0) * dt;
-      const wall=HistoryRules.firstWallHit(HISTORY_GEOMETRY,this.room.doorState,sx,sy,nx,ny,8);
+      const wall=HistoryRules.firstWallHit(HISTORY_GEOMETRY,this.room.doorState,sx,sy,nx,ny,8,this.room.objectState);
       let target=null,hitTime=Infinity;
       for(const p of Object.values(this.room.players)) {
         if(!p.alive)continue;
@@ -1032,7 +1025,7 @@ export class HistoryRoom extends DurableObject {
       if (this.stepKnockback(dragon, dt, now)) continue;
       if (!players.length) { dragon.moving = false; continue; }
 
-      const visible=players.filter(p=>historyLineOfSight(dragon,p,this.room.doorState,8));
+      const visible=players.filter(p=>historyLineOfSight(dragon,p,this.room.doorState,8,this.room.objectState));
       const target = (visible.length?visible:players).reduce((best, p) => !best || distance(dragon, p) < distance(dragon, best) ? p : best, null);
       if (!target) { dragon.moving = false; continue; }
 
@@ -1045,8 +1038,8 @@ export class HistoryRoom extends DurableObject {
         continue;
       }
 
-      if(!historyLineOfSight(dragon,target,this.room.doorState,8)) {
-        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now);continue;
+      if(!historyLineOfSight(dragon,target,this.room.doorState,8,this.room.objectState)) {
+        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState);continue;
       }
       if (d < DRAGON_CLOSE_RANGE) {
         if (now >= Number(dragon.closeShotAt || 0) && this.launchDragonFireball(dragon, target, now, true)) continue;
@@ -1055,7 +1048,7 @@ export class HistoryRoom extends DurableObject {
         if (dragon.x < edge) mx += .85; else if (dragon.x > PVP_WORLD.width - edge) mx -= .85;
         if (dragon.y < edge) my += .85; else if (dragon.y > PVP_WORLD.height - edge) my -= .85;
         const ml = Math.hypot(mx, my) || 1; mx /= ml; my /= ml;
-        moveHistoryEnemy(dragon, mx * DRAGON_SPEED * dt, my * DRAGON_SPEED * dt, COMBAT_ENTITY_RADIUS, this.room.doorState);
+        moveHistoryEnemy(dragon, mx * DRAGON_SPEED * dt, my * DRAGON_SPEED * dt, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
         dragon.moving = true;
         continue;
       }
@@ -1065,9 +1058,9 @@ export class HistoryRoom extends DurableObject {
       }
 
       if (d > 285) {
-        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now);
+        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState);
       } else if (d < 185) {
-        moveHistoryEnemy(dragon, -dx / d * DRAGON_SPEED * dt, -dy / d * DRAGON_SPEED * dt, COMBAT_ENTITY_RADIUS, this.room.doorState);
+        moveHistoryEnemy(dragon, -dx / d * DRAGON_SPEED * dt, -dy / d * DRAGON_SPEED * dt, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
         dragon.moving = true;
       } else dragon.moving = false;
     }
@@ -1109,11 +1102,11 @@ export class HistoryRoom extends DurableObject {
       player.moving = moving;
       if (moving) {
         const speed = PLAYER_SPEED * (specialActive ? WARRIOR_SPECIAL_SPEED_MULTIPLIER : 1);
-        moveHistoryPlayer(player, dx * speed * dt, dy * speed * dt, COMBAT_ENTITY_RADIUS, this.room.doorState);
+        moveHistoryPlayer(player, dx * speed * dt, dy * speed * dt, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
       }
 
       if (specialActive) {
-        this.hitMapObjects(player,WARRIOR_SPECIAL_DAMAGE_MAX,65,now);
+        this.hitMapObjects(player,WARRIOR_SPECIAL_DAMAGE_MAX,65,now,WARRIOR_SPECIAL_DURATION_MS/WARRIOR_SPECIAL_DAMAGE_HITS);
         const hitState = player.specialHitState && typeof player.specialHitState === "object"
           ? player.specialHitState : (player.specialHitState = {});
         const fractions = [0, .24, .49, .74, .96];

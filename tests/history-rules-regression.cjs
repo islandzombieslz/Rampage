@@ -9,12 +9,12 @@ vm.runInContext(shared+'\n'+fs.readFileSync('history-server/src/map.js','utf8').
 function cloud(){const r=Object.create(worker.Room.prototype);r.room=r.createRoom();r.broadcast=()=>{};r.projectileSeq=0;return r;}
 const r=cloud();r.updateSpawnEvents(clock);
 const alive=()=>r.room.dragons.filter(e=>e.alive);
-assert.equal(alive().length,14);
+assert.equal(alive().length,13);
 for(let i=0;i<20;i++)r.updateSpawnEvents(clock+=60000);
-assert.equal(alive().length,14,'endless waves must not accumulate living troops');
+assert.equal(alive().length,13,'endless waves must not accumulate living troops');
 const killed=alive().find(e=>e.type==='dragon'&&e.historySpawnEventId==='event2');killed.alive=false;
 const killedAnubis=alive().find(e=>e.type==='anubis');killedAnubis.alive=false;
-r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,14,'only missing types are replaced');
+r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,13,'only missing types are replaced');
 assert.equal(alive().filter(e=>e.type==='dragon'&&e.historySpawnEventId==='event2').length,3);
 assert.equal(alive().filter(e=>e.type==='anubis'&&e.historySpawnEventId==='event6').length,2);
 const free={id:'free',x:600,y:1400,troops:{naja:2},limitAlive:false,intervalMs:1000};
@@ -39,7 +39,7 @@ local.pvpBaseEntity=(hero,x,y,team)=>{const e={id:local.state.entities.length+1,
 const a=html.indexOf('const HISTORY_LOCAL_ENEMY_STATS='),b=html.indexOf('function renderHistoryServers',a);
 vm.runInContext(html.slice(a,b)+'\nglobalThis.adapter=HistoryLocalAdapter;',local);
 for(let i=0;i<20;i++)local.adapter.updateSpawns(clock+=60000);
-assert.equal(local.state.entities.filter(e=>e.alive).length,14,'local host enforces the same cap');
+assert.equal(local.state.entities.filter(e=>e.alive).length,13,'local host enforces the same cap');
 local.state.entities.find(e=>e.type==='anubis').alive=false;local.adapter.updateSpawns(clock+=60000);
 assert.equal(local.state.entities.filter(e=>e.alive&&e.type==='anubis').length,2);
 // Navigate a wall and a U-shaped enclosure: no teleporting, corner clipping or lost leash.
@@ -84,15 +84,16 @@ vm.runInContext(functionSource('launchAnubisProjectile'),local);vm.runInContext(
 assert.equal(local.launchAnubisProjectile({alive:true,type:'anubis',x:170,y:1750},{alive:true,x:340,y:1750}),false);
 assert.equal(local.launchDragonFireball({alive:true,type:'dragon',dragonFlightState:'flying',x:170,y:1750},{alive:true,x:340,y:1750}),false);
 // Editor object rules: one break, one XP award, a full GIF cycle and a 60-second respawn.
-const objectsRoom=cloud(),player={id:'me',x:470,y:1600,alive:true};objectsRoom.room.doorState.obj218.open=true;
+const barrel=map.destructibles.find(o=>o.kind==='destructible'),rect=barrel.collisionRect;
+const objectsRoom=cloud(),player={id:'me',x:rect[0]-10,y:rect[1]+rect[3]/2,alive:true};objectsRoom.room.doorState.obj218.open=true;
 objectsRoom.hitMapObjects(player,40,20,clock);assert.equal(player.historyObjectXP,25);
 objectsRoom.hitMapObjects(player,40,20,clock);assert.equal(player.historyObjectXP,25,'a broken barrel cannot reward repeated hits');
-objectsRoom.updateObjects(clock+59999);assert(objectsRoom.room.objectState.obj230.broken);
-objectsRoom.updateObjects(clock+60000);assert.equal(objectsRoom.room.objectState.obj230.broken,false);
-assert.equal(map.destructibles.length,7);assert.equal(map.destructibles[0].breakDurationMs,1330);
+objectsRoom.updateObjects(clock+59999);assert(objectsRoom.room.objectState[barrel.id].broken);
+objectsRoom.updateObjects(clock+60000);assert.equal(objectsRoom.room.objectState[barrel.id].broken,false);
+assert.equal(map.destructibles.length,11);assert.equal(barrel.breakDurationMs,1330);
 local.state.historyDoorState={obj218:{open:true}};local.state.historyObjectState=local.historyInitialObjectState();
-local.historyHitMapObjects({alive:true,ownerId:'me',x:470,y:1600},40,20,clock);assert.equal(local.state.players[0].historyObjectXP,25);
-local.historyUpdateObjects(clock+60000);assert.equal(local.state.historyObjectState.obj230.broken,false);
+local.historyHitMapObjects({alive:true,ownerId:'me',x:player.x,y:player.y},40,20,clock);assert.equal(local.state.players[0].historyObjectXP,25);
+local.historyUpdateObjects(clock+60000);assert.equal(local.state.historyObjectState[barrel.id].broken,false);
 vm.runInContext(functionSource('historyRewardChunks'),local);
 const chunks=local.historyRewardChunks({id:'m_history_test',awards:{a:425,b:1075}});
 for(const c of chunks)for(const amount of Object.values(c.awards))assert(amount>=50&&amount<=400);

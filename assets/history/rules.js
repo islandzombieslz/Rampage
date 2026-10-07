@@ -1,13 +1,20 @@
 /* Shared by the local History simulation and Cloudflare Worker. */
 globalThis.RampageHistoryRules = (() => {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  function obstacles(map, states = {}) {
+  function obstacles(map, states = {}, objectStates = {}, ignoreId = null) {
     return [...(map.colliders || []), ...(map.doors || [])
-      .filter(d => states[d.id]?.open ? d.openCollision : d.closedCollision !== false)
-      .map(d => [d.x, d.y, d.w, d.h])];
+      .filter(d => states?.[d.id]?.open ? d.openCollision : d.closedCollision !== false)
+      .map(d => d.collisionRect || [d.x, d.y, d.w, d.h]), ...(map.destructibles || [])
+      .filter(o => o.id !== ignoreId && o.collision && !(objectStates[o.id]?.broken && o.removeCollisionOnBreak))
+      .map(o => [...(o.collisionRect || [o.x, o.y, o.w, o.h]), o.collisionShape])];
   }
   // Swept intersection: a fast projectile cannot skip a thin wall between ticks.
   function rectHitTime(ax, ay, bx, by, rect, radius = 0) {
+    if (rect[4] === 'circle') {
+      const rx = rect[2] / 2 + radius, ry = rect[3] / 2 + radius;
+      return circleHitTime((ax-rect[0]-rect[2]/2)/rx, (ay-rect[1]-rect[3]/2)/ry,
+        (bx-rect[0]-rect[2]/2)/rx, (by-rect[1]-rect[3]/2)/ry, 0, 0, 1);
+    }
     let enter = 0, exit = 1;
     for (const [start, delta, low, high] of [
       [ax, bx - ax, rect[0] - radius, rect[0] + rect[2] + radius],
@@ -23,9 +30,9 @@ globalThis.RampageHistoryRules = (() => {
     }
     return enter;
   }
-  function firstWallHit(map, states, ax, ay, bx, by, radius = 0) {
+  function firstWallHit(map, states, ax, ay, bx, by, radius = 0, objectStates = {}, ignoreId = null) {
     let first = null;
-    for (const rect of obstacles(map, states)) {
+    for (const rect of obstacles(map, states, objectStates, ignoreId)) {
       const t = rectHitTime(ax, ay, bx, by, rect, radius);
       if (t !== null && (first === null || t < first)) first = t;
     }
@@ -48,6 +55,29 @@ globalThis.RampageHistoryRules = (() => {
       e.historySpawnEventId === event.id && e.type === type ? 1 : 0), 0);
     return Math.max(0, desired - alive);
   }
+  function initialObjects(map) {
+    return Object.fromEntries((map.destructibles || []).map(o => [o.id,
+      {hp:o.hp, shield:Number(o.shield)||0, broken:false, brokenAt:0, respawnAt:0}]));
+  }
+  function hitObject(map, o, runtime, attacker, damage, range, doors, states, now, hitIntervalMs = 0) {
+    if (!runtime || runtime.broken || !(damage > 0)) return false;
+    const rect=o.collisionRect || [o.x,o.y,o.w,o.h];
+    const q={x:clamp(attacker.x,rect[0],rect[0]+rect[2]), y:clamp(attacker.y,rect[1],rect[1]+rect[3])};
+    if(Math.hypot(q.x-attacker.x,q.y-attacker.y)>range ||
+      firstWallHit(map,doors,attacker.x,attacker.y,q.x,q.y,0,states,o.id)!==null)return false;
+    if(hitIntervalMs && o.kind==='boss') {
+      const id=attacker.ownerId || attacker.id;
+      runtime.lastSpecialHits ||= {};
+      if(now < (runtime.lastSpecialHits[id] || 0) + hitIntervalMs)return false;
+      runtime.lastSpecialHits[id]=now;
+    }
+    const absorbed=Math.min(Number(runtime.shield)||0,damage);
+    runtime.shield=(Number(runtime.shield)||0)-absorbed;
+    runtime.hp=Math.max(0,runtime.hp-(damage-absorbed));
+    if(runtime.hp===0)Object.assign(runtime,{broken:true,brokenAt:now,
+      respawnAt:o.respawn ? now+Math.max(1,Number(o.respawnSeconds)||10)*1000 : 0});
+    return true;
+  }
   function createNavigator(map) {
     const cell = 32, cols = Math.ceil(map.width / cell), rows = Math.ceil(map.height / cell);
     let gridKey = '', grid, rects = [];
@@ -55,12 +85,13 @@ globalThis.RampageHistoryRules = (() => {
     const point = id => ({x: (id % cols + .5) * cell, y: (Math.floor(id / cols) + .5) * cell});
     const areaContains = (p, area, r) => !area || (p.x >= area.x + r && p.x <= area.x + area.w - r &&
       p.y >= area.y + r && p.y <= area.y + area.h - r);
-    function prepare(radius, states) {
-      const r = Math.ceil(radius), key = r + ':' + (map.doors || []).map(d => states?.[d.id]?.open ? 1 : 0).join('');
+    function prepare(radius, states, objectStates) {
+      const r = Math.ceil(radius), key = r + ':' + (map.doors || []).map(d => states?.[d.id]?.open ? 1 : 0).join('') + ':' +
+        (map.destructibles || []).map(o=>objectStates?.[o.id]?.broken ? 1 : 0).join('');
       if (gridKey === key) return key;
       const cached = grids.get(key);
       if (cached) { gridKey = key; grid = cached.grid; rects = cached.rects; return key; }
-      gridKey = key; rects = obstacles(map, states); grid = new Uint8Array(cols * rows);
+      gridKey = key; rects = obstacles(map, states, objectStates); grid = new Uint8Array(cols * rows);
       for (let id = 0; id < grid.length; id++) {
         const p = point(id);
         grid[id] = p.x < r || p.y < r || p.x > map.width - r || p.y > map.height - r ||
@@ -136,8 +167,8 @@ globalThis.RampageHistoryRules = (() => {
       for (let id = last; id >= 0; id = parent[id]) { result.push(point(id)); if (id === first) break; }
       return result.reverse();
     }
-    function direction(entity, target, radius, states, now = Date.now()) {
-      const key = prepare(radius, states), area = entity.historyLeashArea;
+    function direction(entity, target, radius, states, now = Date.now(), objectStates = {}) {
+      const key = prepare(radius, states, objectStates), area = entity.historyLeashArea;
       const goal = {x: clamp(target.x, area ? area.x + radius : radius, area ? area.x + area.w - radius : map.width - radius),
         y: clamp(target.y, area ? area.y + radius : radius, area ? area.y + area.h - radius : map.height - radius)};
       const norm = p => {const dx = p.x - entity.x, dy = p.y - entity.y, d = Math.hypot(dx, dy); return d > 1 ? {x: dx / d, y: dy / d} : {x: 0, y: 0};};
@@ -153,13 +184,13 @@ globalThis.RampageHistoryRules = (() => {
       if (!next) { route.until = 0; return {x: 0, y: 0}; }
       return norm(next);
     }
-    function spawnPoint(p, radius, states, area) {
-      prepare(radius, states);
+    function spawnPoint(p, radius, states, area, objectStates = {}) {
+      prepare(radius, states, objectStates);
       if (areaContains(p, area, radius) && clear(p, p, radius)) return p;
       const id = nearest(p, area, radius, false);
       return id < 0 ? null : point(id);
     }
     return {direction, spawnPoint};
   }
-  return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator};
+  return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject};
 })();

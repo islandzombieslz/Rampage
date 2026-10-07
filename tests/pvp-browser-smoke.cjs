@@ -70,12 +70,12 @@ const pvpTestHook=`window.__pvpBrowserTest={
      victories:events.filter(e=>e.kind==='victory').length};
  },
  historyLocalDoors(){
-   const doors=historyMapData().doors||[],prox=doors.find(d=>d.openWhen==='proximity'),defeat=doors.find(d=>d.openWhen==='defeat_count');
+   const doors=historyMapData().doors||[],prox=doors.find(d=>d.openWhen==='proximity'),defeat=doors.find(d=>d.openWhen==='proximity_and_defeat');
    const me=pvpLocalHero();if(!me||!prox||!defeat)return null;
    me.x=Number(prox.x)-20;me.y=Number(prox.y)+Number(prox.h)/2;HistoryLocalAdapter.updateDoors(performance.now(),me);
    const area=defeat.enemyArea,enemy={x:Number(area.x)+Number(area.w)/2,y:Number(area.y)+Number(area.h)/2};
    for(let i=0;i<Number(defeat.enemyCount||0);i++)HistoryLocalAdapter.registerDoorDefeat({...enemy,id:'door-test-'+i});
-   HistoryLocalAdapter.updateDoors(performance.now(),me);
+   me.x=Number(defeat.x)-20;me.y=Number(defeat.y)+Number(defeat.h)/2;HistoryLocalAdapter.updateDoors(performance.now(),me);
    return {
      count:doors.length,
      proximity:{id:prox.id,open:!!HistoryLocalAdapter.doorState[prox.id]?.open,collision:historyDoorCollisionActive(prox)},
@@ -83,9 +83,17 @@ const pvpTestHook=`window.__pvpBrowserTest={
        open:!!HistoryLocalAdapter.doorState[defeat.id]?.open,collision:historyDoorCollisionActive(defeat)}
    };
  },
+ historyLocalBoss(){
+   const boss=historyMapData().bosses[0],me=pvpLocalHero();
+   me.x=boss.x+boss.w/2;me.y=boss.y+boss.h+40;
+   historyHitMapObjects(me,40,60);
+   syncHistoryMapVisuals(boss.x-100,boss.y-100,1,1000,700);
+   const runtime=state.historyObjectState[boss.id];
+   return {hp:runtime.hp,shield:runtime.shield,attacks:boss.moves.attack.length,label:document.querySelector('.history-boss-status')?.textContent};
+ },
  historyLocalCheckpoint(){
    const me=pvpLocalHero();if(!me)return null;
-   me.x=599;me.y=656;HistoryLocalAdapter.updateProgress(performance.now(),me);
+   me.x=611;me.y=774;HistoryLocalAdapter.updateProgress(performance.now(),me);
    return {id:HistoryLocalAdapter.checkpointId,x:HistoryLocalAdapter.respawnPoint?.x,y:HistoryLocalAdapter.respawnPoint?.y};
  },
  leaveLocalHistory(){HistoryLocalAdapter.disconnect(false);navigateScreen('menuScreen');return !state.historyActive&&!HistoryLocalAdapter.active},
@@ -573,20 +581,22 @@ async function main(){
    assert((await localRow.textContent()).includes('LOCAL'),'History browser must expose the local server immediately');
    await localRow.click();await page.locator('#historyServerConfirm:not([disabled])').click();
    await page.locator('#gameScreen.active.history-mode').waitFor({timeout:10000});
-   await page.waitForFunction(()=>window.__pvpBrowserTest.historyLocalState().enemies>=14,null,{timeout:6000});
+   await page.waitForFunction(()=>window.__pvpBrowserTest.historyLocalState().enemies>=13,null,{timeout:6000});
    const localHistory=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalState());
    assert.deepEqual(localHistory,{
      active:true,historyActive:true,local:true,serverId:'history-local',online:false,host:true,
-     x:597,y:2049,enemies:14,spawns:3,checkpoints:2,victories:1
+     x:597,y:2049,enemies:13,spawns:3,checkpoints:2,victories:1
    },'local History must start from the editor origin, host locally and spawn the three configured waves');
    const localDoors=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalDoors());
    assert.deepEqual(localDoors,{
-     count:2,
+     count:4,
      proximity:{id:'obj218',open:true,collision:false},
      defeat:{id:'obj228',required:5,defeats:5,open:true,collision:false}
    },'local History must open the proximity door and the five-defeat door, removing collision in both open states');
+   const boss=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalBoss());
+   assert.deepEqual(boss,{hp:3000,shield:1460,attacks:0,label:'BOSS • 3000 / 3000 HP • 1460 escudo'},'editor boss must render its status and absorb strikes with shield first');
    const checkpoint=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalCheckpoint());
-   assert.deepEqual(checkpoint,{id:'event3',x:599,y:656},'reaching checkpoint 1 must update the local respawn point');
+   assert.deepEqual(checkpoint,{id:'event3',x:611,y:774},'reaching checkpoint 1 must update the local respawn point');
    assert(await page.evaluate(()=>window.__pvpBrowserTest.leaveLocalHistory()),'local History must disconnect without a cloud room');
 
    await page.locator('#createBtn').click();
