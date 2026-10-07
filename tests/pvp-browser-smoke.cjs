@@ -85,7 +85,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
  },
  historyLocalBoss(){
    const boss=historyMapData().bosses[0],me=pvpLocalHero();
-   me.x=boss.x+boss.w/2;me.y=boss.y+boss.h+40;
+   const r=boss.collisionRect;me.x=r[0]+r[2]/2;me.y=r[1]+r[3]+40;
    historyHitMapObjects(me,40,60);
    syncHistoryMapVisuals(boss.x-100,boss.y-100,1,1000,700);
    const runtime=state.historyObjectState[boss.id];

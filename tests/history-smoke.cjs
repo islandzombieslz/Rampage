@@ -23,9 +23,9 @@ assert(localStart>=0&&localEnd>localStart&&!localBlock.includes('new WebSocket('
 
 assert(worker.includes('class HistoryRoom extends DurableObject')&&worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'Cloudflare History must keep a Durable Object authority');
-assert(worker.includes('const HISTORY_SCHEMA_VERSION = 10')&&worker.includes('HISTORY_MAP_EVENTS'),
+assert(worker.includes('const HISTORY_SCHEMA_VERSION = 11')&&worker.includes('HISTORY_MAP_EVENTS'),
   'History server schema must be upgraded for editor gameplay events');
-assert(historyMapClient.includes('"id":"history-castle-v5"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v5"'),
+assert(historyMapClient.includes('"id":"history-castle-v6"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v6"'),
   'client and Cloudflare must use the updated editor map version');
 assert(historyMapClient.includes('"visualCount":156')&&historyMapClient.includes('"colliderCount":65')&&
   historyMapClient.includes('"doorCount":4')&&historyMapClient.includes('"eventCount":7'),
@@ -33,7 +33,7 @@ assert(historyMapClient.includes('"visualCount":156')&&historyMapClient.includes
 assert(historyMapServer.includes('HISTORY_MAP_DOORS')&&
   (historyMapServer.match(/"openWhen":"proximity"/g)||[]).length===1&&
   (historyMapServer.match(/"openWhen":"proximity_and_defeat"/g)||[]).length===3&&historyMapServer.includes('"enemyCount":5'),
-  'v5 map must preserve the proximity door and the three combined-condition doors from the editor');
+  'v6 map must preserve the proximity door and the three combined-condition doors from the editor');
 assert(worker.includes('updateDoors(now')&&worker.includes('registerDoorDefeat(enemy')&&worker.includes('historyDoorCollisionActive')&&
   worker.includes('doorState: this.room.doorState'),
   'Cloudflare must authoritatively open doors and change their collision state');

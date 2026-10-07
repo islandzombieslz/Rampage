@@ -12,7 +12,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 10;
+const HISTORY_SCHEMA_VERSION = 11;
 const HistoryRules = globalThis.RampageHistoryRules;
 const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS,destructibles:HISTORY_MAP_OBJECTS};
 const historyNavigation = HistoryRules.createNavigator(HISTORY_GEOMETRY);
