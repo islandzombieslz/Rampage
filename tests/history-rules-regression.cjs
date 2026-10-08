@@ -9,12 +9,12 @@ vm.runInContext(shared+'\n'+fs.readFileSync('history-server/src/map.js','utf8').
 function cloud(){const r=Object.create(worker.Room.prototype);r.room=r.createRoom();r.broadcast=()=>{};r.projectileSeq=0;return r;}
 const r=cloud();r.updateSpawnEvents(clock);
 const alive=()=>r.room.dragons.filter(e=>e.alive);
-assert.equal(alive().length,13);
+assert.equal(alive().length,18);
 for(let i=0;i<20;i++)r.updateSpawnEvents(clock+=60000);
-assert.equal(alive().length,13,'endless waves must not accumulate living troops');
+assert.equal(alive().length,18,'endless waves must not accumulate living troops');
 const killed=alive().find(e=>e.type==='dragon'&&e.historySpawnEventId==='event2');killed.alive=false;
 const killedAnubis=alive().find(e=>e.type==='anubis');killedAnubis.alive=false;
-r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,13,'only missing types are replaced');
+r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,18,'only missing types are replaced');
 assert.equal(alive().filter(e=>e.type==='dragon'&&e.historySpawnEventId==='event2').length,3);
 assert.equal(alive().filter(e=>e.type==='anubis'&&e.historySpawnEventId==='event6').length,2);
 const free={id:'free',x:600,y:1400,troops:{naja:2},limitAlive:false,intervalMs:1000};
@@ -39,7 +39,7 @@ local.pvpBaseEntity=(hero,x,y,team)=>{const e={id:local.state.entities.length+1,
 const a=html.indexOf('const HISTORY_LOCAL_ENEMY_STATS='),b=html.indexOf('function renderHistoryServers',a);
 vm.runInContext(html.slice(a,b)+'\nglobalThis.adapter=HistoryLocalAdapter;',local);
 for(let i=0;i<20;i++)local.adapter.updateSpawns(clock+=60000);
-assert.equal(local.state.entities.filter(e=>e.alive).length,13,'local host enforces the same cap');
+assert.equal(local.state.entities.filter(e=>e.alive).length,18,'local host enforces the same cap');
 local.state.entities.find(e=>e.type==='anubis').alive=false;local.adapter.updateSpawns(clock+=60000);
 assert.equal(local.state.entities.filter(e=>e.alive&&e.type==='anubis').length,2);
 // Navigate a wall and a U-shaped enclosure: no teleporting, corner clipping or lost leash.

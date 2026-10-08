@@ -23,17 +23,17 @@ assert(localStart>=0&&localEnd>localStart&&!localBlock.includes('new WebSocket('
 
 assert(worker.includes('class HistoryRoom extends DurableObject')&&worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'Cloudflare History must keep a Durable Object authority');
-assert(worker.includes('const HISTORY_SCHEMA_VERSION = 11')&&worker.includes('HISTORY_MAP_EVENTS'),
+assert(worker.includes('const HISTORY_SCHEMA_VERSION = 12')&&worker.includes('HISTORY_MAP_EVENTS'),
   'History server schema must be upgraded for editor gameplay events');
-assert(historyMapClient.includes('"id":"history-castle-v6"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v6"'),
+assert(historyMapClient.includes('"id":"history-castle-v7"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v7"'),
   'client and Cloudflare must use the updated editor map version');
-assert(historyMapClient.includes('"visualCount":156')&&historyMapClient.includes('"colliderCount":65')&&
-  historyMapClient.includes('"doorCount":4')&&historyMapClient.includes('"eventCount":7'),
-  'updated map must contain 156 visuals, 65 static colliders, four dynamic doors and 7 gameplay events');
+assert(historyMapClient.includes('"visualCount":155')&&historyMapClient.includes('"colliderCount":67')&&
+  historyMapClient.includes('"doorCount":4')&&historyMapClient.includes('"eventCount":11'),
+  'updated map must contain 155 visuals, 67 static colliders, four dynamic doors and 11 gameplay events');
 assert(historyMapServer.includes('HISTORY_MAP_DOORS')&&
   (historyMapServer.match(/"openWhen":"proximity"/g)||[]).length===1&&
   (historyMapServer.match(/"openWhen":"proximity_and_defeat"/g)||[]).length===3&&historyMapServer.includes('"enemyCount":5'),
-  'v6 map must preserve the proximity door and the three combined-condition doors from the editor');
+  'v7 map must preserve the proximity door and the three combined-condition doors from the editor');
 assert(worker.includes('updateDoors(now')&&worker.includes('registerDoorDefeat(enemy')&&worker.includes('historyDoorCollisionActive')&&
   worker.includes('doorState: this.room.doorState'),
   'Cloudflare must authoritatively open doors and change their collision state');
@@ -41,10 +41,10 @@ assert(html.includes('historyDoorCollisionActive')&&html.includes('scanDoorDefea
   'local History must evaluate the same door triggers, collision and open artwork');
 assert(historyMapServer.includes('HISTORY_MAP_SPAWN = Object.freeze({"x":597,"y":2049})'),
   'player origin must come from the editor player_start event');
-assert((historyMapServer.match(/"kind":"enemy_spawn"/g)||[]).length===3&&
-  (historyMapServer.match(/"kind":"checkpoint"/g)||[]).length===2&&
+assert((historyMapServer.match(/"kind":"enemy_spawn"/g)||[]).length===4&&
+  (historyMapServer.match(/"kind":"checkpoint"/g)||[]).length===3&&
   (historyMapServer.match(/"kind":"victory"/g)||[]).length===1,
-  'editor map must keep three troop spawns, two checkpoints and one victory area');
+  'editor map must keep four troop spawns, three checkpoints and one victory area');
 assert(historyMapServer.includes('"dragon":3')&&historyMapServer.includes('"naja":1')&&historyMapServer.includes('"anubis":2')&&
   historyMapServer.includes('"spawnMode":"endless"'),
   'editor troop quantities and endless spawn settings must reach the game config');
@@ -108,3 +108,5 @@ require('./history-combat-regression.cjs');
 require('./history-rules-regression.cjs');
 
 require('./history-map-v5-regression.cjs');
+
+require('./history-boss-camera-regression.cjs');

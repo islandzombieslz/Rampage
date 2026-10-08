@@ -2,7 +2,7 @@
 import base64, hashlib, io, json, pathlib, re, sys
 from PIL import Image
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-version=sys.argv[2] if len(sys.argv)>2 else 'history-castle-v5'
+version=sys.argv[2] if len(sys.argv)>2 else 'history-castle-v7'
 asset_version=version.rsplit('-',1)[-1]
 p=json.loads(re.search(r'<script id="projectData" type="application/json">(.*?)</script>',pathlib.Path(sys.argv[1]).read_text(),re.S)[1])
 existing={hashlib.sha256(f.read_bytes()).hexdigest():f.relative_to(ROOT).as_posix() for f in (ROOT/'assets/history').glob('map-*/*') if f.is_file()}
@@ -43,7 +43,9 @@ for o in p['objects']:
  elif o['type']=='boss':
   moves=json.loads(json.dumps(b.get('moves',{})))
   for kind,items in moves.items():
-   for m in items:m['asset']=index(m.get('asset'))
+   for m in items:
+    m['asset']=index(m.get('asset'))
+    m['gifDurationMs']=durations.get(assets[m['asset']],1000) if m['asset'] is not None else 1000
   boss={**base,'kind':'boss','hp':b.get('hp',3000),'shield':b.get('shield',1500),'moves':moves,'pattern':b.get('pattern',[]),'respawn':False,'removeCollisionOnBreak':True,'fadeOut':True,'fadeOutSeconds':.35,'breakDurationMs':0,'xp':0}
   objects.append(boss);bosses.append(boss)
  elif d.get('enabled'):

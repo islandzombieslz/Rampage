@@ -12,7 +12,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 11;
+const HISTORY_SCHEMA_VERSION = 12;
 const HistoryRules = globalThis.RampageHistoryRules;
 const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS,destructibles:HISTORY_MAP_OBJECTS};
 const historyNavigation = HistoryRules.createNavigator(HISTORY_GEOMETRY);
@@ -272,6 +272,19 @@ export class HistoryRoom extends DurableObject {
       const state=this.room.objectState[o.id];
       if(state?.broken&&o.respawn&&now>=state.respawnAt)Object.assign(state,{hp:o.hp,broken:false,brokenAt:0,respawnAt:0});
     }
+  }
+
+  updateBosses(now) {
+    HistoryRules.updateBosses(HISTORY_GEOMETRY,this.room.objectState,this.room.doorState,
+      Object.values(this.room.players),now,(boss,move,player,push)=>{
+        const protectedCharge=now<Number(player.specialActiveUntil||0);
+        const steps=Math.max(1,Math.ceil(Math.hypot(push.x,push.y)/18));
+        if(!protectedCharge)for(let i=0;i<steps;i++)moveHistoryPlayer(player,push.x/steps,push.y/steps,COMBAT_ENTITY_RADIUS,this.room.doorState,this.room.objectState);
+        const origin={id:boss.id,x:boss.x+boss.w/2,y:boss.y+boss.h/2};
+        this.applyDamage("player",player,protectedCharge&&move.damage>0?2:Number(move.damage)||0,"boss_attack",boss.id,
+          move.hitEffect?.enabled===false?null:normalizedImpact(origin,player,6));
+        this.defeatPlayer(player,now);
+      });
   }
 
   hitMapObjects(player,damage,range,now=Date.now(),hitIntervalMs=0) {
@@ -1149,6 +1162,7 @@ export class HistoryRoom extends DurableObject {
     }
 
     this.updateObjects(now);
+    this.updateBosses(now);
     this.updateSpawnEvents(now);
     this.updateDragons(dt, now);
     this.updateProjectiles(dt, now);

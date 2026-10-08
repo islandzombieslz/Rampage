@@ -192,5 +192,99 @@ globalThis.RampageHistoryRules = (() => {
     }
     return {direction, spawnPoint};
   }
-  return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject};
+  function bossMoveArea(o, move) {
+    if (move.areaMode === 'custom') return move.customArea;
+    return move.areaMode === 'near' ? {x:o.x-50,y:o.y-40,w:o.w+100,h:o.h+80} : o;
+  }
+  function bossPush(o, move, player) {
+    const dir=move.push?.direction || 'away', flow=move.areaFlow;
+    let x=0,y=0;
+    if(dir==='away') { x=player.x-o.x-o.w/2; y=player.y-o.y-o.h/2; }
+    else {
+      const d=dir==='flow' ? ({left_to_right:'right',right_to_left:'left',top_to_bottom:'down',bottom_to_top:'up'}[flow]) : dir;
+      x=d==='right'?1:d==='left'?-1:0; y=d==='down'?1:d==='up'?-1:0;
+    }
+    const length=Math.hypot(x,y)||1,force=move.push?.enabled ? clamp(Number(move.push.force)||0,0,800) : 0;
+    return {x:x/length*force,y:y/length*force};
+  }
+  // Both authorities use the editor sequence, hit schedule and actual GIF length.
+  function updateBosses(map, states, doors, players, now, hit) {
+    for(const o of (map.destructibles || []).filter(o=>o.kind==='boss')) {
+      const rt=states[o.id]; if(!rt)continue;
+      if(rt.broken) { rt.activeMoveId=null; continue; }
+      const sequence=(o.pattern?.length ? o.pattern : ['attack','special','power'].flatMap(kind=>(o.moves[kind]||[]).map(m=>({kind,moveId:m.id,repeats:1}))))
+        .flatMap(step=>Array.from({length:Math.max(1,Number(step.repeats)||1)},()=>o.moves[step.kind]?.find(m=>m.id===step.moveId))).filter(Boolean);
+      if(!rt.activeMoveId && sequence.length && now>=(rt.nextAt||0) && players.some(p=>p.alive&&Math.hypot(p.x-o.x-o.w/2,p.y-o.y-o.h/2)<420)) {
+        const move=sequence[(rt.moveIndex||0)%sequence.length]; rt.moveIndex=(rt.moveIndex||0)+1;
+        const gif=Math.max(50,Number(move.gifDurationMs)||1000);
+        const visual=move.effectDurationMode==='duration' ? Math.max(50,Number(move.effectDurationSec)*1000||1000) : gif;
+        rt.actionStartedAt=now; rt.activeMoveId=move.id;
+        rt.visualUntil=now+(move.preserveUntilGifEnd ? Math.max(visual,gif) : visual);
+        rt.hitNextAt=now+(move.hitTiming==='delay' ? Math.max(0,Number(move.delaySec)||0)*1000 : 0);
+        rt.hitEndAt=rt.hitNextAt+(move.damageMode==='constant' ? Math.max(50,Number(move.damageDurationSec)*1000||3000) : 0);
+        rt.hitDone=false; rt.until=Math.max(rt.visualUntil,rt.hitEndAt); rt.nextAt=rt.until+1200;
+        rt.hp=Math.min(o.hp,rt.hp+Math.max(0,Number(move.heal)||0));
+      }
+      const move=Object.values(o.moves).flat().find(m=>m.id===rt.activeMoveId);
+      if(!move)continue;
+      const area=bossMoveArea(o,move), rect=[area.x,area.y,area.w,area.h,move.areaMode==='custom'?move.areaShape:'rect'];
+      if(!rt.hitDone && (move.damageMode!=='constant' || now<=rt.hitEndAt)) {
+        let guard=0;
+        while(now>=rt.hitNextAt && rt.hitNextAt<=rt.hitEndAt && guard++<8) {
+          for(const player of players) {
+            if(!player.alive || rectHitTime(player.x,player.y,player.x,player.y,rect,player.r||30)===null)continue;
+            const body=o.collisionRect||[o.x,o.y,o.w,o.h];
+            const x=clamp(player.x,body[0],body[0]+body[2]), y=clamp(player.y,body[1],body[1]+body[3]);
+            if(firstWallHit(map,doors,x,y,player.x,player.y,0,states,o.id)!==null)continue;
+            if(move.damage>0 || move.push?.enabled)hit(o,move,player,bossPush(o,move,player));
+          }
+          if(move.damageMode!=='constant') { rt.hitDone=true; break; }
+          rt.hitNextAt+=Math.max(50,Number(move.damageIntervalSec)*1000||1000);
+        }
+      }
+      if(now>rt.hitEndAt)rt.hitDone=true;
+      if(now>=rt.until)rt.activeMoveId=null;
+    }
+  }
+  function createCameraState() { return {events:{},queue:[],active:null,shake:null,held:null}; }
+  function cameraFrame(map, rt, player, objects, now, base) {
+    if(!player)return base;
+    for(const event of (map.events||[]).filter(e=>e.kind==='camera')) {
+      const c=event.camera, st=rt.events[event.id] ||= {fired:false,inside:false,defeated:false};
+      const a=c.triggerArea,inside=c.trigger==='area' && player.alive && player.x>=a.x && player.x<=a.x+a.w && player.y>=a.y && player.y<=a.y+a.h;
+      const defeated=c.trigger==='boss_defeated' && !!objects[c.bossId]?.broken;
+      const trigger=inside&&!st.inside || defeated&&!st.defeated;
+      st.inside=inside; st.defeated=defeated;
+      if(trigger && (c.repeat==='always' || !st.fired)) {st.fired=true;rt.queue.push(event);}
+    }
+    const shake=(c)=> {if(c.shake?.enabled)rt.shake={until:now+Math.max(50,c.shake.durationSec*1000),intensity:clamp(c.shake.intensity,1,80)};};
+    let pose=rt.held||base,scripted=!!(rt.active||rt.held);
+    if(!rt.active && rt.queue.length) {
+      scripted=true;
+      const event=rt.queue.shift(), c=event.camera;
+      const points=c.points.map(p=>({...p,zoom:p.zoom/100}));
+      if(c.finish==='player')points.push({player:true,zoom:1,durationSec:c.returnSec});
+      rt.active={event,points,index:0,from:{...pose},segStart:now}; rt.held=null;
+      if(c.shake?.when==='start')shake(c);
+    }
+    if(rt.active) {
+      const run=rt.active,c=run.event.camera;
+      // Advance by segment deadlines, so a slow frame cannot stretch the path.
+      while(run.index<run.points.length) {
+        const to=run.points[run.index],target=to.player?{x:player.x,y:player.y,zoom:1}:to;
+        const duration=Math.max(50,(Number(to.durationSec)||1)*1000),u=clamp((now-run.segStart)/duration,0,1),smooth=u*u*(3-2*u);
+        pose={x:run.from.x+(target.x-run.from.x)*smooth,y:run.from.y+(target.y-run.from.y)*smooth,zoom:run.from.zoom+(target.zoom-run.from.zoom)*smooth};
+        if(u<1)break;
+        if(c.shake?.when==='each_point'&&!to.player)shake(c);
+        run.from={...target};run.segStart+=duration;run.index++;
+      }
+      if(run.index===run.points.length) {
+        rt.active=null;rt.held=c.finish==='player'?null:{...pose};
+        if(c.shake?.when==='end')shake(c);
+      }
+    }
+    return {...pose,scripted,shake:rt.shake&&now<rt.shake.until?rt.shake.intensity:0};
+  }
+  return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject,
+    bossMoveArea, updateBosses, createCameraState, cameraFrame};
 })();

@@ -26,7 +26,15 @@ for(const e of source.events){const imported=map.events.find(x=>x.id===e.id);for
 for(const url of map.assets)assert(fs.existsSync(url),url);
 assert.equal(map.destructibles.filter(o=>o.kind==='destructible').length,10);
 const boss=map.bosses[0];assert.equal(boss.hp,3000);assert.equal(boss.shield,1500);
-assert.equal(boss.moves.idle.length,1);assert.equal(boss.moves.attack.length+boss.moves.special.length+boss.moves.power.length,0,'no invented boss attacks');
+assert.equal(boss.moves.idle.length,1);assert.equal(boss.moves.attack.length,2);assert.equal(boss.moves.special.length+boss.moves.power.length,0);
+const originalBoss=source.objects.find(o=>o.type==='boss');
+assert.deepEqual(plain(boss.pattern),originalBoss.boss.pattern);
+for(const kind of Object.keys(boss.moves))for(const m of boss.moves[kind]){
+ const sourceMove=originalBoss.boss.moves[kind].find(x=>x.id===m.id);
+ for(const k of Object.keys(sourceMove))if(k!=='asset')assert.deepEqual(plain(m[k]),sourceMove[k],m.id+' '+k);
+ assert.equal(map.assets[m.asset],source.assets[sourceMove.asset.assetId]);
+}
+assert.equal(boss.moves.attack[0].gifDurationMs,5930);assert.equal(boss.moves.idle[0].gifDurationMs,3500);
 // The supplied idle GIF must retain the complete 105-frame, 3.5-second cycle.
 const gif=fs.readFileSync(map.assets[boss.moves.idle[0].asset]);
 assert.equal(gif.subarray(0,3).toString(),'GIF');
@@ -69,4 +77,4 @@ assert.equal(rules.firstWallHit(wall,{},60,80,260,80,8,state),null);
 Object.assign(state.crate,{hp:20,broken:false});
 assert.equal(nav.direction(npc,goal,16,{},2,state).x,0,'barrel respawn restores collision and navigation');
 const ellipse=[100,100,80,80,'circle'];assert.equal(rules.rectHitTime(100,100,100,100,ellipse),null);assert.equal(rules.rectHitTime(140,140,140,140,ellipse),0);
-console.log('MAP V6 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and no invented attacks.');
+console.log('MAP V7 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and exact editor attack sequence.');
