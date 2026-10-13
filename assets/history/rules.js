@@ -71,9 +71,13 @@ globalThis.RampageHistoryRules = (() => {
       if(now < (runtime.lastSpecialHits[id] || 0) + hitIntervalMs)return false;
       runtime.lastSpecialHits[id]=now;
     }
+    const before=runtime.hp+(Number(runtime.shield)||0);
     const absorbed=Math.min(Number(runtime.shield)||0,damage);
     runtime.shield=(Number(runtime.shield)||0)-absorbed;
     runtime.hp=Math.max(0,runtime.hp-(damage-absorbed));
+    runtime.hitSerial=(Number(runtime.hitSerial)||0)+1;
+    runtime.hitAt=now;
+    runtime.hitDamage=before-runtime.hp-runtime.shield;
     if(runtime.hp===0)Object.assign(runtime,{broken:true,brokenAt:now,
       respawnAt:o.respawn ? now+Math.max(1,Number(o.respawnSeconds)||10)*1000 : 0});
     return true;
@@ -285,6 +289,31 @@ globalThis.RampageHistoryRules = (() => {
     }
     return {...pose,scripted,shake:rt.shake&&now<rt.shake.until?rt.shake.intensity:0};
   }
+  function soundMix(event, map, objects, player, enemies) {
+    const a=event.sound,area=event.area;
+    const inside=(p,r)=>!!p&&!!r&&p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h;
+    if(!a||!player)return {active:false,volume:0};
+    const foes=[...(enemies||[]).filter(e=>e.alive),...(map.bosses||map.destructibles||[])
+      .filter(o=>o.kind==='boss'&&!objects[o.id]?.broken&&(objects[o.id]?.hp??o.hp)>0)
+      .map(o=>({x:o.x+o.w/2,y:o.y+o.h/2}))];
+    const near=foes.some(e=>Math.hypot(e.x-player.x,e.y-player.y)<=520),inArea=foes.some(e=>inside(e,area));
+    const conditions={none:true,in_area:inArea,no_in_area:!inArea,near_player:near,no_near_player:!near,in_area_not_near:inArea&&!near};
+    const triggers={area:inside(player,area),enemies_near:near,enemies_in_area:inArea,no_enemies_in_area:!inArea,
+      no_enemies_near:!near,enemies_in_area_not_near:inArea&&!near};
+    const active=!!triggers[a.trigger||'area']&&!!conditions[a.enemyCondition||(a.requireEnemiesInArea?'in_area':'none')];
+    let spatial=1;
+    if(a.mode==='spatial') {
+      spatial=0;
+      if(inside(player,area)) {
+        const x=clamp(event.x,area.x,area.x+area.w),y=clamp(event.y,area.y,area.y+area.h),dx=player.x-x,dy=player.y-y;
+        let t=Infinity;
+        if(dx>0)t=Math.min(t,(area.x+area.w-x)/dx);else if(dx<0)t=Math.min(t,(area.x-x)/dx);
+        if(dy>0)t=Math.min(t,(area.y+area.h-y)/dy);else if(dy<0)t=Math.min(t,(area.y-y)/dy);
+        spatial=clamp(1-(Number.isFinite(t)&&t>0?1/t:0)*.92,.08,1);
+      }
+    }
+    return {active,volume:clamp((Number(a.volume)||0)/100,0,1)*spatial};
+  }
   return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject,
-    bossMoveArea, updateBosses, createCameraState, cameraFrame};
+    bossMoveArea, updateBosses, createCameraState, cameraFrame, soundMix};
 })();

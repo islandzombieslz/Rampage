@@ -23,17 +23,17 @@ assert(localStart>=0&&localEnd>localStart&&!localBlock.includes('new WebSocket('
 
 assert(worker.includes('class HistoryRoom extends DurableObject')&&worker.includes('new WebSocketPair()')&&worker.includes('status: 101'),
   'Cloudflare History must keep a Durable Object authority');
-assert(worker.includes('const HISTORY_SCHEMA_VERSION = 12')&&worker.includes('HISTORY_MAP_EVENTS'),
+assert(worker.includes('const HISTORY_SCHEMA_VERSION = 13')&&worker.includes('HISTORY_MAP_EVENTS'),
   'History server schema must be upgraded for editor gameplay events');
-assert(historyMapClient.includes('"id":"history-castle-v7"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v7"'),
+assert(historyMapClient.includes('"id":"history-castle-v8"')&&historyMapServer.includes('HISTORY_MAP_ID = "history-castle-v8"'),
   'client and Cloudflare must use the updated editor map version');
 assert(historyMapClient.includes('"visualCount":155')&&historyMapClient.includes('"colliderCount":67')&&
-  historyMapClient.includes('"doorCount":4')&&historyMapClient.includes('"eventCount":11'),
-  'updated map must contain 155 visuals, 67 static colliders, four dynamic doors and 11 gameplay events');
+  historyMapClient.includes('"doorCount":4')&&historyMapClient.includes('"eventCount":14'),
+  'updated map must contain 155 visuals, 67 static colliders, four dynamic doors and 14 gameplay events');
 assert(historyMapServer.includes('HISTORY_MAP_DOORS')&&
   (historyMapServer.match(/"openWhen":"proximity"/g)||[]).length===1&&
   (historyMapServer.match(/"openWhen":"proximity_and_defeat"/g)||[]).length===3&&historyMapServer.includes('"enemyCount":5'),
-  'v7 map must preserve the proximity door and the three combined-condition doors from the editor');
+  'v8 map must preserve the proximity door and the three combined-condition doors from the editor');
 assert(worker.includes('updateDoors(now')&&worker.includes('registerDoorDefeat(enemy')&&worker.includes('historyDoorCollisionActive')&&
   worker.includes('doorState: this.room.doorState'),
   'Cloudflare must authoritatively open doors and change their collision state');
@@ -110,3 +110,5 @@ require('./history-rules-regression.cjs');
 require('./history-map-v5-regression.cjs');
 
 require('./history-boss-camera-regression.cjs');
+
+require('./history-audio-feedback-regression.cjs');

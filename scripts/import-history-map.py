@@ -2,7 +2,7 @@
 import base64, hashlib, io, json, pathlib, re, sys
 from PIL import Image
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-version=sys.argv[2] if len(sys.argv)>2 else 'history-castle-v7'
+version=sys.argv[2] if len(sys.argv)>2 else 'history-castle-v8'
 asset_version=version.rsplit('-',1)[-1]
 p=json.loads(re.search(r'<script id="projectData" type="application/json">(.*?)</script>',pathlib.Path(sys.argv[1]).read_text(),re.S)[1])
 existing={hashlib.sha256(f.read_bytes()).hexdigest():f.relative_to(ROOT).as_posix() for f in (ROOT/'assets/history').glob('map-*/*') if f.is_file()}
@@ -10,7 +10,7 @@ assets=[];durations={};refs={}
 def asset(src):
  if not src: return None
  if not src.startswith('data:'): return src
- raw=base64.b64decode(src.split(',',1)[1]);sha=hashlib.sha256(raw).hexdigest();ext={'image/webp':'webp','image/gif':'gif','image/png':'png','image/jpeg':'jpg'}[src.split(';')[0][5:]]
+ raw=base64.b64decode(src.split(',',1)[1]);sha=hashlib.sha256(raw).hexdigest();ext={'image/webp':'webp','image/gif':'gif','image/png':'png','image/jpeg':'jpg','audio/mpeg':'mp3','audio/mp3':'mp3','audio/wav':'wav','audio/ogg':'ogg','audio/x-wav':'wav','audio/mp4':'m4a'}[src.split(';')[0][5:]]
  url=existing.get(sha,f'assets/history/map-{asset_version}/{sha[:16]}.{ext}')
  dest=ROOT/url;dest.parent.mkdir(parents=True,exist_ok=True)
  if not dest.exists():dest.write_bytes(raw)
@@ -57,6 +57,7 @@ events=json.loads(json.dumps(p['events']))
 for e in events:
  if e['kind']=='enemy_spawn':e.setdefault('limitAlive',True)
  if e['kind']=='checkpoint':e['respawn']={'x':e['x'],'y':e['y']}
+ if e['kind']=='sound':e['sound']['src']=asset(e.get('sound',{}).get('src'))
 spawn=next(e for e in events if e['kind']=='player_start')
 m={'id':version,'width':3200,'height':2200,'spawn':{'x':spawn['x'],'y':spawn['y']},'visualCount':len(visuals),'colliderCount':len(colliders),'doorCount':len(doors),'eventCount':len(events),'assets':assets,'objects':visuals,'colliders':colliders,'doors':doors,'events':events,'destructibles':objects,'bosses':bosses}
 compact=lambda x:json.dumps(x,ensure_ascii=False,separators=(',',':'))
@@ -65,6 +66,7 @@ exports={'ID':m['id'],'WORLD':{'width':3200,'height':2200},'SPAWN':m['spawn'],'P
 (ROOT/'history-server/src/map.js').write_text('/* Generated from the same editor project as assets/history/map-config.js. */\n'+''.join('export const HISTORY_MAP_'+k+' = '+(compact(v) if isinstance(v,str) else 'Object.freeze('+compact(v)+')')+';\n' for k,v in exports.items()))
 # A small source manifest retains editor rules for auditing, with embedded images replaced by repository URLs.
 p['assets']=refs
+p['events']=events
 for o in p['objects']:
  if o.get('src','').startswith('data:'):
   o['src']=assets[visuals[next(x['objectIndex'] for x in objects if x['id']==o['id'])][0]] if o['type']=='boss' else asset(o['src'])

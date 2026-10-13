@@ -25,7 +25,7 @@ for(const o of source.objects.filter(o=>o.type==='door')){
 for(const e of source.events){const imported=map.events.find(x=>x.id===e.id);for(const k of Object.keys(e))assert.deepEqual(plain(imported[k]),e[k],e.id+' '+k);}
 for(const url of map.assets)assert(fs.existsSync(url),url);
 assert.equal(map.destructibles.filter(o=>o.kind==='destructible').length,10);
-const boss=map.bosses[0];assert.equal(boss.hp,3000);assert.equal(boss.shield,1500);
+const boss=map.bosses[0];assert.equal(boss.hp,500);assert.equal(boss.shield,250);
 assert.equal(boss.moves.idle.length,1);assert.equal(boss.moves.attack.length,2);assert.equal(boss.moves.special.length+boss.moves.power.length,0);
 const originalBoss=source.objects.find(o=>o.type==='boss');
 assert.deepEqual(plain(boss.pattern),originalBoss.boss.pattern);
@@ -58,12 +58,12 @@ assert(boss.collisionRect[2]<boss.w&&boss.collisionRect[3]<boss.h,'boss uses the
 const objects=rules.initialObjects(map),doors=Object.fromEntries(map.doors.map(d=>[d.id,{open:true}]));
 const r=boss.collisionRect,player={id:'me',x:r[0]+r[2]/2,y:r[1]-40};
 assert(rules.hitObject(map,boss,objects[boss.id],player,100,60,doors,objects,10000),'own collision cannot block a melee strike');
-assert.equal(objects[boss.id].shield,1400);assert.equal(objects[boss.id].hp,3000);
-assert(rules.hitObject(map,boss,objects[boss.id],player,1400,60,doors,objects,11000));
-assert.equal(objects[boss.id].shield,0);assert.equal(objects[boss.id].hp,3000);
+assert.equal(objects[boss.id].shield,150);assert.equal(objects[boss.id].hp,500);
+assert(rules.hitObject(map,boss,objects[boss.id],player,150,60,doors,objects,11000));
+assert.equal(objects[boss.id].shield,0);assert.equal(objects[boss.id].hp,500);
 assert(rules.hitObject(map,boss,objects[boss.id],player,70,60,doors,objects,12000,780));
 assert.equal(rules.hitObject(map,boss,objects[boss.id],player,70,60,doors,objects,12033,780),false,'special cannot damage the boss on every frame');
-assert.equal(objects[boss.id].hp,2930);
+assert.equal(objects[boss.id].hp,430);
 assert(rules.hitObject(map,boss,objects[boss.id],player,3000,60,doors,objects,13000));
 assert(objects[boss.id].broken);assert.equal(objects[boss.id].respawnAt,0);
 assert.equal(rules.firstWallHit(map,doors,player.x,player.y,player.x,r[1]+20,0,objects),null,'defeated boss releases collision');
@@ -77,4 +77,4 @@ assert.equal(rules.firstWallHit(wall,{},60,80,260,80,8,state),null);
 Object.assign(state.crate,{hp:20,broken:false});
 assert.equal(nav.direction(npc,goal,16,{},2,state).x,0,'barrel respawn restores collision and navigation');
 const ellipse=[100,100,80,80,'circle'];assert.equal(rules.rectHitTime(100,100,100,100,ellipse),null);assert.equal(rules.rectHitTime(140,140,140,140,ellipse),0);
-console.log('MAP V7 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and exact editor attack sequence.');
+console.log('MAP V8 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and exact editor attack sequence.');

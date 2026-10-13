@@ -42,12 +42,12 @@ const camEvents=map.events.filter(e=>e.kind==='camera');assert.equal(camEvents.l
 const rt=rules.createCameraState(),heroCamera={alive:true,x:559,y:1950},base={x:559,y:1950,zoom:1};
 const frame=t=>rules.cameraFrame(map,rt,heroCamera,{},t,base);
 frame(0);assert.equal(rt.active.event.id,'event10');
-assert.equal(frame(2000).zoom,1.4);assert.equal(frame(4000).y,388);assert.equal(frame(6000).x,2611);assert.equal(frame(8000).y,1889);
-const returned=frame(8800);assert.equal(rt.active,null);assert.equal(returned.x,heroCamera.x);assert.equal(returned.zoom,1);
+assert.equal(frame(1000).zoom,1);assert.equal(frame(3000).y,388);assert.equal(frame(5000).x,2611);assert.equal(frame(7000).y,1889);
+const returned=frame(7800);assert.equal(rt.active,null);assert.equal(returned.x,heroCamera.x);assert.equal(returned.zoom,1);
 heroCamera.x=100;frame(8900);heroCamera.x=559;frame(9000);assert.equal(rt.active,null,'once camera cannot repeat on reentry');
 heroCamera.x=2342;heroCamera.y=2010;const shaken=frame(10000);assert.equal(rt.active.event.id,'event11');assert.equal(shaken.shake,10);
 assert.equal(frame(12001).shake,0);frame(14600);assert.equal(rt.active,null);assert.equal(rt.events.event11.fired,true);
 const queued=rules.createCameraState();heroCamera.x=559;heroCamera.y=1950;rules.cameraFrame(map,queued,heroCamera,{},0,base);
 heroCamera.x=2342;heroCamera.y=2010;rules.cameraFrame(map,queued,heroCamera,{},100,base);assert.equal(queued.queue.length,1);
-rules.cameraFrame(map,queued,heroCamera,{},8800,base);rules.cameraFrame(map,queued,heroCamera,{},8801,base);assert.equal(queued.active.event.id,'event11');
+rules.cameraFrame(map,queued,heroCamera,{},7800,base);rules.cameraFrame(map,queued,heroCamera,{},7801,base);assert.equal(queued.active.event.id,'event11');
 console.log('HISTORY BOSS/CAMERA PASS: exact sequence, GIF duration, scheduled/area/occluded damage, shield/push/death, delayed ticks, both camera paths, shake, queue and once triggers.');

@@ -36,6 +36,7 @@ external_urls = set(re.findall(r'''['"](https://i\.postimg\.cc/[^'"<>\s]+)['"]''
 history_map_url = 'assets/history/map-config.js'
 local_urls.add(history_map_url)
 local_urls.add('assets/history/rules.js')
+local_urls.add('assets/history/audio.js')
 # Map artwork and break animations are referenced by the generated map config.
 local_urls.update(re.findall(r'"(assets/history/[^"]+)"', Path(history_map_url).read_text()))
 
@@ -66,7 +67,7 @@ for url in sorted(external_urls):
 manifest_json = json.dumps(manifest, ensure_ascii=False, separators=(',', ':'))
 new_manifest = 'const BOOT_ASSET_MANIFEST=Object.freeze(' + manifest_json + ');'
 text = manifest_pattern.sub(lambda _m: new_manifest, text, count=1)
-for history_url in (history_map_url, 'assets/history/rules.js'):
+for history_url in (history_map_url, 'assets/history/rules.js', 'assets/history/audio.js'):
     text, history_script_count = re.subn(
         r'<script src="' + re.escape(history_url) + r'(?:\?[^"<>]*)?"></script>',
         '<script src="' + history_url + '?rampageRev=' + manifest[history_url] + '"></script>',
