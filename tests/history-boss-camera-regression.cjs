@@ -35,9 +35,14 @@ const source=fs.readFileSync('history-server/src/index.js','utf8').replace(/^imp
 vm.runInContext(shared+'\n'+fs.readFileSync('history-server/src/map.js','utf8').replaceAll('export const','const')+'\n'+source+'\nglobalThis.Room=HistoryRoom',worker);
 const room=Object.create(worker.Room.prototype);room.room=room.createRoom();room.room.doorState=doors;const emitted=[];room.broadcast=e=>emitted.push(e);
 const hero={...p,hp:350,shield:100};room.room.players={hero};room.updateBosses(clock);
-clock+=3500;room.updateBosses(clock);clock+=1200;room.updateBosses(clock);
-assert.equal(hero.hp,350);assert.equal(hero.shield,50);assert(hero.y>1780);
-assert(emitted.some(e=>e.type==='damage'&&e.kind==='boss_attack'&&e.amount===50));
+clock+=3500;room.updateBosses(clock);clock+=1200;const beforeBossPushY=hero.y;room.updateBosses(clock);
+assert.equal(hero.hp,350);assert.equal(hero.shield,50);
+assert.equal(hero.y,beforeBossPushY,'boss hit arms knockback instead of teleporting the player in one tick');
+assert(hero.knockUntil>clock&&hero.knockLinear===true&&Math.hypot(hero.knockVX,hero.knockVY)>0,'boss knockback must be an active linear motion');
+const bossDamageEvent=emitted.find(e=>e.type==='damage'&&e.kind==='boss_attack'&&e.amount===50);
+assert(bossDamageEvent&&bossDamageEvent.impact?.linear===true&&bossDamageEvent.impact?.timeMs>0,'clients receive the same linear boss knockback');
+clock+=33;room.stepKnockback(hero,.033,clock);
+assert(hero.y>beforeBossPushY,'boss knockback advances the player on later simulation ticks');
 const camEvents=map.events.filter(e=>e.kind==='camera');assert.equal(camEvents.length,2);
 const rt=rules.createCameraState(),heroCamera={alive:true,x:559,y:1950},base={x:559,y:1950,zoom:1};
 const frame=t=>rules.cameraFrame(map,rt,heroCamera,{},t,base);
@@ -50,4 +55,9 @@ assert.equal(frame(12001).shake,0);frame(14600);assert.equal(rt.active,null);ass
 const queued=rules.createCameraState();heroCamera.x=559;heroCamera.y=1950;rules.cameraFrame(map,queued,heroCamera,{},0,base);
 heroCamera.x=2342;heroCamera.y=2010;rules.cameraFrame(map,queued,heroCamera,{},100,base);assert.equal(queued.queue.length,1);
 rules.cameraFrame(map,queued,heroCamera,{},7800,base);rules.cameraFrame(map,queued,heroCamera,{},7801,base);assert.equal(queued.active.event.id,'event11');
-console.log('HISTORY BOSS/CAMERA PASS: exact sequence, GIF duration, scheduled/area/occluded damage, shield/push/death, delayed ticks, both camera paths, shake, queue and once triggers.');
+const html=fs.readFileSync('index.html','utf8');
+assert(html.includes('id="historyBossHud"')&&html.includes('function historyUpdateBossHud(')&&html.includes('HISTORY_BOSS_HUD_NEAR_PX'),
+  'production History must render the boss HP/shield HUD when visible or nearby');
+assert(html.includes('knockLinear')&&html.includes('historyBossPushOptions(push,move)'),
+  'local History must use the same frame-based linear boss knockback');
+console.log('HISTORY BOSS/CAMERA PASS: exact sequence, GIF duration, scheduled/area/occluded damage, shield/linear push/death, production boss HUD, delayed ticks, both camera paths, shake, queue and once triggers.');

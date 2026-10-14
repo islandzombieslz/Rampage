@@ -278,11 +278,19 @@ export class HistoryRoom extends DurableObject {
     HistoryRules.updateBosses(HISTORY_GEOMETRY,this.room.objectState,this.room.doorState,
       Object.values(this.room.players),now,(boss,move,player,push)=>{
         const protectedCharge=now<Number(player.specialActiveUntil||0);
-        const steps=Math.max(1,Math.ceil(Math.hypot(push.x,push.y)/18));
-        if(!protectedCharge)for(let i=0;i<steps;i++)moveHistoryPlayer(player,push.x/steps,push.y/steps,COMBAT_ENTITY_RADIUS,this.room.doorState,this.room.objectState);
-        const origin={id:boss.id,x:boss.x+boss.w/2,y:boss.y+boss.h/2};
-        this.applyDamage("player",player,protectedCharge&&move.damage>0?2:Number(move.damage)||0,"boss_attack",boss.id,
-          move.hitEffect?.enabled===false?null:normalizedImpact(origin,player,6));
+        const distance=Math.hypot(Number(push?.x)||0,Number(push?.y)||0);
+        let impact=null;
+        if(!protectedCharge&&distance>0){
+          const timeMs=clamp(distance/700*1000,160,650);
+          impact=this.armKnockback(player,Number(push.x)/distance,Number(push.y)/distance,distance/(timeMs/1000),timeMs,true);
+          if(impact)impact.tilt=move.hitEffect?.enabled===false?0:6;
+        }else if(move.hitEffect?.enabled!==false){
+          const origin={id:boss.id,x:boss.x+boss.w/2,y:boss.y+boss.h/2};
+          impact=normalizedImpact(origin,player,6);
+        }
+        const damage=protectedCharge&&move.damage>0?2:Number(move.damage)||0;
+        if(damage>0)this.applyDamage("player",player,damage,"boss_attack",boss.id,impact);
+        else if(impact)this.broadcast({type:"history_knockback",targetKind:"player",targetId:player.id,sourceId:boss.id,impact,at:now});
         this.defeatPlayer(player,now);
       });
   }
@@ -521,7 +529,7 @@ export class HistoryRoom extends DurableObject {
       specialSerial: 0, specialStartedAt: 0, specialActiveUntil: 0, specialAngle: 0, specialHitState: {},
       regenSerial: 0,
       burnUntil: 0, burnNextTick: 0, burnSerial: 0, burnSourceId: null, burnSourceX: 0, burnSourceY: 0,
-      knockUntil: 0, knockVX: 0, knockVY: 0,
+      knockUntil: 0, knockVX: 0, knockVY: 0, knockLinear: false,
       lastPoseSeq: 0, lastPoseAt: 0,
       checkpointId: null, checkpointX: HISTORY_MAP_SPAWN.x, checkpointY: HISTORY_MAP_SPAWN.y
     };
@@ -611,27 +619,32 @@ export class HistoryRoom extends DurableObject {
     return true;
   }
 
-  armKnockback(target, dirX, dirY, force = HISTORY_KNOCK_FORCE, timeMs = HISTORY_KNOCK_TIME_MS) {
+  armKnockback(target, dirX, dirY, force = HISTORY_KNOCK_FORCE, timeMs = HISTORY_KNOCK_TIME_MS, linear = false) {
     if (!target?.alive || !(force > 0) || !(timeMs > 0)) return null;
     let dx = Number(dirX) || 0, dy = Number(dirY) || 0, len = Math.hypot(dx, dy);
     if (len < .001) { dx = Number(target.facing) < 0 ? -1 : 1; dy = 0; len = 1; }
     dx /= len; dy /= len;
     target.knockUntil = Date.now() + timeMs;
-    target.knockVX = dx * force; target.knockVY = dy * force;
+    target.knockVX = dx * force; target.knockVY = dy * force; target.knockLinear = !!linear;
     target.moving = false;
-    return { dirX: dx, dirY: dy, force, timeMs, tilt: HISTORY_HIT_TILT };
+    return { dirX: dx, dirY: dy, force, timeMs, linear: !!linear, tilt: HISTORY_HIT_TILT };
   }
 
   stepKnockback(target, dt, now) {
     if (!target?.alive || now >= Number(target.knockUntil || 0)) {
-      if (target) { target.knockUntil = 0; target.knockVX = 0; target.knockVY = 0; }
+      if (target) { target.knockUntil = 0; target.knockVX = 0; target.knockVY = 0; target.knockLinear = false; }
       return false;
     }
-    const knockDx = (Number(target.knockVX) || 0) * dt, knockDy = (Number(target.knockVY) || 0) * dt;
+    const remaining=Math.max(0,(Number(target.knockUntil)||now)-now)/1000;
+    const step=Math.min(Math.max(0,Number(dt)||0),remaining||Math.max(0,Number(dt)||0));
+    const knockDx = (Number(target.knockVX) || 0) * step, knockDy = (Number(target.knockVY) || 0) * step;
     if (this.room?.players?.[target.id] === target) moveHistoryPlayer(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
     else moveHistoryEnemy(target, knockDx, knockDy, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
-    const damping = Math.pow(.16, dt);
-    target.knockVX *= damping; target.knockVY *= damping; target.moving = false;
+    if(!target.knockLinear){
+      const damping = Math.pow(.16, step);
+      target.knockVX *= damping; target.knockVY *= damping;
+    }
+    target.moving = false;
     return true;
   }
 

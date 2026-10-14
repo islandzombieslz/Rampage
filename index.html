@@ -413,6 +413,18 @@ h1{font-size:clamp(32px,6vw,58px);line-height:.95}
 #warBarrierTopSprite,#pvpBarrierTopSprite{z-index:1;clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%);-webkit-clip-path:polygon(12% 0,88% 0,88% 22%,12% 22%)}
 #warBarrierSprite,#pvpBarrierSprite{z-index:4;clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%);-webkit-clip-path:polygon(0 0,12% 0,12% 22%,88% 22%,88% 0,100% 0,100% 100%,0 100%)}
 #hud{position:absolute;inset:0;pointer-events:none;z-index:5}
+#historyBossHud{position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);width:min(680px,72vw);z-index:30;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .46s ease,transform .46s ease,visibility 0s linear .46s}
+#historyBossHud.show{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .15s ease-out,transform .15s ease-out,visibility 0s}
+#historyBossHud .history-boss-hud-card{background:#071019e8;border:1px solid #7c8791;border-radius:10px;padding:8px 12px 10px;box-shadow:0 8px 28px #000a;backdrop-filter:blur(5px)}
+#historyBossHudName{text-align:center;font:900 13px/1.2 Arial,sans-serif;letter-spacing:.7px;color:#fff;margin-bottom:6px;text-shadow:0 2px 3px #000}
+#historyBossHud .history-boss-hud-row{display:grid;grid-template-columns:56px 1fr 74px;gap:7px;align-items:center;margin-top:4px;font-size:9px;font-weight:900;color:#d9e6ef}
+#historyBossHud .history-boss-hud-track{height:12px;border-radius:999px;background:#020609;border:1px solid #ffffff35;overflow:hidden;box-shadow:inset 0 1px 4px #000}
+#historyBossHud .history-boss-hud-fill{height:100%;width:100%;transition:width .16s linear}
+#historyBossHudHpFill{background:linear-gradient(90deg,#8d1515,#ef3f3f)}
+#historyBossHudShieldFill{background:linear-gradient(90deg,#174b82,#54b9ff)}
+#historyBossHud .history-boss-hud-value{text-align:right;color:#fff;font-variant-numeric:tabular-nums}
+@media(max-width:700px){#historyBossHud{width:min(92vw,620px);top:max(8px,env(safe-area-inset-top))}#historyBossHud .history-boss-hud-row{grid-template-columns:48px 1fr 62px}}
+
 
 .entity-visual{
   position:absolute;
@@ -3206,6 +3218,13 @@ window.dispatchEvent(new Event('firebase-ready'));
   <img id="pvpBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
   <canvas id="pvpDamageCanvas" aria-hidden="true"></canvas>
   <div id="hud">
+    <div id="historyBossHud" aria-hidden="true">
+      <div class="history-boss-hud-card">
+        <div id="historyBossHudName">BOSS</div>
+        <div class="history-boss-hud-row"><span>ESCUDO</span><div class="history-boss-hud-track"><div id="historyBossHudShieldFill" class="history-boss-hud-fill"></div></div><span id="historyBossHudShieldValue" class="history-boss-hud-value">0 / 0</span></div>
+        <div class="history-boss-hud-row"><span>VIDA</span><div class="history-boss-hud-track"><div id="historyBossHudHpFill" class="history-boss-hud-fill"></div></div><span id="historyBossHudHpValue" class="history-boss-hud-value">0 / 0</span></div>
+      </div>
+    </div>
     <div id="pvpStatusHud" aria-label="Vida, escudo e rodada PvP"><div class="pvp-health">❤ <span id="pvpHP">200/200</span></div><div class="pvp-shield">◆ <span id="pvpShield">100/100</span></div><div id="pvpRoundCounter">1/2</div></div>
     <div class="hud-top">
       <div class="hud-box">
@@ -7010,14 +7029,60 @@ function historyUpdateObjects(now=Date.now()){
    if(runtime?.broken&&o.respawn&&now>=runtime.respawnAt)Object.assign(runtime,{hp:o.hp,broken:false,brokenAt:0,respawnAt:0});
  }
 }
+const HISTORY_BOSS_HUD_NEAR_PX=520;
+function historyBossDistanceToPlayer(boss,player){
+ if(!boss||!player)return Infinity;
+ const px=Number(player.x)||0,py=Number(player.y)||0,x=Number(boss.x)||0,y=Number(boss.y)||0,w=Math.max(0,Number(boss.w)||0),h=Math.max(0,Number(boss.h)||0);
+ const qx=clamp(px,x,x+w),qy=clamp(py,y,y+h);
+ return Math.hypot(px-qx,py-qy);
+}
+function historyBossInCamera(boss){
+ if(!boss||!state.historyActive)return false;
+ const vp=gameViewport(),zoom=Math.max(.01,Number(state.camera?.zoom)||1);
+ const left=Number(state.camera?.x)||0,top=Number(state.camera?.y)||0,right=left+Math.max(1,Number(vp.w)||1)/zoom,bottom=top+Math.max(1,Number(vp.h)||1)/zoom;
+ const x=Number(boss.x)||0,y=Number(boss.y)||0,w=Math.max(0,Number(boss.w)||0),h=Math.max(0,Number(boss.h)||0);
+ return x<right&&x+w>left&&y<bottom&&y+h>top;
+}
+function historyHideBossHud(immediate=false){
+ const hud=$('#historyBossHud');if(!hud)return;
+ hud.classList.remove('show');hud.setAttribute('aria-hidden','true');
+ if(immediate){hud.style.transition='none';requestAnimationFrame(()=>{hud.style.transition=''})}
+}
+function historyUpdateBossHud(player=pvpLocalHero()){
+ const hud=$('#historyBossHud');
+ if(!hud||!state.historyActive||!state.running||!player){historyHideBossHud();return}
+ const candidates=[];
+ for(const boss of historyMapData().bosses||[]){
+   const runtime=state.historyObjectState?.[boss.id];
+   const hp=Math.max(0,Number(runtime?.hp ?? boss.hp)||0),shield=Math.max(0,Number(runtime?.shield ?? boss.shield)||0);
+   if(runtime?.broken||hp<=0)continue;
+   const visible=historyBossInCamera(boss),distance=historyBossDistanceToPlayer(boss,player);
+   if(visible||distance<=HISTORY_BOSS_HUD_NEAR_PX)candidates.push({boss,runtime,hp,shield,visible,distance});
+ }
+ if(!candidates.length){historyHideBossHud();return}
+ candidates.sort((a,b)=>(b.visible-a.visible)||(a.distance-b.distance));
+ const current=candidates[0],boss=current.boss;
+ const maxHp=Math.max(1,Number(boss.hp)||current.hp||1),maxShield=Math.max(0,Number(boss.shield)||current.shield||0);
+ $('#historyBossHudName').textContent=String(boss.name||'BOSS').trim()||'BOSS';
+ $('#historyBossHudHpFill').style.width=(clamp(current.hp/maxHp,0,1)*100)+'%';
+ $('#historyBossHudShieldFill').style.width=(maxShield?clamp(current.shield/maxShield,0,1)*100:0)+'%';
+ $('#historyBossHudHpValue').textContent=Math.ceil(current.hp)+' / '+Math.ceil(maxHp);
+ $('#historyBossHudShieldValue').textContent=Math.ceil(current.shield)+' / '+Math.ceil(maxShield);
+ hud.classList.add('show');hud.setAttribute('aria-hidden','false');
+}
+function historyBossPushOptions(push,move){
+ const dx=Number(push?.x)||0,dy=Number(push?.y)||0,distance=Math.hypot(dx,dy);
+ if(!(distance>0))return {knockForce:0,knockTime:0,knockLinear:false};
+ const seconds=clamp(distance/700,.16,.65);
+ return {knockForce:distance/seconds,knockTime:seconds,knockDirX:dx/distance,knockDirY:dy/distance,knockLinear:true,tilt:move?.hitEffect?.enabled===false?0:6,bypassHistoryWalls:true};
+}
 function historyUpdateBosses(now=Date.now()){
  const players=state.entities.filter(e=>e.alive&&e.controlled&&!e.pvpEnemy);
  globalThis.RampageHistoryRules.updateBosses(historyMapData(),state.historyObjectState,state.historyDoorState,players,now,(boss,move,player,push)=>{
    const attacker={id:boss.id,type:'history-boss',team:'history-boss',x:boss.x+boss.w/2,y:boss.y+boss.h/2};
    const protectedCharge=Number(player.pvpWarriorChargeUntil)>performance.now();
-   const steps=Math.max(1,Math.ceil(Math.hypot(push.x,push.y)/18));
-   if(!protectedCharge)for(let i=0;i<steps;i++)historyMoveEntity(player,push.x/steps,push.y/steps);
-   applyCombatHit(player,attacker,Number(move.damage)||0,{knockForce:0,knockTime:0,tilt:move.hitEffect?.enabled===false?0:6,bypassHistoryWalls:true});
+   const impact=protectedCharge?{knockForce:0,knockTime:0,knockLinear:false,tilt:move.hitEffect?.enabled===false?0:6,bypassHistoryWalls:true}:historyBossPushOptions(push,move);
+   applyCombatHit(player,attacker,Number(move.damage)||0,impact);
  });
 }
 let historyCameraRuntime=null;
@@ -7307,14 +7372,14 @@ function historyApplyHitFeedback(e,impact,sourceId=null){
  e.hitSerial=(Number(e.hitSerial)||0)+1;e.lastCombatAt=performance.now();
  if(impact&&Number(impact.force)>0&&Number(impact.timeMs)>0){
    e.knockTime=Math.max(Number(e.knockTime)||0,Number(impact.timeMs)/1000);
-   e.knockVX=dx*Number(impact.force);e.knockVY=dy*Number(impact.force);e.moving=false;
+   e.knockVX=dx*Number(impact.force);e.knockVY=dy*Number(impact.force);e.knockLinear=!!impact.linear;e.moving=false;
    e.shakeSerial=(Number(e.shakeSerial)||0)+1;e.shakePower=9;
  }
 }
 function historyResetDeathVisual(e){
  if(!e)return;
  e.deathStarted=0;e.removeAt=0;e.deathDir=0;e.pvpWarriorDeathGifAt=0;e.pvpWarriorDeathUntil=0;
- e.knockTime=0;e.knockVX=0;e.knockVY=0;
+ e.knockTime=0;e.knockVX=0;e.knockVY=0;e.knockLinear=false;
  const node=entityNodes.get(e.id);
  if(node){
    node.querySelectorAll('img').forEach(releaseGifObjectUrl);
@@ -7454,6 +7519,11 @@ const HistoryAdapter={
        p.historyAuthX=p.x;p.historyAuthY=p.y;
        p.expireAt=performance.now()+Math.max(0,(Number(data.hitUntil)||0)-(Number(data.at)||Date.now()));
      }
+     return;
+   }
+   if(data.type==='history_knockback'){
+     const e=historyFindEntity(data.targetKind,data.targetId);
+     if(e)historyApplyHitFeedback(e,data.impact,data.sourceId);
      return;
    }
    if(data.type==='damage'){
@@ -9245,8 +9315,11 @@ function applyCombatHit(target,attacker,amount,options={}){
  }
 
  // Direção do impacto. Se estiver exatamente sobreposto, usa a direção do atacante.
- let dx=target.x-attacker.x,dy=target.y-attacker.y;
+ let dx=Number(options.knockDirX),dy=Number(options.knockDirY);
  let len=Math.hypot(dx,dy);
+ if(!(len>.001)){
+   dx=target.x-attacker.x;dy=target.y-attacker.y;len=Math.hypot(dx,dy);
+ }
  if(len<.001){
    dx=Math.cos(attacker.heading||0);
    dy=Math.sin(attacker.heading||0);
@@ -9309,6 +9382,7 @@ function applyCombatHit(target,attacker,amount,options={}){
    target.knockTime=knockTime;
    target.knockVX=dx*knockForce;
    target.knockVY=dy*knockForce;
+   target.knockLinear=!!options.knockLinear;
    if(!golemVsWarriorMage&&!brownStableHit&&!najaStableHit)target.moving=false;
  }
 
@@ -12387,6 +12461,7 @@ function pvpSetHudImage(img,src){
 }
 function updatePVPHUD(){
  const me=pvpLocalHero(),now=performance.now();
+ if(state.historyActive)historyUpdateBossHud(me);else historyHideBossHud();
  const localPlayer=state.players.find(p=>p.id===NetworkAdapter.localPlayerId)||null;
  const reviveRemaining=Math.max(0,(Number(localPlayer?.pvpReviveAt)||0)-now);
  const aliveHeroes=state.entities.filter(e=>e.alive&&!e.pvpMinion&&e.ownerId);
@@ -14158,12 +14233,14 @@ function updateEntities(dt,shouldSimulate=null){
      if(state.historyActive)historyMoveEntity(e,e.knockVX*step,e.knockVY*step);
      else{e.x+=e.knockVX*step;e.y+=e.knockVY*step}
      e.knockTime=Math.max(0,e.knockTime-dt);
-     const damping=Math.pow(.16,dt); // desaceleração suave, independente do FPS
-     e.knockVX*=damping;
-     e.knockVY*=damping;
+     if(!e.knockLinear){
+       const damping=Math.pow(.16,dt); // desaceleração suave, independente do FPS
+       e.knockVX*=damping;
+       e.knockVY*=damping;
+     }
      if(state.historyActive)historyClampEntity(e);
      else{e.x=clamp(e.x,35,state.world.w-35);e.y=clamp(e.y,35,state.world.h-35)}
-     if(e.knockTime<=0){e.knockVX=0;e.knockVY=0}
+     if(e.knockTime<=0){e.knockVX=0;e.knockVY=0;e.knockLinear=false}
    }
  }
  if(deadTargetIds.size){
@@ -16071,6 +16148,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
  }
 }
 function clearEntityVisuals(){
+ historyHideBossHud(true);
  for(const el of entityNodes.values()){
    clearEntityOffscreenSuspend(el);
    clearEntityLoopSuspendTimers(el);
