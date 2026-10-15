@@ -151,7 +151,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
    let node=historySyncSoldierVisual(e,1300,1500,1,now);const one=node._image.src.includes('/combo1.gif'),bodyOnly=!node.querySelector('.entity-sword,.entity-weapon-facing');
    e.soldierSerial=2;e.soldierVariant=2;node=historySyncSoldierVisual(e,1300,1500,1,now);const two=node._image.src.includes('/combo2.gif');
    e.alive=false;e.deathStarted=now;e.removeAt=now+2130;node=historySyncSoldierVisual(e,1300,1500,1,now);const death=node._image.src.includes('/death.gif');node.remove();entityNodes.delete(e.id);
-   return {hit,continuous,slowing,normal,damagedBoss,fixedHud,visibleNumbers,comboShown,cameraSafe,one,two,death,bodyOnly};
+   return {hit,continuous,slowing,normal,damagedBoss,fixedHud,visibleNumbers,comboShown,cameraSafe,one,two,death,bodyOnly,name:entityUiDisplayName(enemy),damage:enemy.damage};
  },
  historyLocalCheckpoint(){
    const me=pvpLocalHero();if(!me)return null;
@@ -670,7 +670,7 @@ async function main(){
    assert.equal(bossCamera.boss.move,'move_u7t8wnue');assert(bossCamera.boss.image.includes('map-v7/')&&bossCamera.boss.image.includes('gifStart='));
    assert.deepEqual(bossCamera.camera,{x:587,y:388,zoom:1,returned:true,once:true,shake:10});
    const v9=await page.evaluate(()=>window.__pvpBrowserTest.historyV9Visuals());
-   assert.deepEqual(v9,{hit:10,continuous:true,slowing:.45,normal:1,damagedBoss:true,fixedHud:true,visibleNumbers:true,comboShown:true,cameraSafe:true,one:true,two:true,death:true,bodyOnly:true});
+   assert.deepEqual(v9,{hit:10,continuous:true,slowing:.45,normal:1,damagedBoss:true,fixedHud:true,visibleNumbers:true,comboShown:true,cameraSafe:true,one:true,two:true,death:true,bodyOnly:true,name:'Enemy soldier',damage:10});
    const checkpoint=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalCheckpoint());
    assert.deepEqual(checkpoint,{id:'event3',x:611,y:774},'reaching checkpoint 1 must update the local respawn point');
    assert(await page.evaluate(()=>window.__pvpBrowserTest.leaveLocalHistory()),'local History must disconnect without a cloud room');

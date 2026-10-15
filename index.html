@@ -7607,7 +7607,7 @@ const HistoryAdapter={
        else if(kind==='anubis'){e.anubisAttackSerial=attackSerial;e.anubisAttackKind=sd.attackKind||'melee';e.pendingAnubisAttack={kind:e.anubisAttackKind,serial:attackSerial,startedAt:arrival,endAt:arrival+Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime)}}
        else if(kind==='poseidon'||kind==='seahorse')e.waterAttackSerial=attackSerial;
      }
-     if(kind==='soldier_enemy'){e.soldierSerial=Number(sd.soldierSerial)||0;e.soldierVariant=Number(sd.soldierVariant)||1;e.soldierUntil=arrival+Math.max(0,(Number(sd.soldierUntil)||0)-this.lastServerTime)}
+     if(kind==='soldier_enemy'){e.damage=historyMapData().soldier.damage;e.soldierSerial=Number(sd.soldierSerial)||0;e.soldierVariant=Number(sd.soldierVariant)||1;e.soldierUntil=arrival+Math.max(0,(Number(sd.soldierUntil)||0)-this.lastServerTime)}
      if(kind==='dragon'){
        const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
        if(e.dragonTakeoffSerial!==takeoffSerial&&flight==='takeoff'){
@@ -7818,6 +7818,7 @@ const HistoryLocalAdapter={
        const npc=pvpBaseEntity({...hero,id:type},point.x,point.y,'pvp-enemy','#d86543',null,true);
        const stats=HISTORY_LOCAL_ENEMY_STATS[type];if(stats){npc.hp=npc.maxHp=stats.hp;npc.shield=npc.maxShield=stats.shield;npc.speed=stats.speed}
        npc.historySpawnEventId=event.id;npc.historyLeashArea=event.area?{...event.area}:null;
+       if(type==='soldier_enemy')npc.damage=historyMapData().soldier.damage;
        if(type==='dragon')beginDragonTakeoff(npc);
        spawned++;
      }
@@ -14446,6 +14447,7 @@ function historySyncSoldierVisual(e,left,top,zoom,now){
  if(!el){
    el=document.createElement('div');el.className='entity-visual history-soldier-visual';el.dataset.entityId=String(e.id);
    el.innerHTML='<div class="entity-facing"><img class="entity-body" draggable="false" style="width:142px;height:142px;left:-32px;top:-45px;opacity:1;display:block"></div><div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>';
+   el.querySelector('.entity-bars').dataset.unitName='Enemy soldier';
    el._facing=el.querySelector('.entity-facing');el._image=el.querySelector('img');el._hp=el.querySelector('.hp-fill');el._shield=el.querySelector('.shield-fill');entityCameraLayer.appendChild(el);entityNodes.set(e.id,el);
  }
  const kind=!e.alive?'death':e.soldierUntil>now?'combo'+e.soldierVariant:e.moving?'walk':'idle';
@@ -14585,6 +14587,7 @@ const entityUiAlphaCtx=entityUiAlphaCanvas.getContext('2d',{willReadFrequently:t
 
 function entityUiDisplayName(e){
  if(!e)return 'Unidade';
+ if(e.type==='soldier_enemy')return 'Enemy soldier';
  if(state.mode==='pvp'&&e.ownerId&&!e.pvpMinion){
    const player=state.players.find(p=>p.id===e.ownerId);
    if(player?.human){
