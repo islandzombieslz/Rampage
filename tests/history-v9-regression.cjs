@@ -25,8 +25,16 @@ const victim={id:'victim',alive:true,hp:350,shield:100,x:enemy.x+70,y:enemy.y};r
 room.updateSoldier(enemy,.016,clock);assert.equal(victim.shield,90);assert.equal(enemy.soldierVariant,1);
 for(const fraction of config.hitFractions.slice(1))room.updateSoldier(enemy,.016,clock+Math.ceil(4270*fraction));
 assert.equal(victim.shield,50,'five confirmed hits each deal 10, with no extra single attack');
-room.updateSoldier(enemy,.016,clock+4270);clock+=4770;room.updateSoldier(enemy,.016,clock);assert.equal(enemy.soldierVariant,2);
-room.updateSoldier(enemy,.016,clock+4270);clock+=4770;room.updateSoldier(enemy,.016,clock);assert.equal(enemy.soldierVariant,1,'combo A/B/A alternation');
+room.updateSoldier(enemy,.016,clock+4270);
+let nextAt=enemy.soldierNextAt;assert(nextAt>=clock+5270&&nextAt<=clock+6270,'soldier waits 1-2 randomized seconds after its combo');
+room.updateSoldier(enemy,.016,nextAt-1);assert.equal(enemy.soldierSerial,1,'soldier must not reattack before its per-unit timer');
+clock=nextAt;room.updateSoldier(enemy,.016,clock);assert.equal(enemy.soldierVariant,2);
+room.updateSoldier(enemy,.016,clock+4270);clock=enemy.soldierNextAt;room.updateSoldier(enemy,.016,clock);assert.equal(enemy.soldierVariant,1,'combo A/B/A alternation');
+const crowd=[{id:'a',alive:true,x:100,y:100},{id:'b',alive:true,x:102,y:100}];
+rules.separateEnemies(crowd,(e,dx,dy)=>{e.x+=dx;e.y+=dy;return true},64);
+assert(Math.hypot(crowd[0].x-crowd[1].x,crowd[0].y-crowd[1].y)>=63.9,'History troops may be near but never stacked');
+const steer=rules.steerEnemies({id:'moving',x:100,y:100},{x:1,y:0},[{id:'blocker',alive:true,x:120,y:90}],64);
+assert(steer.y>0,'pursuit steers around nearby soldiers instead of walking through them');
 const comboHero={id:'combo',alive:true,x:600,y:1500,hp:350,shield:50,comboUntil:clock+3000,comboStartedAt:clock,comboRequestUntil:clock+460,comboHitIndex:0,comboSfxIndex:0,singleSerial:0,attackSerial:1,knockUntil:clock+300};
 room.applyAction(comboHero,'attack',{});assert(comboHero.comboUntil>clock);assert.equal(comboHero.comboRequestUntil,clock+460,'hit stun cannot prevent combo continuation');
 console.log('HISTORY V9 PASS: exact soldier GIF frames, 20-troop cap, A/B five-hit combos, camera bounds including shake, gradual collision-safe push, attack movement scaling and combo continuity.');
