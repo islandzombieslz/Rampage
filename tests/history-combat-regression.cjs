@@ -35,6 +35,14 @@ ctx.historySyncWarriorCombatSnapshot(e,{specialSerial:3,specialActiveUntil:0},cl
 assert.equal(e.pvpWarriorChargeUntil,specialUntil,'pre-action snapshot must not cancel prediction');
 ctx.historyApplyAuthoritativeAction(e,{action:'special',specialSerial:4,specialActiveUntil:53900,at:50000});
 assert.equal(e.pvpSpecialSerial,special,'confirmation must not replay special');
+// A stale local action lock must be released when the Cloudflare worker is idle.
+// Special previously worked while the same player could no longer basic attack.
+clock+=5000;e.pvpWarriorChargeUntil=0;e.pvpWarriorComboUntil=0;e.pvpActionUntil=clock+60000;
+e.attackCooldown=5;e.lastAttackAt=clock-1000;e.historySpecialPreviewAt=clock-1000;
+assert.equal(ctx.historyPreviewLocalAction(e,'attack'),false,'stale predicted lock blocks the basic button');
+ctx.historySyncWarriorCombatSnapshot(e,{singleSerial:1,specialSerial:4,attackCooldownUntil:0,comboUntil:0,specialActiveUntil:0},clock,60000);
+assert.equal(e.pvpActionUntil,0,'server idle snapshot releases stale action lock');
+assert(ctx.historyPreviewLocalAction(e,'attack'),'basic attack must recover without using special');
 let serverClock=50000;const events=[];
 const historyMap=fs.readFileSync('history-server/src/map.js','utf8').replaceAll('export const','const');
 const worker=fs.readFileSync('history-server/src/index.js','utf8').replace(/^import .*;\n/gm,'').replace('export default','const workerDefault=').replace('export class HistoryRoom','class HistoryRoom');
