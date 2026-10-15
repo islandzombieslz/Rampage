@@ -315,13 +315,48 @@ globalThis.RampageHistoryRules = (() => {
       Math.max(Number(entity.pvpWarriorSingleUntil)||0,Number(entity.pvpWarriorComboUntil)||0,Number(entity.pvpMeleeVisualUntil)||0);
     return active>now?.45:1;
   }
+  // History-only crowd steering is independent of sprite/GIF dimensions.
+  function steerEnemies(entity, direction, enemies, spacing = 64) {
+    let x=Number(direction?.x)||0, y=Number(direction?.y)||0;
+    const nearby=spacing*1.6;
+    for(const other of enemies||[]) {
+      if(!other?.alive||other===entity||other.id===entity.id)continue;
+      let dx=(Number(entity.x)||0)-(Number(other.x)||0),dy=(Number(entity.y)||0)-(Number(other.y)||0);
+      let d=Math.hypot(dx,dy);
+      if(d>=nearby)continue;
+      if(d<.001) { const a=(String(entity.id).length+String(other.id).length)*1.17;dx=Math.cos(a);dy=Math.sin(a);d=1; }
+      const strength=Math.min(2,(nearby-d)/spacing)*1.7;
+      x+=dx/d*strength;y+=dy/d*strength;
+    }
+    const len=Math.hypot(x,y);
+    return len>.001?{x:x/len,y:y/len}:{x:0,y:0};
+  }
+  function separateEnemies(enemies, move, spacing = 64) {
+    const units=(enemies||[]).filter(e=>e?.alive);
+    for(let pass=0;pass<3;pass++) {
+      let moved=false;
+      for(let i=0;i<units.length;i++)for(let j=i+1;j<units.length;j++) {
+        const a=units[i],b=units[j];
+        let dx=(Number(b.x)||0)-(Number(a.x)||0),dy=(Number(b.y)||0)-(Number(a.y)||0);
+        let d=Math.hypot(dx,dy);
+        if(d>=spacing)continue;
+        if(d<.001) { const angle=(i*2.39996323+j*.73);dx=Math.cos(angle);dy=Math.sin(angle);d=1; }
+        const step=Math.min(36,(spacing-d+.1)/2),ux=dx/d,uy=dy/d;
+        const aMoved=move(a,-ux*step,-uy*step),bMoved=move(b,ux*step,uy*step);
+        if(!aMoved&&bMoved)move(b,ux*step,uy*step);
+        if(!bMoved&&aMoved)move(a,-ux*step,-uy*step);
+        moved ||= !!(aMoved||bMoved);
+      }
+      if(!moved)break;
+    }
+  }
   function soldierTick(e,target,now,config,canHit,hit) {
     if(!e.alive)return false;
     if(!(e.soldierUntil>now)&&!(e.soldierStartedAt>0)) {
       if(!target||now<(e.soldierNextAt||0)||!canHit(e,target))return false;
       e.soldierSerial=(e.soldierSerial||0)+1;e.soldierVariant=(e.soldierSerial-1)%2+1;
       e.soldierStartedAt=now;e.soldierUntil=now+config.sprites['combo'+e.soldierVariant].durationMs;e.soldierHitIndex=0;
-      e.soldierNextAt=e.soldierUntil+500;e.attackSerial=e.soldierSerial;
+      e.soldierNextAt=e.soldierUntil+1000+Math.floor(Math.random()*1001);e.attackSerial=e.soldierSerial;
     }
     if(e.soldierStartedAt>0) {
       const duration=e.soldierUntil-e.soldierStartedAt;
@@ -360,5 +395,5 @@ globalThis.RampageHistoryRules = (() => {
     return {active,volume:clamp((Number(a.volume)||0)/100,0,1)*spatial};
   }
   return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject,
-    bossMoveArea, updateBosses, createCameraState, cameraFrame, soundMix, safeCamera, queuePush, stepPush, attackMovement, soldierTick};
+    bossMoveArea, updateBosses, createCameraState, cameraFrame, soundMix, safeCamera, queuePush, stepPush, attackMovement, soldierTick, steerEnemies, separateEnemies};
 })();

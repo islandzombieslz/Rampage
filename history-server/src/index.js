@@ -17,8 +17,9 @@ const HistoryRules = globalThis.RampageHistoryRules;
 const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS,destructibles:HISTORY_MAP_OBJECTS};
 const historyNavigation = HistoryRules.createNavigator(HISTORY_GEOMETRY);
 function historyLineOfSight(a,b,doors,r=0,objects={}) { return HistoryRules.firstWallHit(HISTORY_GEOMETRY,doors,a.x,a.y,b.x,b.y,r,objects) === null; }
-function pursueHistoryEnemy(enemy,target,dt,doors,now,objects={}) {
-  const v=historyNavigation.direction(enemy,target,COMBAT_ENTITY_RADIUS,doors,now,objects);
+function pursueHistoryEnemy(enemy,target,dt,doors,now,objects={},neighbors=[]) {
+  const route=historyNavigation.direction(enemy,target,COMBAT_ENTITY_RADIUS,doors,now,objects);
+  const v=HistoryRules.steerEnemies(enemy,route,neighbors);
   enemy.moving=moveHistoryEnemy(enemy,v.x*enemy.speed*dt,v.y*enemy.speed*dt,COMBAT_ENTITY_RADIUS,doors,objects);
   if(enemy.moving){enemy.heading=Math.atan2(v.y,v.x);if(Math.abs(v.x)>.01)enemy.facing=v.x<0?-1:1;}
   return enemy.moving;
@@ -374,15 +375,26 @@ export class HistoryRoom extends DurableObject {
       x = clamp(x, Number(area.x) + 34, Number(area.x) + Number(area.w) - 34);
       y = clamp(y, Number(area.y) + 34, Number(area.y) + Number(area.h) - 34);
     }
-    const point=historyNavigation.spawnPoint({x,y},COMBAT_ENTITY_RADIUS,this.room.doorState,area,this.room.objectState);
+    let point=historyNavigation.spawnPoint({x,y},COMBAT_ENTITY_RADIUS,this.room.doorState,area,this.room.objectState);
     if(!point)return null;
+    const free=p=>this.room.dragons.every(e=>!e.alive||distance(e,p)>=64);
+    if(!free(point)){
+      let chosen=null;
+      for(let n=1;n<=48;n++){
+        const a=(index+n)*2.399963229728653,r=65+Math.floor((n-1)/8)*35;
+        const p=historyNavigation.spawnPoint({x:Number(event.x)+Math.cos(a)*r,y:Number(event.y)+Math.sin(a)*r},COMBAT_ENTITY_RADIUS,this.room.doorState,area,this.room.objectState);
+        if(p&&free(p)){chosen=p;break}
+      }
+      if(!chosen)return null;
+      point=chosen;
+    }
     x=point.x;y=point.y;
     const id = "history-enemy-" + (++this.room.enemySeq) + "-" + String(event.id || "spawn");
     return {
       id, type, x, y, hp: stats.hp, maxHp: stats.hp, shield: stats.shield, maxShield: stats.shield,
       damage: stats.damage, speed: stats.speed, alive: true, facing: 1, heading: 0, moving: false,
       wave, historySpawnEventId: event.id, historyLeashArea: area ? { ...area } : null,
-      attackSerial: 0, attackUntil: 0, npcNextAttackAt: now + 450,
+      attackSerial: 0, attackUntil: 0, npcNextAttackAt: now + 450 + Math.floor(Math.random()*1400),
       flightState: type === "dragon" ? "takeoff" : "ground",
       takeoffSerial: type === "dragon" ? wave : 0,
       takeoffUntil: type === "dragon" ? now + DRAGON_TAKEOFF_MS : 0,
@@ -402,7 +414,7 @@ export class HistoryRoom extends DurableObject {
       if (!HISTORY_ENEMY_STATS[type]) continue;
       for (let i = 0; i < count; i++) {
         const enemy=this.createEnemy(type,event,wave,offset++,now);
-        if(enemy){this.room.dragons.push(enemy);spawned++;}
+        if(enemy){if(type==='soldier_enemy')enemy.soldierNextAt=now+Math.floor(Math.random()*1200);this.room.dragons.push(enemy);spawned++;}
       }
     }
     if(spawned)state.count = wave;
@@ -457,7 +469,7 @@ export class HistoryRoom extends DurableObject {
     const knocked=this.stepKnockback(enemy,dt,now);
     const players=Object.values(this.room.players).filter(p=>p.alive&&pointInArea(p.x,p.y,enemy.historyLeashArea));
     const target=players.reduce((best,p)=>!best||distance(enemy,p)<distance(enemy,best)?p:best,null);
-    const canHit=(e,p)=>distance(e,p)<=HISTORY_MAP_SOLDIER.range+COMBAT_ENTITY_RADIUS*.36&&historyLineOfSight(e,p,this.room.doorState,0,this.room.objectState);
+    const canHit=(e,p)=>distance(e,p)<=Math.min(HISTORY_MAP_SOLDIER.range,78)&&historyLineOfSight(e,p,this.room.doorState,0,this.room.objectState);
     const active=(!knocked||enemy.soldierStartedAt>0)&&HistoryRules.soldierTick(enemy,target,now,HISTORY_MAP_SOLDIER,canHit,(p,damage)=>{
       const impact=this.armKnockback(p,p.x-enemy.x,p.y-enemy.y,82,75);
       this.applyDamage('player',p,damage,'soldier_combo',enemy.id,impact);this.defeatPlayer(p,now);
@@ -466,7 +478,7 @@ export class HistoryRoom extends DurableObject {
     if(active||knocked){enemy.moving=false;return}
     if(!target){enemy.moving=false;return}
     enemy.heading=Math.atan2(target.y-enemy.y,target.x-enemy.x);enemy.facing=target.x<enemy.x?-1:1;
-    if(!canHit(enemy,target))pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState);
+    if(!canHit(enemy,target))pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState,this.room.dragons);
     else enemy.moving=false;
   }
 
@@ -484,14 +496,14 @@ export class HistoryRoom extends DurableObject {
     enemy.heading = Math.atan2(dy, dx); enemy.facing = dx < 0 ? -1 : 1;
     if (now < Number(enemy.attackUntil || 0)) { enemy.moving = false; return; }
     if (d > stats.range || !historyLineOfSight(enemy,target,this.room.doorState,8,this.room.objectState)) {
-      pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState);
+      pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState,this.room.dragons);
       return;
     }
     enemy.moving = false;
     if (now < Number(enemy.npcNextAttackAt || 0)) return;
     enemy.attackSerial = (Number(enemy.attackSerial) || 0) + 1;
     enemy.attackUntil = now + Math.min(1100, stats.cooldown);
-    enemy.npcNextAttackAt = now + stats.cooldown;
+    enemy.npcNextAttackAt = now + stats.cooldown + Math.floor(Math.random()*1100);
     if(enemy.type === "anubis") {
       const angle=Math.atan2(dy,dx),start={x:enemy.x+Math.cos(angle)*40,y:enemy.y-14+Math.sin(angle)*16};
       if(!historyLineOfSight(enemy,start,this.room.doorState,8,this.room.objectState))return;
@@ -1077,7 +1089,7 @@ export class HistoryRoom extends DurableObject {
       }
 
       if(!historyLineOfSight(dragon,target,this.room.doorState,8,this.room.objectState)) {
-        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState);continue;
+        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState,this.room.dragons);continue;
       }
       if (d < DRAGON_CLOSE_RANGE) {
         if (now >= Number(dragon.closeShotAt || 0) && this.launchDragonFireball(dragon, target, now, true)) continue;
@@ -1096,7 +1108,7 @@ export class HistoryRoom extends DurableObject {
       }
 
       if (d > 285) {
-        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState);
+        pursueHistoryEnemy(dragon,target,dt,this.room.doorState,now,this.room.objectState,this.room.dragons);
       } else if (d < 185) {
         moveHistoryEnemy(dragon, -dx / d * DRAGON_SPEED * dt, -dy / d * DRAGON_SPEED * dt, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
         dragon.moving = true;
@@ -1190,6 +1202,7 @@ export class HistoryRoom extends DurableObject {
     this.updateBosses(now);
     this.updateSpawnEvents(now);
     this.updateDragons(dt, now);
+    HistoryRules.separateEnemies(this.room.dragons,(e,dx,dy)=>moveHistoryEnemy(e,dx,dy,COMBAT_ENTITY_RADIUS,this.room.doorState,this.room.objectState),64);
     this.updateProjectiles(dt, now);
     this.updateBurns(now);
     this.updateMapProgress(now);
