@@ -7296,6 +7296,23 @@ function historySyncWarriorCombatSnapshot(e,sp,arrival,serverTime){
    e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;
    if(Number(e.pvpActionUntil)<=arrival+PVP_WARRIOR.specialFallbackMs)e.pvpActionUntil=0;
  }
+ // The server is authoritative for online History attack locks. A rejected or
+ // interrupted local preview must not leave basic attacks disabled forever.
+ // Allow a short prediction grace period so late snapshots cannot cut an
+ // attack that was just pressed.
+ if(controlled){
+   const serverReady=Math.max(Number(sp.attackCooldownUntil)||0,Number(sp.comboUntil)||0,
+     Number(sp.specialActiveUntil)||0)<=serverTime;
+   const previewAt=Math.max(Number(e.lastAttackAt)||0,Number(e.historySpecialPreviewAt)||0);
+   if(serverReady&&arrival-previewAt>=700){
+     if(Number(e.pvpWarriorComboUntil)>arrival)pvpCancelWarriorCombo(e,arrival);
+     if(Number(e.pvpWarriorChargeUntil)>arrival){
+       e.pvpWarriorChargeUntil=0;e.pvpWarriorChargeStartedAt=0;
+       e.pvpSpecialVisualUntil=Math.min(Number(e.pvpSpecialVisualUntil)||0,arrival);
+     }
+     e.attackCooldown=0;e.pvpPowerUntil=0;e.pvpActionUntil=0;
+   }
+ }
 }
 function historyApplyHitFeedback(e,impact,sourceId=null){
  if(!e)return;
