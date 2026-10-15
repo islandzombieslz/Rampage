@@ -1422,7 +1422,8 @@ html,body{
  #lobbyScreen.pvp-lobby .pvp-player-card{min-height:63px}#lobbyScreen.pvp-lobby .pvp-player-card img{height:38px}
  #pvpHeroChoices button img{height:38px}}
 /* PvP-only vitality, round and world damage presentation. */
-#gameScreen:not(.pvp-mode) #pvpStatusHud,#gameScreen:not(.pvp-mode) #pvpDamageCanvas{display:none!important}
+#gameScreen:not(.pvp-mode) #pvpStatusHud,#gameScreen:not(.pvp-mode):not(.history-mode) #pvpDamageCanvas{display:none!important}
+#historyBossHud{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(420px,72vw);z-index:80;pointer-events:none;background:#151018ee;border:1px solid #b85c5c;border-radius:8px;padding:8px 12px;color:#fff;text-align:center;font:bold 12px system-ui}#historyBossHud[hidden]{display:none}#historyBossHud .history-meter{height:9px;background:#333;margin-top:5px;position:relative}#historyBossHud .history-meter span{display:block;height:100%;background:#d34a42}#historyBossHud .history-meter.shield span{background:#489ddc}#historyBossHud .history-values{font-size:11px;margin-top:3px}
 #pvpDamageCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;touch-action:none}
 #gameScreen.pvp-mode #hudMain,#gameScreen.pvp-mode #hudSub,#gameScreen.pvp-mode #aliveCount{display:none!important}
 #pvpStatusHud{position:absolute;right:calc(var(--safe-right) + 9px);top:calc(var(--safe-top) + 5px);
@@ -3205,6 +3206,7 @@ window.dispatchEvent(new Event('firebase-ready'));
   <img id="warBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
   <img id="pvpBarrierSprite" src="assets/arena/barrier.png" draggable="false" alt="">
   <canvas id="pvpDamageCanvas" aria-hidden="true"></canvas>
+  <div id="historyBossHud" hidden><div class="history-boss-name"></div><div class="history-meter"><span class="history-boss-hp"></span></div><div class="history-meter shield"><span class="history-boss-shield"></span></div><div class="history-values"></div></div>
   <div id="hud">
     <div id="pvpStatusHud" aria-label="Vida, escudo e rodada PvP"><div class="pvp-health">❤ <span id="pvpHP">200/200</span></div><div class="pvp-shield">◆ <span id="pvpShield">100/100</span></div><div id="pvpRoundCounter">1/2</div></div>
     <div class="hud-top">
@@ -3292,9 +3294,9 @@ window.dispatchEvent(new Event('firebase-ready'));
   </div>
 </section>
 
-<script src="assets/history/rules.js?rampageRev=c082906f7628456cfa11"></script>
-<script src="assets/history/audio.js?rampageRev=4b2c46f2e23c7b0ffa83"></script>
-<script src="assets/history/map-config.js?rampageRev=30689c3762b0c7efc8a9"></script>
+<script src="assets/history/rules.js?rampageRev=6b6a51dc33ec0fa1d9a4"></script>
+<script src="assets/history/audio.js?rampageRev=fe6b3aff28015b315585"></script>
+<script src="assets/history/map-config.js?rampageRev=dab31d068ea331ea6f93"></script>
 <script>
 (() => {
 'use strict';
@@ -3869,7 +3871,7 @@ const PVP_UI_ASSETS=Object.freeze({
 });
 
 /* PERSISTENT ASSET CACHE 2026-09-12 */
-const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/pvp/dragon-wings.ogg":"0d26ce33674d04de7b3f","assets/audio/sfx/pvp/warrior-special.ogg":"08f2e4d9bed287b6a998","assets/audio/sfx/pvp/warrior-walk.ogg":"05f20f3bac93ca521a6a","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/history/audio.js":"4b2c46f2e23c7b0ffa83","assets/history/map-config.js":"30689c3762b0c7efc8a9","assets/history/map-v4/42b66bcb84d76d3b.webp":"42b66bcb84d76d3b4059","assets/history/map-v4/49baa4de77ef683b.gif":"49baa4de77ef683b3235","assets/history/map-v4/9b2952de60261e47.webp":"9b2952de60261e4719d3","assets/history/map-v4/eb612e4a6843caf2.webp":"eb612e4a6843caf21384","assets/history/map-v5/d48b0489f419f0f3.webp":"d48b0489f419f0f34b9d","assets/history/map-v5/ea992934137442c4.webp":"ea992934137442c495a6","assets/history/map-v6/492eb65ef0acae7f.gif":"492eb65ef0acae7f6ea4","assets/history/map-v7/191dccace1748ea6.gif":"191dccace1748ea626f9","assets/history/map-v7/31dc78c4c1bee07b.webp":"31dc78c4c1bee07b610a","assets/history/map-v7/4b289426b493ff37.webp":"4b289426b493ff37998b","assets/history/map-v7/7c48d97efc2b7759.webp":"7c48d97efc2b77596f78","assets/history/map-v8/008df506c8ab19a8.mp3":"008df506c8ab19a88d1b","assets/history/map-v8/22b377fa8832923f.mp3":"22b377fa8832923fd015","assets/history/map-v8/3664f3c2516f9850.webp":"3664f3c2516f98507d0b","assets/history/map-v8/36e91baba3fe3b38.webp":"36e91baba3fe3b38f064","assets/history/map-v8/44f83d52942635af.webp":"44f83d52942635af0ff2","assets/history/map-v8/454d3cd03681c90d.webp":"454d3cd03681c90d0011","assets/history/map-v8/47f1667268d56afe.webp":"47f1667268d56afec800","assets/history/map-v8/49f78238a32e15bf.webp":"49f78238a32e15bf16fc","assets/history/map-v8/5814e6fad5b7bc9f.webp":"5814e6fad5b7bc9fbdef","assets/history/map-v8/8cd570fd82cb10ac.webp":"8cd570fd82cb10ac5c91","assets/history/map-v8/bfe01797b45dc311.webp":"bfe01797b45dc3117571","assets/history/map-v8/c18de9a4fa95a72b.webp":"c18de9a4fa95a72b625b","assets/history/map-v8/d0ca3142502415d5.mp3":"d0ca3142502415d562f6","assets/history/map-v8/d672989e5598ad7e.webp":"d672989e5598ad7ed21a","assets/history/map-v8/deb77d1340d83dd2.webp":"deb77d1340d83dd2ef92","assets/history/map-v8/f9b424f0385d3796.webp":"f9b424f0385d37968c7c","assets/history/map-v8/fb10755a7e53498f.webp":"fb10755a7e53498fbe3a","assets/history/rules.js":"c082906f7628456cfa11","assets/king/card.png":"65a1234077906cbb8d47","assets/king/sword.png":"8105d9f3509070ea78e2","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/runtime/anubisIdle.gif":"d2c4dd390235bd593506","assets/runtime/anubisMeleeAttack.gif":"a6964099dba8fbe53e91","assets/runtime/anubisProjectile.gif":"16bf7779fadac01adaf5","assets/runtime/anubisRangedAttack.gif":"ac773984b5a4affceaaf","assets/runtime/anubisWalk.gif":"86233f85e461061af411","assets/runtime/brownAttack.gif":"7b8fd7dc30dfcb2c18b3","assets/runtime/brownIdle.gif":"14fd298519c4160f4312","assets/runtime/brownPower.gif":"f346b170457336825b38","assets/runtime/brownSpecial.gif":"ffa96a37521542d13e24","assets/runtime/brownWalk.gif":"1c2f94850831e5b4e5ed","assets/runtime/dragonAttack.gif":"9676ea524cac92259482","assets/runtime/dragonFireball.gif":"4085f3d153d414cffd98","assets/runtime/dragonFly.gif":"1bf4162ee27227a7d46a","assets/runtime/dragonGround.gif":"be7d795a1dbd9f9f1d6c","assets/runtime/dragonTakeoff.gif":"f787ba39a1158bf19112","assets/runtime/egyptFemaleMageIdle.gif":"bde77f0dc1bc0ec42718","assets/runtime/egyptFemaleMageSpecial.gif":"b97b168c13281a92202d","assets/runtime/egyptFemaleMageWalk.gif":"71e61bb9b7330dec5081","assets/runtime/egyptFemaleWarriorIdle.gif":"e508f526eea1f0871eb3","assets/runtime/egyptFemaleWarriorWalk.gif":"6cf0b9c441aaaafecb2f","assets/runtime/egyptMageIdle.gif":"6621d88b1489dfafec62","assets/runtime/egyptMagePower.gif":"02103b2073392caa2c07","assets/runtime/egyptMagePowerSpecial.gif":"bdbd89604459cc4b9fa8","assets/runtime/egyptMageSpecial.gif":"f470d2865da5c42b13aa","assets/runtime/egyptMageStaff.gif":"99ce483560a712cd5ec6","assets/runtime/egyptMageWalk.gif":"154f4bf71ee7469ca09e","assets/runtime/egyptWarriorIdle.gif":"4495a6280350a4132869","assets/runtime/egyptWarriorWalk.gif":"367ab11f83a7583acb18","assets/runtime/femaleIdle.gif":"2d13a2634c4f235a75e0","assets/runtime/femaleMageIdle.gif":"9a3b01ff2520d6cbed40","assets/runtime/femaleMageSpecial.gif":"e1b3a9423bfcf6b8e9a6","assets/runtime/femaleMageWalk.gif":"a71a5347e564ff831152","assets/runtime/femaleWalk.gif":"ee6bd307516a65236f86","assets/runtime/golemAttack.gif":"bb894a91e8585f2e3e62","assets/runtime/golemIdle.gif":"87f14204a62a1654ce7f","assets/runtime/golemSpecial.gif":"dec15b64c0a7574d4c4d","assets/runtime/golemWalk.gif":"477fb93ee8cfc8b69d08","assets/runtime/idle.gif":"79c24ba2cde5f9e504d3","assets/runtime/isisAttack.gif":"bca16377352d63b97db0","assets/runtime/isisIdle.gif":"d0d005a75c8323fa25b5","assets/runtime/isisPower.gif":"8c718e84e1a06fbbb88a","assets/runtime/isisSpecial.gif":"e52a7b177fe7d46590c9","assets/runtime/isisWalk.gif":"21cdff431f4e07d544f8","assets/runtime/kingIdle.gif":"76585d55c84fc3cc999f","assets/runtime/kingPower.gif":"500a76aed40864d69379","assets/runtime/kingSpecial.gif":"18e2cfcf2d40649414d6","assets/runtime/kingWalk.gif":"75a13bb75ad56488b333","assets/runtime/mageIdle.gif":"d37d7d7fe01bce21d629","assets/runtime/magePower.gif":"ebf3a91a9911e4e88366","assets/runtime/magePowerSpecial.gif":"6986e393081b8a830539","assets/runtime/mageSpecial.gif":"9f335f07256663456199","assets/runtime/mageStaff.gif":"f674fab649b4cf605ee5","assets/runtime/mageWalk.gif":"886cd556571e51e33b69","assets/runtime/najaAttack.gif":"e13edf02d58ad2393179","assets/runtime/najaIdle.gif":"dfe8e36fa7a5f977d6ba","assets/runtime/najaSpecial.gif":"867551f116d2a1f46b0a","assets/runtime/najaSpecialFinal.gif":"dca4420b2deacf8144b5","assets/runtime/najaWalk.gif":"44674e2952aec7b646e3","assets/runtime/poseidonIdle.gif":"04a28ec08ceb38ed9a73","assets/runtime/poseidonNormal.gif":"8b7df0bd63407417abd4","assets/runtime/poseidonSummonCast.gif":"9d5ba2722fe9265a1241","assets/runtime/poseidonWalk.gif":"af71144767e73ef5c729","assets/runtime/poseidonWaveCast.gif":"3531242ccc353800946f","assets/runtime/poseidonWavePower.gif":"42cb0df376a77f5f84d9","assets/runtime/pvpWarriorAttack.gif":"6334b6613ee9e6398ad7","assets/runtime/pvpWarriorCombo.gif":"86eb8f9aab5241bfab0b","assets/runtime/pvpWarriorDeath.gif":"281fdc908adab1f99691","assets/runtime/pvpWarriorSpecial.gif":"f3c6cffbdbed467af73c","assets/runtime/seahorseAttack.gif":"583226fd53b11fde11b4","assets/runtime/seahorseIdle.gif":"30def817e2b4d5d95253","assets/runtime/seahorseWalk.gif":"78f22447b93f2e416549","assets/runtime/walk.gif":"796400c5b2024a42dc7d","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/estrela-hud-nivel.png":"57107ead6f9469b56f00","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/pvp/botao-ataque.png":"d762d77d6ae58cb53d30","assets/ui/pvp/moldura-armas.png":"ba95ffb158b310b7b4e3","assets/ui/pvp/punho-especial-ativo.gif":"7a865133eb40f7d0ebe6","assets/ui/pvp/punho-especial-inativo.png":"dc0cb98473f8deea5f87","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/seahorse/card.png":"fb07fee512437b85d6ca","https://i.postimg.cc/HnSCZB63/Botao-modo-historia.png":"ext-574fdd18ac6c323c"});
+const BOOT_ASSET_MANIFEST=Object.freeze({"assets/arena/barrier.png":"505a629d8d1cc68b65f1","assets/arena/floor.png":"954105e2b64e0311b94f","assets/audio/sfx/burn.mp3":"b44099b6298934099e26","assets/audio/sfx/click.mp3":"cebf6a4b4945aa6ea2bc","assets/audio/sfx/click2.mp3":"32b4088947da3d152ecc","assets/audio/sfx/mage.mp3":"07bcabdbc5807f5bbacf","assets/audio/sfx/melee.mp3":"3e868c187ebe38a2b555","assets/audio/sfx/pvp/dragon-wings.ogg":"0d26ce33674d04de7b3f","assets/audio/sfx/pvp/warrior-special.ogg":"08f2e4d9bed287b6a998","assets/audio/sfx/pvp/warrior-walk.ogg":"05f20f3bac93ca521a6a","assets/audio/sfx/shake.mp3":"c7147695b86540d9a304","assets/audio/sfx/transition.mp3":"23f8f181796cbe02243e","assets/audio/som-de-batalha.mp3":"008df506c8ab19a88d1b","assets/audio/tema.mp3":"4ea25460a082ec24d41c","assets/egypt/anubis/card.png":"b6dd86f06c12be2c826b","assets/egypt/isis/card.png":"308182d7b322a34ce939","assets/egypt/mage/card.png":"cec347c0f724caeee83e","assets/egypt/mage/hand.png":"dce8cb4d6b00bc73892d","assets/egypt/mage/power-normal.gif":"d52ee9e40bcc8f439691","assets/egypt/naja/card.png":"c7e23845f23ea1657121","assets/egypt/ui/clan-card.png":"dda307911841149877ac","assets/egypt/warrior/card.png":"0ea04a43fa9bff452d11","assets/egypt/warrior/sword.png":"3beec6932a9be193f969","assets/golem/pedras-golem.png":"5a1a30b96d673a3318fc","assets/history/audio.js":"fe6b3aff28015b315585","assets/history/map-config.js":"dab31d068ea331ea6f93","assets/history/map-v4/42b66bcb84d76d3b.webp":"42b66bcb84d76d3b4059","assets/history/map-v4/49baa4de77ef683b.gif":"49baa4de77ef683b3235","assets/history/map-v4/9b2952de60261e47.webp":"9b2952de60261e4719d3","assets/history/map-v4/eb612e4a6843caf2.webp":"eb612e4a6843caf21384","assets/history/map-v5/d48b0489f419f0f3.webp":"d48b0489f419f0f34b9d","assets/history/map-v5/ea992934137442c4.webp":"ea992934137442c495a6","assets/history/map-v6/492eb65ef0acae7f.gif":"492eb65ef0acae7f6ea4","assets/history/map-v7/191dccace1748ea6.gif":"191dccace1748ea626f9","assets/history/map-v7/31dc78c4c1bee07b.webp":"31dc78c4c1bee07b610a","assets/history/map-v7/4b289426b493ff37.webp":"4b289426b493ff37998b","assets/history/map-v7/7c48d97efc2b7759.webp":"7c48d97efc2b77596f78","assets/history/map-v8/3664f3c2516f9850.webp":"3664f3c2516f98507d0b","assets/history/map-v8/36e91baba3fe3b38.webp":"36e91baba3fe3b38f064","assets/history/map-v8/44f83d52942635af.webp":"44f83d52942635af0ff2","assets/history/map-v8/454d3cd03681c90d.webp":"454d3cd03681c90d0011","assets/history/map-v8/47f1667268d56afe.webp":"47f1667268d56afec800","assets/history/map-v8/49f78238a32e15bf.webp":"49f78238a32e15bf16fc","assets/history/map-v8/5814e6fad5b7bc9f.webp":"5814e6fad5b7bc9fbdef","assets/history/map-v8/8cd570fd82cb10ac.webp":"8cd570fd82cb10ac5c91","assets/history/map-v8/bfe01797b45dc311.webp":"bfe01797b45dc3117571","assets/history/map-v8/c18de9a4fa95a72b.webp":"c18de9a4fa95a72b625b","assets/history/map-v8/d0ca3142502415d5.mp3":"d0ca3142502415d562f6","assets/history/map-v8/d672989e5598ad7e.webp":"d672989e5598ad7ed21a","assets/history/map-v8/deb77d1340d83dd2.webp":"deb77d1340d83dd2ef92","assets/history/map-v8/f9b424f0385d3796.webp":"f9b424f0385d37968c7c","assets/history/map-v8/fb10755a7e53498f.webp":"fb10755a7e53498fbe3a","assets/history/rules.js":"6b6a51dc33ec0fa1d9a4","assets/history/soldier-enemy/combo1.gif":"2b0351d22ff9104cce87","assets/history/soldier-enemy/combo2.gif":"3c4ff24d2ddd75e274d3","assets/history/soldier-enemy/death.gif":"f31b7365a9d413c4df68","assets/history/soldier-enemy/idle.gif":"dd502464110604c81ea4","assets/history/soldier-enemy/walk.gif":"f266813add519e322dca","assets/king/card.png":"65a1234077906cbb8d47","assets/king/sword.png":"8105d9f3509070ea78e2","assets/mage/mao-magos.png":"dce8cb4d6b00bc73892d","assets/mage/poder-mago.gif":"ac235a426b9db43d1048","assets/runtime/anubisIdle.gif":"d2c4dd390235bd593506","assets/runtime/anubisMeleeAttack.gif":"a6964099dba8fbe53e91","assets/runtime/anubisProjectile.gif":"16bf7779fadac01adaf5","assets/runtime/anubisRangedAttack.gif":"ac773984b5a4affceaaf","assets/runtime/anubisWalk.gif":"86233f85e461061af411","assets/runtime/brownAttack.gif":"7b8fd7dc30dfcb2c18b3","assets/runtime/brownIdle.gif":"14fd298519c4160f4312","assets/runtime/brownPower.gif":"f346b170457336825b38","assets/runtime/brownSpecial.gif":"ffa96a37521542d13e24","assets/runtime/brownWalk.gif":"1c2f94850831e5b4e5ed","assets/runtime/dragonAttack.gif":"9676ea524cac92259482","assets/runtime/dragonFireball.gif":"4085f3d153d414cffd98","assets/runtime/dragonFly.gif":"1bf4162ee27227a7d46a","assets/runtime/dragonGround.gif":"be7d795a1dbd9f9f1d6c","assets/runtime/dragonTakeoff.gif":"f787ba39a1158bf19112","assets/runtime/egyptFemaleMageIdle.gif":"bde77f0dc1bc0ec42718","assets/runtime/egyptFemaleMageSpecial.gif":"b97b168c13281a92202d","assets/runtime/egyptFemaleMageWalk.gif":"71e61bb9b7330dec5081","assets/runtime/egyptFemaleWarriorIdle.gif":"e508f526eea1f0871eb3","assets/runtime/egyptFemaleWarriorWalk.gif":"6cf0b9c441aaaafecb2f","assets/runtime/egyptMageIdle.gif":"6621d88b1489dfafec62","assets/runtime/egyptMagePower.gif":"02103b2073392caa2c07","assets/runtime/egyptMagePowerSpecial.gif":"bdbd89604459cc4b9fa8","assets/runtime/egyptMageSpecial.gif":"f470d2865da5c42b13aa","assets/runtime/egyptMageStaff.gif":"99ce483560a712cd5ec6","assets/runtime/egyptMageWalk.gif":"154f4bf71ee7469ca09e","assets/runtime/egyptWarriorIdle.gif":"4495a6280350a4132869","assets/runtime/egyptWarriorWalk.gif":"367ab11f83a7583acb18","assets/runtime/femaleIdle.gif":"2d13a2634c4f235a75e0","assets/runtime/femaleMageIdle.gif":"9a3b01ff2520d6cbed40","assets/runtime/femaleMageSpecial.gif":"e1b3a9423bfcf6b8e9a6","assets/runtime/femaleMageWalk.gif":"a71a5347e564ff831152","assets/runtime/femaleWalk.gif":"ee6bd307516a65236f86","assets/runtime/golemAttack.gif":"bb894a91e8585f2e3e62","assets/runtime/golemIdle.gif":"87f14204a62a1654ce7f","assets/runtime/golemSpecial.gif":"dec15b64c0a7574d4c4d","assets/runtime/golemWalk.gif":"477fb93ee8cfc8b69d08","assets/runtime/idle.gif":"79c24ba2cde5f9e504d3","assets/runtime/isisAttack.gif":"bca16377352d63b97db0","assets/runtime/isisIdle.gif":"d0d005a75c8323fa25b5","assets/runtime/isisPower.gif":"8c718e84e1a06fbbb88a","assets/runtime/isisSpecial.gif":"e52a7b177fe7d46590c9","assets/runtime/isisWalk.gif":"21cdff431f4e07d544f8","assets/runtime/kingIdle.gif":"76585d55c84fc3cc999f","assets/runtime/kingPower.gif":"500a76aed40864d69379","assets/runtime/kingSpecial.gif":"18e2cfcf2d40649414d6","assets/runtime/kingWalk.gif":"75a13bb75ad56488b333","assets/runtime/mageIdle.gif":"d37d7d7fe01bce21d629","assets/runtime/magePower.gif":"ebf3a91a9911e4e88366","assets/runtime/magePowerSpecial.gif":"6986e393081b8a830539","assets/runtime/mageSpecial.gif":"9f335f07256663456199","assets/runtime/mageStaff.gif":"f674fab649b4cf605ee5","assets/runtime/mageWalk.gif":"886cd556571e51e33b69","assets/runtime/najaAttack.gif":"e13edf02d58ad2393179","assets/runtime/najaIdle.gif":"dfe8e36fa7a5f977d6ba","assets/runtime/najaSpecial.gif":"867551f116d2a1f46b0a","assets/runtime/najaSpecialFinal.gif":"dca4420b2deacf8144b5","assets/runtime/najaWalk.gif":"44674e2952aec7b646e3","assets/runtime/poseidonIdle.gif":"04a28ec08ceb38ed9a73","assets/runtime/poseidonNormal.gif":"8b7df0bd63407417abd4","assets/runtime/poseidonSummonCast.gif":"9d5ba2722fe9265a1241","assets/runtime/poseidonWalk.gif":"af71144767e73ef5c729","assets/runtime/poseidonWaveCast.gif":"3531242ccc353800946f","assets/runtime/poseidonWavePower.gif":"42cb0df376a77f5f84d9","assets/runtime/pvpWarriorAttack.gif":"6334b6613ee9e6398ad7","assets/runtime/pvpWarriorCombo.gif":"86eb8f9aab5241bfab0b","assets/runtime/pvpWarriorDeath.gif":"281fdc908adab1f99691","assets/runtime/pvpWarriorSpecial.gif":"f3c6cffbdbed467af73c","assets/runtime/seahorseAttack.gif":"583226fd53b11fde11b4","assets/runtime/seahorseIdle.gif":"30def817e2b4d5d95253","assets/runtime/seahorseWalk.gif":"78f22447b93f2e416549","assets/runtime/walk.gif":"796400c5b2024a42dc7d","assets/ui/botao-loja.png":"0e8b751a876e189eb958","assets/ui/botao-mestre-da-guerra.png":"962f83ce7386c6c7a79a","assets/ui/botao-pvp.png":"2146131b8b84bee9563c","assets/ui/cla-guerreiros.png":"efca29243cc7a74f402b","assets/ui/criar-partida.png":"ef738c5fbc59ae6f68b1","assets/ui/estrela-hud-nivel.png":"57107ead6f9469b56f00","assets/ui/mestre-da-guerra-menu.png":"66d7766fbfec3c9682c2","assets/ui/pvp-menu.png":"00a74b607b4342b82318","assets/ui/pvp/botao-ataque.png":"d762d77d6ae58cb53d30","assets/ui/pvp/moldura-armas.png":"ba95ffb158b310b7b4e3","assets/ui/pvp/punho-especial-ativo.gif":"7a865133eb40f7d0ebe6","assets/ui/pvp/punho-especial-inativo.png":"dc0cb98473f8deea5f87","assets/ui/usar-codigo.png":"f2f0e3a60b7e79ed4e04","assets/ui/walpaper.gif":"1b3f22d231f880f2c81b","assets/ui/war-shop/card-dragao-guerreiro.png":"70c9c1ad9686774f24cc","assets/ui/war-shop/card-golem-guerreiro.png":"d87869d5bbd7b2b215f4","assets/ui/war-shop/card-guerreira-marrom.png":"8ce3e554f3c816cf65f6","assets/ui/war-shop/card-guerreiros.png":"a443fb8789b9c457ba48","assets/ui/war-shop/card-magos-guerreiros.png":"0cb1763d193bc4e91e5b","assets/warrior/espada-guerreiro.png":"9e8f429f8bd38fc96eb1","assets/water/poseidon/card.png":"fbefffbc45e2aa5fb61c","assets/water/seahorse/card.png":"fb07fee512437b85d6ca","https://i.postimg.cc/HnSCZB63/Botao-modo-historia.png":"ext-574fdd18ac6c323c"});
 // BEGIN GENERATED DISPLAY SPRITES
 const ORIGINAL_ASSETS=Object.freeze({...ASSETS});
 Object.assign(ASSETS,{"idle":"assets/runtime/idle.gif","walk":"assets/runtime/walk.gif","pvpWarriorDeath":"assets/runtime/pvpWarriorDeath.gif","pvpWarriorAttack":"assets/runtime/pvpWarriorAttack.gif","pvpWarriorCombo":"assets/runtime/pvpWarriorCombo.gif","pvpWarriorSpecial":"assets/runtime/pvpWarriorSpecial.gif","femaleIdle":"assets/runtime/femaleIdle.gif","femaleWalk":"assets/runtime/femaleWalk.gif","brownIdle":"assets/runtime/brownIdle.gif","brownWalk":"assets/runtime/brownWalk.gif","brownAttack":"assets/runtime/brownAttack.gif","brownSpecial":"assets/runtime/brownSpecial.gif","brownPower":"assets/runtime/brownPower.gif","kingIdle":"assets/runtime/kingIdle.gif","kingWalk":"assets/runtime/kingWalk.gif","kingSpecial":"assets/runtime/kingSpecial.gif","kingPower":"assets/runtime/kingPower.gif","golemIdle":"assets/runtime/golemIdle.gif","golemWalk":"assets/runtime/golemWalk.gif","golemAttack":"assets/runtime/golemAttack.gif","golemSpecial":"assets/runtime/golemSpecial.gif","mageIdle":"assets/runtime/mageIdle.gif","mageWalk":"assets/runtime/mageWalk.gif","mageSpecial":"assets/runtime/mageSpecial.gif","magePower":"assets/runtime/magePower.gif","magePowerSpecial":"assets/runtime/magePowerSpecial.gif","mageStaff":"assets/runtime/mageStaff.gif","femaleMageIdle":"assets/runtime/femaleMageIdle.gif","femaleMageWalk":"assets/runtime/femaleMageWalk.gif","femaleMageSpecial":"assets/runtime/femaleMageSpecial.gif","egyptWarriorIdle":"assets/runtime/egyptWarriorIdle.gif","egyptWarriorWalk":"assets/runtime/egyptWarriorWalk.gif","egyptFemaleWarriorIdle":"assets/runtime/egyptFemaleWarriorIdle.gif","egyptFemaleWarriorWalk":"assets/runtime/egyptFemaleWarriorWalk.gif","egyptMageStaff":"assets/runtime/egyptMageStaff.gif","egyptMagePower":"assets/runtime/egyptMagePower.gif","egyptMagePowerSpecial":"assets/runtime/egyptMagePowerSpecial.gif","egyptMageIdle":"assets/runtime/egyptMageIdle.gif","egyptMageWalk":"assets/runtime/egyptMageWalk.gif","egyptMageSpecial":"assets/runtime/egyptMageSpecial.gif","egyptFemaleMageIdle":"assets/runtime/egyptFemaleMageIdle.gif","egyptFemaleMageWalk":"assets/runtime/egyptFemaleMageWalk.gif","egyptFemaleMageSpecial":"assets/runtime/egyptFemaleMageSpecial.gif","najaIdle":"assets/runtime/najaIdle.gif","najaWalk":"assets/runtime/najaWalk.gif","najaAttack":"assets/runtime/najaAttack.gif","najaSpecial":"assets/runtime/najaSpecial.gif","najaSpecialFinal":"assets/runtime/najaSpecialFinal.gif","anubisIdle":"assets/runtime/anubisIdle.gif","anubisWalk":"assets/runtime/anubisWalk.gif","anubisMeleeAttack":"assets/runtime/anubisMeleeAttack.gif","anubisRangedAttack":"assets/runtime/anubisRangedAttack.gif","anubisProjectile":"assets/runtime/anubisProjectile.gif","isisIdle":"assets/runtime/isisIdle.gif","isisWalk":"assets/runtime/isisWalk.gif","isisAttack":"assets/runtime/isisAttack.gif","isisSpecial":"assets/runtime/isisSpecial.gif","isisPower":"assets/runtime/isisPower.gif","poseidonIdle":"assets/runtime/poseidonIdle.gif","poseidonWalk":"assets/runtime/poseidonWalk.gif","poseidonNormal":"assets/runtime/poseidonNormal.gif","poseidonWaveCast":"assets/runtime/poseidonWaveCast.gif","poseidonSummonCast":"assets/runtime/poseidonSummonCast.gif","poseidonWavePower":"assets/runtime/poseidonWavePower.gif","seahorseIdle":"assets/runtime/seahorseIdle.gif","seahorseWalk":"assets/runtime/seahorseWalk.gif","seahorseAttack":"assets/runtime/seahorseAttack.gif","dragonGround":"assets/runtime/dragonGround.gif","dragonTakeoff":"assets/runtime/dragonTakeoff.gif","dragonFly":"assets/runtime/dragonFly.gif","dragonAttack":"assets/runtime/dragonAttack.gif","dragonFireball":"assets/runtime/dragonFireball.gif"});
@@ -6902,17 +6904,17 @@ const HISTORY_SERVER_BASE_DEFAULT='https://rampage-history.island-zombie-slz.wor
 let historyServerBase=String(localStorage.getItem('rampageHistoryServer')||HISTORY_SERVER_BASE_DEFAULT).replace(/\/$/,'');
 let historySelectedServerId=null;
 const HISTORY_SERVER_FALLBACK=Object.freeze([
- {id:'history-1',name:'Servidor História 1',map:'history-castle-v8',maxPlayers:8,players:0,online:false}
+ {id:'history-1',name:'Servidor História 1',map:'history-castle-v9',maxPlayers:8,players:0,online:false}
 ]);
 const HISTORY_LOCAL_SERVER=Object.freeze({
- id:'history-local',name:'Servidor local • Solo',map:'history-castle-v8',maxPlayers:1,players:1,online:true,local:true
+ id:'history-local',name:'Servidor local • Solo',map:'history-castle-v9',maxPlayers:1,players:1,online:true,local:true
 });
 let historyServerRows=[HISTORY_LOCAL_SERVER,...HISTORY_SERVER_FALLBACK];
 const HISTORY_RENDER_DELAY_MIN_MS=35;
 const HISTORY_RENDER_DELAY_MAX_MS=80;
 const HISTORY_REMOTE_MAX_EXTRAP_MS=105;
 const HISTORY_INPUT_KEEPALIVE_MS=50;
-const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v8',width:3200,height:2200,spawn:Object.freeze({x:597,y:2049}),assets:[],objects:[],colliders:[],doors:[],events:[]});
+const HISTORY_MAP_FALLBACK=Object.freeze({id:'history-castle-v9',width:3200,height:2200,spawn:Object.freeze({x:597,y:2049}),assets:[],objects:[],colliders:[],doors:[],events:[]});
 function historyMapData(){return window.RAMPAGE_HISTORY_MAP||HISTORY_MAP_FALLBACK}
 function historyMapBounds(r=0){
  const m=historyMapData();
@@ -7015,8 +7017,7 @@ function historyUpdateBosses(now=Date.now()){
  globalThis.RampageHistoryRules.updateBosses(historyMapData(),state.historyObjectState,state.historyDoorState,players,now,(boss,move,player,push)=>{
    const attacker={id:boss.id,type:'history-boss',team:'history-boss',x:boss.x+boss.w/2,y:boss.y+boss.h/2};
    const protectedCharge=Number(player.pvpWarriorChargeUntil)>performance.now();
-   const steps=Math.max(1,Math.ceil(Math.hypot(push.x,push.y)/18));
-   if(!protectedCharge)for(let i=0;i<steps;i++)historyMoveEntity(player,push.x/steps,push.y/steps);
+   if(!protectedCharge)globalThis.RampageHistoryRules.queuePush(player,push);
    applyCombatHit(player,attacker,Number(move.damage)||0,{knockForce:0,knockTime:0,tilt:move.hitEffect?.enabled===false?0:6,bypassHistoryWalls:true});
  });
 }
@@ -7039,12 +7040,13 @@ function historyUpdateMapAudio(force=false){
  historyMapAudio.update(me,state.entities.filter(e=>e.pvpEnemy),state.historyObjectState);
 }
 document.addEventListener('visibilitychange',()=>{if(state.historyActive)historyUpdateMapAudio(true)});
-function historyObjectHitFeedback(object,runtime){
+function historyObjectHitFeedback(object,runtime,serverAt=Date.now()){
  if(object.kind!=='boss'||!runtime?.hitSerial)return;
  state.historyObjectHitSeen ||= {};
  if((state.historyObjectHitSeen[object.id]||0)>=runtime.hitSerial)return;
  state.historyObjectHitSeen[object.id]=runtime.hitSerial;
- if(Date.now()-runtime.hitAt>1000)return;
+ if(serverAt-runtime.hitAt>1000)return;
+ state.historyObjectHitFX ||= {};state.historyObjectHitFX[object.id]={serial:runtime.hitSerial,at:performance.now()};
  recordPVPDamage({id:'history-object:'+object.id,x:object.x+object.w/2,y:object.y+80},runtime.hitDamage);
 }
 function historyHitMapObjects(e,damage,range,now=Date.now(),hitIntervalMs=0){
@@ -7184,7 +7186,7 @@ function historyStartLocalWarriorCombo(e,now){
 }
 function historyTickLocalWarriorComboVisual(e,now=performance.now()){
  if(!pvpIsWarriorHero(e)||!e?.alive||!(Number(e.pvpWarriorComboUntil)>0))return false;
- if(Number(e.knockTime)>0||Number(e.pvpWarriorComboRequestUntil)>0&&now>Number(e.pvpWarriorComboRequestUntil))
+ if(Number(e.pvpWarriorComboRequestUntil)>0&&now>Number(e.pvpWarriorComboRequestUntil))
    return pvpCancelWarriorCombo(e,now);
  const start=Number(e.pvpWarriorComboStartedAt)||now,duration=Math.max(1,Number(e.pvpWarriorComboUntil)-start);
  const fractions=[0,.50,.86],volumes=[.38,.52,.38];
@@ -7208,7 +7210,7 @@ function historyPreviewLocalAction(e,action,targetId){
  const now=performance.now();
  if(action==='attack'){
    if(pvpIsWarriorHero(e)){
-     if(Number(e.pvpWarriorChargeUntil)>now||Number(e.knockTime)>0)return false;
+     if(Number(e.pvpWarriorChargeUntil)>now)return false;
      if(Number(e.pvpWarriorComboUntil)>now){
        e.pvpWarriorComboRequestUntil=now+PVP_WARRIOR.comboContinueMs;
        e.attackSerial=(Number(e.attackSerial)||0)+1;e.lastAttackAt=now;e.lastCombatAt=now;return true;
@@ -7218,7 +7220,7 @@ function historyPreviewLocalAction(e,action,targetId){
        return historyStartLocalWarriorCombo(e,now);
      }
    }
-   if(Number(e.attackCooldown)>0||Number(e.knockTime)>0||Number(e.pvpPowerUntil)>now||Number(e.pvpActionUntil)>now)return false;
+   if(Number(e.attackCooldown)>0||Number(e.pvpPowerUntil)>now||Number(e.pvpActionUntil)>now)return false;
    pvpPreviewBasicAttack(e);
    if(pvpIsWarriorHero(e)){
      e.pvpWarriorSingleUntil=now+historyWarriorDuration('pvpWarriorAttack');e.pvpMeleeVisualUntil=e.pvpWarriorSingleUntil;
@@ -7417,7 +7419,7 @@ const HistoryAdapter={
    }
  },
  begin(snapshot){
-   this.active=true;state.historyActive=true;state.historyLocal=false;state.historyServerId=this.serverId;state.historyDoorState={};state.historyObjectState={};state.historyVictoryAwards=null;historyResetCamera();historyResetMapAudio();state.historyObjectHitSeen={};
+   this.active=true;state.historyActive=true;state.historyLocal=false;state.historyServerId=this.serverId;state.historyDoorState={};state.historyObjectState={};state.historyVictoryAwards=null;historyResetCamera();historyResetMapAudio();state.historyObjectHitSeen={};state.historyObjectHitFX={};
    state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
    state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.entities=[];
    warBurningEntities.clear();warFrameEnemiesByTeam.clear();clearEntityVisuals();pvpResetLocalSpectatorAfterRevive();
@@ -7497,9 +7499,13 @@ const HistoryAdapter={
    if(data.type==='projectile_blocked'){
      state.dragonProjectiles=state.dragonProjectiles.filter(p=>String(p.id)!==String(data.projectileId));return;
    }
+   if(data.type==='history_push'){
+     const e=historyFindEntity('player',data.uid);if(e?.controlled&&Number(data.serial)>(e.historyPushSerial||0)){e.historyPushSerial=Number(data.serial);globalThis.RampageHistoryRules.queuePush(e,data.push)}
+     return;
+   }
    if(data.type==='history_object'){
      state.historyObjectState[data.objectId]=data.state;
-     const object=historyMapData().destructibles.find(o=>o.id===data.objectId);if(object)historyObjectHitFeedback(object,data.state);
+     const object=historyMapData().destructibles.find(o=>o.id===data.objectId);if(object)historyObjectHitFeedback(object,data.state,Number(data.at)||Date.now());
      const player=state.players.find(p=>String(p.id)===String(data.uid));if(player)player.historyObjectXP=Number(data.xp)||0;
      return;
    }
@@ -7536,7 +7542,7 @@ const HistoryAdapter={
    this.lastSnapshotAt=arrival;this.lastSnapshotSeq=seq;this.lastServerTime=Number(snapshot.serverTime)||Date.now();
    state.historyDoorState=snapshot.doorState&&typeof snapshot.doorState==='object'?snapshot.doorState:{};
    state.historyObjectState=snapshot.objectState||{};
-   for(const o of historyMapData().bosses||[])historyObjectHitFeedback(o,state.historyObjectState[o.id]);
+   for(const o of historyMapData().bosses||[])historyObjectHitFeedback(o,state.historyObjectState[o.id],Number(snapshot.serverTime)||Date.now());
    const world=snapshot.world||{};state.world.w=Number(world.width)||PVP_ARENA.w;state.world.h=Number(world.height)||PVP_ARENA.h;
    const rawPlayers=Array.isArray(snapshot.players)?snapshot.players:[];
    const oldPlayers=new Map(state.players.map(p=>[String(p.id),p]));
@@ -7558,6 +7564,7 @@ const HistoryAdapter={
      e.historyServerId=sid;e.ownerId=String(sp.id);e.team='history-players';e.controlled=String(sp.id)===String(this.uid);
      const serverAlive=sp.alive!==false;
      if(wasAlive===false&&serverAlive)historyResetDeathVisual(e);
+     if(e.controlled&&Number(sp.historyPushSerial)>(e.historyPushSerial||0)){e.historyPushSerial=Number(sp.historyPushSerial);e.historyPushQueue=JSON.parse(JSON.stringify(sp.historyPushQueue||[]))}
      e.alive=serverAlive;e.hp=Math.max(0,Number(sp.hp)||0);e.maxHp=Math.max(1,Number(sp.maxHp)||350);
      e.shield=Math.max(0,Number(sp.shield)||0);e.maxShield=Math.max(0,Number(sp.maxShield)||250);
      e.heading=Number(sp.heading)||0;e.facing=Number(sp.facing)<0?-1:1;e.moving=!!sp.moving;
@@ -7600,6 +7607,7 @@ const HistoryAdapter={
        else if(kind==='anubis'){e.anubisAttackSerial=attackSerial;e.anubisAttackKind=sd.attackKind||'melee';e.pendingAnubisAttack={kind:e.anubisAttackKind,serial:attackSerial,startedAt:arrival,endAt:arrival+Math.max(0,(Number(sd.attackUntil)||0)-this.lastServerTime)}}
        else if(kind==='poseidon'||kind==='seahorse')e.waterAttackSerial=attackSerial;
      }
+     if(kind==='soldier_enemy'){e.soldierSerial=Number(sd.soldierSerial)||0;e.soldierVariant=Number(sd.soldierVariant)||1;e.soldierUntil=arrival+Math.max(0,(Number(sd.soldierUntil)||0)-this.lastServerTime)}
      if(kind==='dragon'){
        const flight=sd.flightState||'flying',takeoffSerial=Number(sd.takeoffSerial)||0;
        if(e.dragonTakeoffSerial!==takeoffSerial&&flight==='takeoff'){
@@ -7645,8 +7653,8 @@ const HistoryAdapter={
      const input=getLocalMovement();
      let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
      if(len>1){dx/=len;dy/=len}
-     let knocked=false;
-   if(Number(me.knockTime)>0){
+     let knocked=historyStepPush(me,dt);
+   if(!knocked&&Number(me.knockTime)>0){
      const step=Math.min(dt,Number(me.knockTime)||0);
      historyMoveEntity(me,(Number(me.knockVX)||0)*step,(Number(me.knockVY)||0)*step);
      me.knockTime=Math.max(0,(Number(me.knockTime)||0)-dt);
@@ -7661,7 +7669,7 @@ const HistoryAdapter={
        historyMoveEntity(me,Math.cos(angle)*speed*dt,Math.sin(angle)*speed*dt);
        me.heading=angle;me.facing=Math.cos(angle)<0?-1:1;me.moving=true;
      }else if(!locked&&(dx||dy)){
-       historyMoveEntity(me,dx*me.speed*dt,dy*me.speed*dt);
+       historyMoveEntity(me,dx*me.speed*historyMovementScale(me,now)*dt,dy*me.speed*historyMovementScale(me,now)*dt);
        me.heading=Math.atan2(dy,dx);if(Math.abs(dx)>.08)me.facing=dx<0?-1:1;me.moving=true;
      }else if(!locked)me.moving=false;
 
@@ -7750,6 +7758,7 @@ function finishHistoryVictory(uid){
 }
 function historyMapEvents(kind){return (historyMapData().events||[]).filter(event=>event.kind===kind)}
 const HISTORY_LOCAL_ENEMY_STATS=Object.freeze({
+ soldier_enemy:Object.freeze({hp:100,shield:50,speed:117}),
  naja:Object.freeze({hp:300,shield:250,speed:117}),
  poseidon:Object.freeze({hp:300,shield:250,speed:117}),
  anubis:Object.freeze({hp:100,shield:50,speed:97.5}),
@@ -7780,7 +7789,7 @@ const HistoryLocalAdapter={
    const map=historyMapData(),spawn=map.spawn||{x:597,y:2049},now=performance.now();
    this.active=true;this.spawnRuntime.clear();this.checkpointId=null;this.respawnPoint={x:Number(spawn.x),y:Number(spawn.y)};this.reviveAt=0;this.victory=false;
    this.doorState=this.initialDoorState();this.countedDoorDefeats.clear();
-   state.historyActive=true;state.historyLocal=true;state.historyServerId=this.serverId;state.historyDoorState=this.doorState;state.historyObjectState=historyInitialObjectState();state.historyVictoryAwards=null;historyResetCamera();historyResetMapAudio();state.historyObjectHitSeen={};
+   state.historyActive=true;state.historyLocal=true;state.historyServerId=this.serverId;state.historyDoorState=this.doorState;state.historyObjectState=historyInitialObjectState();state.historyVictoryAwards=null;historyResetCamera();historyResetMapAudio();state.historyObjectHitSeen={};state.historyObjectHitFX={};
    state.mode='pvp';state.phase='combat';state.running=true;state.round=1;state.rounds=1;state.timeLeft=0;state.prepLeft=0;
    state.world.w=Number(map.width)||3200;state.world.h=Number(map.height)||2200;
    state.entities=[];state.particles=[];state.dragonProjectiles=[];state.pvpDamageEvents=[];state.pvpDamageSeq=0;state.nextId=1;
@@ -7888,15 +7897,15 @@ const HistoryLocalAdapter={
    pvpRebuildTargets();
    const me=pvpLocalHero();this.updateDoors(now,me);
    if(me?.alive){
-     historyTickLocalWarriorComboVisual(me,now);
-     const input=getLocalMovement();
+     pvpTickWarriorCombo(me,now);
+     const input=getLocalMovement(),pushed=historyStepPush(me,dt);
      if(pvpIsWarriorHero(me)&&Number(me.pvpWarriorChargeUntil)>now){
        pvpTickWarriorSpecial(me,input,dt,now);historyHitMapObjects(me,PVP_WARRIOR.specialDamageMax,65,Date.now(),780);
-     }else if(Number(me.knockTime)<=0){
+     }else if(!pushed&&Number(me.knockTime)<=0){
        let dx=clamp(Number(input.dx)||0,-1,1),dy=clamp(Number(input.dy)||0,-1,1),len=Math.hypot(dx,dy);
        if(len>1){dx/=len;dy/=len}
        if(dx||dy){
-         historyMoveEntity(me,dx*me.speed*dt,dy*me.speed*dt);me.heading=Math.atan2(dy,dx);
+         historyMoveEntity(me,dx*me.speed*historyMovementScale(me,now)*dt,dy*me.speed*historyMovementScale(me,now)*dt);me.heading=Math.atan2(dy,dx);
          if(Math.abs(dx)>.08)me.facing=dx<0?-1:1;me.moving=true;
        }else me.moving=false;
      }
@@ -7945,7 +7954,7 @@ function renderHistoryServers(servers){
  for(const server of rows){
    const button=document.createElement('button');button.type='button';button.className='history-server-item'+(server.id===historySelectedServerId?' selected':'');
    const local=!!server.local,status=local||!!historyServerBase&&server.online!==false;
-   const meta=local?'mesmo mapa • solo • sem Cloudflare':historyEscape(server.map||'history-castle-v8')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores';
+   const meta=local?'mesmo mapa • solo • sem Cloudflare':historyEscape(server.map||'history-castle-v9')+' • '+Number(server.players||0)+'/'+Number(server.maxPlayers||8)+' jogadores';
    button.innerHTML='<span><div class="history-server-name">'+historyEscape(server.name||server.id)+'</div>'+
      '<div class="history-server-meta">'+meta+'</div></span>'+
      '<span class="history-server-status'+(status?'':' offline')+'">'+(local?'LOCAL':status?'ONLINE':'OFFLINE')+'</span>';
@@ -8180,6 +8189,7 @@ const PVP_ENEMY_HEROES=Object.freeze({
  anubis:{name:'Anubis',type:'anubis',card:'assets/egypt/anubis/card.png',clan:'egypt'},
  golem:{name:'Golem',type:'golem',card:'assets/ui/war-shop/card-golem-guerreiro.png',clan:'warriors'},
  dragon:{name:'Dragão',type:'dragon',card:'assets/ui/war-shop/card-dragao-guerreiro.png',clan:'warriors'},
+ soldier_enemy:{name:'Enemy soldier',type:'soldier_enemy',clan:'warriors',power:false,special:false},
  seahorse:{name:'Cavalo-marinho',type:'seahorse',card:'assets/water/seahorse/card.png',clan:'water'}
 });
 let pvpPickerDraft='warrior',pvpStartInFlight=false;
@@ -9202,7 +9212,7 @@ function applyCombatHit(target,attacker,amount,options={}){
     Number(target.pvpWarriorChargeUntil)>performance.now()&&Number(amount)>0){
    amount=2;
    options={...options,knockForce:0,knockTime:0,shake:0};
- }else if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode){
+ }else if(state.mode==='pvp'&&attacker.pvpWarAI&&target.pvpMode&&!(state.historyActive&&attacker.type==='soldier_enemy')){
    const distance=Math.hypot(target.x-attacker.x,target.y-attacker.y);
    const periodic=options.knockForce===0;
    const special=attacker.pendingGolemAttack?.kind==='special'||
@@ -9363,6 +9373,7 @@ function startEntityDeath(e,dx=0,dy=0){
  e.pendingKingSpecial=null;
  e.pendingDragonAttack=null;
  e.deathDir=(dx!==0 ? Math.sign(dx) : (e.facing||1)) || 1;
+ if(state.historyActive){e.historyPushQueue=[];if(e.type==='soldier_enemy'){e.removeAt=now+historyMapData().soldier.sprites.death.durationMs+100;deadTargetIds.add(e.id);return}}
  const pvpWarriorDeath=state.mode==='pvp'&&e.pvpMode&&e.pvpHero==='warrior'&&e.type==='warrior'&&e.clan==='warriors';
  if(pvpWarriorDeath){
    const deathDuration=pvpFullGifDuration('pvpWarriorDeath',PVP_WARRIOR.deathFallbackMs);
@@ -11497,7 +11508,7 @@ function pvpBasicAttack(e){
    if(last>0&&now-last>=120&&now-last<=PVP_WARRIOR.comboChainMs)
      return pvpStartWarriorCombo(e,now);
  }
- if(e.attackCooldown>0||e.knockTime>0||e.pvpPowerUntil>now||e.pvpActionUntil>now)return false;
+ if(e.attackCooldown>0||(e.knockTime>0&&!state.historyActive)||e.pvpPowerUntil>now||e.pvpActionUntil>now)return false;
  e.attackCooldown=PVP_BASE.meleeCooldown;e.attackAnim=.31;e.lastAttackAt=now;
  e.lastCombatAt=now;e.comboStep=(e.comboStep%2)+1;e.attackSerial++;
  if(pvpIsWarriorHero(e)){
@@ -11987,6 +11998,7 @@ function pvpObserveDragonDamage(e){
 }
 function pvpBotAction(e,dt){
  if(!e.alive)return;
+ if(state.historyActive&&e.type==='soldier_enemy'){historySoldierTick(e,dt,performance.now());return}
  const now=performance.now();
  if(state.historyActive&&state.historyLocal&&historyPrepareNPC(e,dt,now))return;
  if(e.type==='dragon'){
@@ -14257,6 +14269,10 @@ function draw(){
    viewW=vw/zoom;viewH=vh/zoom;
  }
 
+ if(state.historyActive){
+   const safe=globalThis.RampageHistoryRules.safeCamera(historyMapData(),vw,vh,state.camera.x+vw/zoom/2,state.camera.y+vh/zoom/2,zoom);
+   zoom=safe.zoom;viewW=vw/zoom;viewH=vh/zoom;state.camera.zoom=zoom;state.camera.x=safe.left;state.camera.y=safe.top;
+ }
  left=state.camera.x;top=state.camera.y;
 
  // Tremor local quando uma tropa deste jogador recebe pancada do Golem.
@@ -14358,6 +14374,7 @@ function draw(){
  syncPVPArenaOverlay(left,top,zoom);
  const domCamera=prepareCameraComposite(left,top,zoom);
  syncHistoryMapVisuals(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
+ historySyncBossHud(left,top,zoom,vw,vh);
  syncEntityVisuals(visible,domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncIsisPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
  syncBrownWarriorPowerEffects(domCamera.left,domCamera.top,domCamera.zoom,vw,vh,left,top,zoom);
@@ -14396,6 +14413,53 @@ function historyMapVisualZ(o,top,zoom){
  if(depth===4)return 9000+Math.max(0,Math.min(999,z));
  return 100+Math.round(((Number(o?.[2])||0)+(Number(o?.[4])||0)-top)*zoom);
 }
+function historySyncBossHud(left,top,zoom,width,height){
+ const hud=$('#historyBossHud');if(!hud)return;
+ if(!state.historyActive){hud.hidden=true;return}
+ const me=pvpLocalHero(),bosses=(historyMapData().bosses||[]).filter(o=>!state.historyObjectState[o.id]?.broken);
+ const candidates=bosses.map(o=>({o,visible:(o.x+o.w-left)*zoom>=0&&(o.y+o.h-top)*zoom>=0&&(o.x-left)*zoom<=width&&(o.y-top)*zoom<=height,d:me?Math.hypot(me.x-o.x-o.w/2,me.y-o.y-o.h/2):Infinity})).filter(x=>x.visible||x.d<=620).sort((a,b)=>Number(b.visible)-Number(a.visible)||a.d-b.d);
+ const boss=candidates[0]?.o;hud.hidden=!boss;if(!boss)return;
+ const rt=state.historyObjectState[boss.id]||boss,hp=Math.max(0,rt.hp),shield=Math.max(0,rt.shield||0);
+ hud.querySelector('.history-boss-name').textContent=boss.name||'BOSS';
+ hud.querySelector('.history-boss-hp').style.width=(100*hp/boss.hp)+'%';
+ hud.querySelector('.history-boss-shield').style.width=(boss.shield?100*shield/boss.shield:0)+'%';
+ hud.querySelector('.history-values').textContent=hp+' / '+boss.hp+' HP • '+shield+' / '+boss.shield+' escudo';
+}
+function historyMovementScale(e,now){return globalThis.RampageHistoryRules.attackMovement(e,now)}
+function historyStepPush(e,dt){return globalThis.RampageHistoryRules.stepPush(e,dt,historyMoveEntity)}
+function historySoldierTick(e,dt,now){
+ const config=historyMapData().soldier;
+ const targets=state.entities.filter(t=>t.alive&&!t.pvpEnemy&&t.team!==e.team&&historyPointInArea(t.x,t.y,e.historyLeashArea));
+ const target=targets.reduce((best,t)=>!best||Math.hypot(t.x-e.x,t.y-e.y)<Math.hypot(best.x-e.x,best.y-e.y)?t:best,null);
+ const canHit=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y)<=config.range+(b.r||30)*.36&&historyLineOfSight(a,b);
+ const active=(!e.knockTime||e.soldierStartedAt>0)&&globalThis.RampageHistoryRules.soldierTick(e,target,now,config,canHit,(t,damage)=>applyCombatHit(t,e,damage,{knockForce:82,knockTime:.075,tilt:6}));
+ if(active||e.knockTime>0){e.moving=false;return}
+ if(!target){e.moving=false;return}
+ e.heading=Math.atan2(target.y-e.y,target.x-e.x);e.facing=target.x<e.x?-1:1;
+ if(!canHit(e,target)){
+   const v=historyNavigator().direction(e,target,e.r||30,state.historyDoorState,now,state.historyObjectState);
+   e.moving=historyMoveEntity(e,v.x*e.speed*dt,v.y*e.speed*dt);
+ }else e.moving=false;
+}
+function historySyncSoldierVisual(e,left,top,zoom,now){
+ let el=entityNodes.get(e.id);
+ if(!el){
+   el=document.createElement('div');el.className='entity-visual history-soldier-visual';el.dataset.entityId=String(e.id);
+   el.innerHTML='<div class="entity-facing"><img class="entity-body" draggable="false" style="width:142px;height:142px;left:-32px;top:-45px;opacity:1;display:block"></div><div class="entity-bars"><div class="hp-bg"><div class="hp-fill"></div></div><div class="shield-bg"><div class="shield-fill"></div></div></div>';
+   el._facing=el.querySelector('.entity-facing');el._image=el.querySelector('img');el._hp=el.querySelector('.hp-fill');el._shield=el.querySelector('.shield-fill');entityCameraLayer.appendChild(el);entityNodes.set(e.id,el);
+ }
+ const kind=!e.alive?'death':e.soldierUntil>now?'combo'+e.soldierVariant:e.moving?'walk':'idle';
+ const config=historyMapData().soldier.sprites[kind],serial=kind==='death'?e.deathStarted:kind.startsWith('combo')?e.soldierSerial:0;
+ const key=kind+':'+serial;
+ if(el._historySprite!==key){el._historySprite=key;el.dataset.anim=kind;el._image.src=config.src+(serial?'?gifStart='+encodeURIComponent(e.id+'-'+serial):'')}
+ el._lastVisibleAt=now;setEntityNodeVisible(el,true);
+ el.style.transform='translate3d('+((e.x-left)*zoom-39)+'px,'+((e.y-top)*zoom-55)+'px,0) scale('+zoom+')';el.style.transformOrigin='39px 55px';el.style.zIndex=String(40+Math.round((e.y-top)*zoom));
+ el._facing.style.setProperty('--face',String(e.facing<0?-1:1));el._facing.style.transform='scaleX('+(e.facing<0?-1:1)+')';
+ if(el._hit!==e.hitSerial){el._hit=e.hitSerial;el._facing.classList.remove('hit-react','hit-react-alt');el._facing.classList.add((e.hitSerial&1)?'hit-react':'hit-react-alt')}
+ el._hp.style.width=(100*Math.max(0,e.hp)/e.maxHp)+'%';el._shield.style.width=(100*Math.max(0,e.shield)/e.maxShield)+'%';
+ el.style.opacity=!e.alive?String(clamp(((e.removeAt||now+100)-now)/200,0,1)):'1';
+ return el;
+}
 function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullTop=top,cullZoom=zoom){
  if(!state.historyActive){if(historyMapNodes.size)clearHistoryMapVisuals();return}
  const map=historyMapData(),objects=map.objects||[],assets=map.assets||[];
@@ -14432,7 +14496,7 @@ function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullT
    }
    if(object?.kind==='boss'&&objectState?.hitSerial&&img._historyHitSerial!==objectState.hitSerial){
      img._historyHitSerial=objectState.hitSerial;
-     if(Date.now()-objectState.hitAt<500){
+     if(performance.now()-(state.historyObjectHitFX?.[object.id]?.at??-Infinity)<500){
        const key=(objectState.hitSerial&1)?'hitFlash':'hitFlashAlt';
        img.style.animation=key+' .17s steps(1,end)';
        img.onanimationend=()=>{img.style.animation=''};
@@ -14449,17 +14513,7 @@ function syncHistoryMapVisuals(left,top,zoom,screenW,screenH,cullLeft=left,cullT
    if(img._hh!==sh){img._hh=sh;img.style.height=sh+'px'}
    const vz=historyMapVisualZ(o,top,zoom);
    if(img._hz!==vz){img._hz=vz;img.style.zIndex=String(vz)}
-   if(object?.kind==='boss'){
-     if(!img._bossStatus){
-       const bar=document.createElement('div');bar.className='history-boss-status';
-       Object.assign(bar.style,{position:'absolute',pointerEvents:'none',textAlign:'center',color:'#fff',font:'bold 11px Arial',textShadow:'0 1px 2px #000',background:'#171717dd',border:'1px solid #b44',borderRadius:'4px',padding:'3px'});
-       entityCameraLayer.appendChild(bar);img._bossStatus=bar;
-     }
-     const bar=img._bossStatus,hp=Number(objectState?.hp??object.hp),shield=Number(objectState?.shield??object.shield);
-     const label='BOSS • '+hp+' / '+object.hp+' HP • '+shield+' escudo';
-     if(bar.textContent!==label)bar.textContent=label;
-     Object.assign(bar.style,{display:objectState?.broken?'none':'block',left:(sx+sw/2-130)+'px',top:(sy-24)+'px',width:'260px',zIndex:String(vz+1)});
-   }
+
 
  }
 }
@@ -15649,6 +15703,7 @@ function syncEntityVisuals(visible,left,top,zoom,screenW,screenH,cullLeft=left,c
      continue;
    }
 
+   if(e.type==='soldier_enemy'){historySyncSoldierVisual(e,left,top,zoom,localNow);visibleIds.add(e.id);continue}
    if(!el)el=makeEntityNode(e);
    visibleIds.add(e.id);
    el._lastVisibleAt=localNow;

@@ -40,6 +40,8 @@ local_urls.add('assets/history/audio.js')
 # Map artwork and break animations are referenced by the generated map config.
 local_urls.update(re.findall(r'"(assets/history/[^"]+)"', Path(history_map_url).read_text()))
 
+local_urls={url for url in local_urls if not (url.startswith('assets/history/soldier-enemy/') and url.endswith('-original.gif'))}
+
 # Keep the boot cache aligned with the generated display sprites. Original art
 # remains in the repository as a fallback; eagerly downloading both versions
 # would erase the loading/memory benefit on every clean installation.

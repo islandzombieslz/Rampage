@@ -87,16 +87,16 @@ const pvpTestHook=`window.__pvpBrowserTest={
    const boss=historyMapData().bosses[0],me=pvpLocalHero();
    const r=boss.collisionRect;me.x=r[0]+r[2]/2;me.y=r[1]+r[3]+40;
    historyHitMapObjects(me,40,60);
-   syncHistoryMapVisuals(boss.x-100,boss.y-100,1,1000,700);
+   syncHistoryMapVisuals(boss.x-100,boss.y-100,1,1000,700);historySyncBossHud(boss.x-100,boss.y-100,1,1000,700);
    const runtime=state.historyObjectState[boss.id];
-   return {hp:runtime.hp,shield:runtime.shield,attacks:boss.moves.attack.length,flash:historyMapNodes.get(boss.objectIndex).style.animation.includes('hitFlash'),number:state.pvpDamageEvents.at(-1)?.amount,label:document.querySelector('.history-boss-status')?.textContent};
+   return {hp:runtime.hp,shield:runtime.shield,attacks:boss.moves.attack.length,flash:historyMapNodes.get(boss.objectIndex).style.animation.includes('hitFlash'),number:state.pvpDamageEvents.at(-1)?.amount,label:document.querySelector('#historyBossHud .history-values')?.textContent};
  },
  historyBossAndCamera(){
    const boss=historyMapData().bosses[0],me=pvpLocalHero(),now=Date.now();
    const saved={hp:me.hp,shield:me.shield,x:me.x,y:me.y};
    state.historyObjectState[boss.id]=globalThis.RampageHistoryRules.initialObjects(historyMapData())[boss.id];
    me.x=1656;me.y=1780;me.hp=350;me.shield=100;
-   historyUpdateBosses(now);historyUpdateBosses(now+3500);historyUpdateBosses(now+4700);
+   historyUpdateBosses(now);historyUpdateBosses(now+3500);historyUpdateBosses(now+4700);historyStepPush(me,.033);
    syncHistoryMapVisuals(boss.x-100,boss.y-100,1,1000,700);
    const bossResult={hp:me.hp,shield:me.shield,pushed:me.y>1780,
      move:state.historyObjectState[boss.id].activeMoveId,
@@ -112,7 +112,7 @@ const pvpTestHook=`window.__pvpBrowserTest={
    return {boss:bossResult,camera:{x:point.x,y:point.y,zoom:point.zoom,returned,once,shake}};
  },
  historyAudioProbe(){
-   const me=pvpLocalHero();me.x=615;me.y=1193;
+   const me=pvpLocalHero();me.x=1883;me.y=1927;
    historyUpdateMapAudio(true);
    return {mode:desiredMusicMode,defaultPaused:menuMusicEl.paused&&battleMusicEl.paused,
      tracks:[...historyMapAudio.entries].map(([id,st])=>({id,want:st.want,paused:st.audio.paused,src:st.audio.src,volume:st.audio.volume}))};
@@ -124,6 +124,34 @@ const pvpTestHook=`window.__pvpBrowserTest={
    syncHistoryMapVisuals(object.x-100,object.y-100,1,1000,700);
    const texts=state.pvpDamageEvents.filter(e=>e.targetId==='history-object:'+object.id&&e.amount===25);
    return {texts:texts.length,flash:historyMapNodes.get(object.objectIndex).style.animation.includes('hitFlash')};
+ },
+ historyV9Visuals(){
+   const me=pvpLocalHero(),boss=historyMapData().bosses[0],enemy=state.entities.find(e=>e.alive&&e.type==='soldier_enemy'),now=performance.now();
+   const saved={...me},entities=state.entities,oldBoss=state.historyObjectState[boss.id];
+   const rect=boss.collisionRect;me.x=rect[0]+rect[2]/2;me.y=rect[1]+rect[3]+40;me.pvpWarriorChargeUntil=0;me.knockTime=0;
+   state.entities=[me,{...enemy,id:9001,x:me.x+70,y:me.y,alive:true,hp:100,shield:50}];
+   state.historyObjectState[boss.id]=globalThis.RampageHistoryRules.initialObjects(historyMapData())[boss.id];state.historyObjectHitSeen={};
+   pvpStartWarriorCombo(me,now);const until=me.pvpWarriorComboUntil,duration=until-now,before=me.hp+me.shield;
+   applyCombatHit(me,state.entities[1],10,{knockForce:82,knockTime:.075,tilt:6});
+   const hit=before-me.hp-me.shield;pvpBasicAttack(me);me.pvpWarriorComboRequestUntil=until+100;
+   pvpTickWarriorCombo(me,now+duration*.18+1);
+   const continuous=me.pvpWarriorComboUntil===until;
+   const slowing=historyMovementScale(me,now),normal=historyMovementScale(me,until+1000);
+   const damagedBoss=state.historyObjectState[boss.id].shield<250;
+   historySyncBossHud(boss.x-100,boss.y-100,1,1000,700);const hud=$('#historyBossHud'),top=hud.getBoundingClientRect().top;
+   historySyncBossHud(boss.x-200,boss.y-100,.8,1000,700);const fixedHud=!hud.hidden&&Math.abs(hud.getBoundingClientRect().top-top)<.01&&!hud.closest('#entityLayer');
+   const texts=[],fill=pvpDamageCtx.fillText;pvpDamageCtx.fillText=function(value,...args){texts.push(value);return fill.call(this,value,...args)};
+   drawPVPDamageNumbers(pvpDamageCtx,performance.now()+120);pvpDamageCtx.fillText=fill;
+   const visibleNumbers=getComputedStyle(pvpDamageCanvas).display!=='none'&&texts.includes('-40');
+   draw();const comboShown=entityNodes.get(me.id)?.dataset.anim==='warriorCombo';
+   const oldCamera=historyCameraRuntime;historyResetCamera();historyCameraRuntime.held={x:-500,y:4000,zoom:.1};historyCameraRuntime.shake={until:performance.now()+1000,intensity:80};draw();
+   const viewport=gameViewport(),cameraSafe=state.camera.x>=0&&state.camera.y>=0&&state.camera.x+viewport.w/state.camera.zoom<=state.world.w+.01&&state.camera.y+viewport.h/state.camera.zoom<=state.world.h+.01;historyCameraRuntime=oldCamera;
+   state.entities=entities;Object.assign(me,saved);state.historyObjectState[boss.id]=oldBoss;
+   const e={...enemy,id:9002,x:1600,y:1800,alive:true,soldierSerial:1,soldierVariant:1,soldierUntil:now+4270};
+   let node=historySyncSoldierVisual(e,1300,1500,1,now);const one=node._image.src.includes('/combo1.gif'),bodyOnly=!node.querySelector('.entity-sword,.entity-weapon-facing');
+   e.soldierSerial=2;e.soldierVariant=2;node=historySyncSoldierVisual(e,1300,1500,1,now);const two=node._image.src.includes('/combo2.gif');
+   e.alive=false;e.deathStarted=now;e.removeAt=now+2130;node=historySyncSoldierVisual(e,1300,1500,1,now);const death=node._image.src.includes('/death.gif');node.remove();entityNodes.delete(e.id);
+   return {hit,continuous,slowing,normal,damagedBoss,fixedHud,visibleNumbers,comboShown,cameraSafe,one,two,death,bodyOnly};
  },
  historyLocalCheckpoint(){
    const me=pvpLocalHero();if(!me)return null;
@@ -616,16 +644,16 @@ async function main(){
    assert((await localRow.textContent()).includes('LOCAL'),'History browser must expose the local server immediately');
    await localRow.click();await page.locator('#historyServerConfirm:not([disabled])').click();
    await page.locator('#gameScreen.active.history-mode').waitFor({timeout:10000});
-   await page.waitForFunction(()=>window.__pvpBrowserTest.historyLocalState().enemies>=15,null,{timeout:6000});
+   await page.waitForFunction(()=>window.__pvpBrowserTest.historyLocalState().enemies>=20,null,{timeout:6000});
    const localHistory=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalState());
    assert.deepEqual(localHistory,{
      active:true,historyActive:true,local:true,serverId:'history-local',online:false,host:true,
-     x:597,y:2049,enemies:15,spawns:4,checkpoints:3,victories:1
+     x:597,y:2049,enemies:20,spawns:4,checkpoints:3,victories:1
    },'local History must start from the editor origin, host locally and spawn the four configured waves');
-   await page.waitForFunction(()=>window.__pvpBrowserTest.historyAudioProbe().tracks.some(t=>t.id==='event13'&&!t.paused),null,{timeout:8000});
+   await page.waitForFunction(()=>window.__pvpBrowserTest.historyAudioProbe().tracks.some(t=>t.id==='event14'&&!t.paused),null,{timeout:8000});
    const audioProbe=await page.evaluate(()=>window.__pvpBrowserTest.historyAudioProbe());
    assert.equal(audioProbe.mode,'history');assert.equal(audioProbe.defaultPaused,true);
-   assert.deepEqual(audioProbe.tracks.filter(t=>t.want).map(t=>t.id),['event13']);
+   assert.deepEqual(audioProbe.tracks.filter(t=>t.want).map(t=>t.id),['event14']);
    assert(audioProbe.tracks.every(t=>t.src.includes('/assets/history/')));
    const localDoors=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalDoors());
    assert.deepEqual(localDoors,{
@@ -634,13 +662,15 @@ async function main(){
      defeat:{id:'obj228',required:5,defeats:5,open:true,collision:false}
    },'local History must open the proximity door and the five-defeat door, removing collision in both open states');
    const boss=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalBoss());
-   assert.deepEqual(boss,{hp:500,shield:210,attacks:2,flash:true,number:40,label:'BOSS • 500 / 500 HP • 210 escudo'},'editor boss must render its status and absorb strikes with shield first');
+   assert.deepEqual(boss,{hp:500,shield:210,attacks:2,flash:true,number:40,label:'500 / 500 HP • 210 / 250 escudo'},'editor boss must render its status and absorb strikes with shield first');
    const cloudFeedback=await page.evaluate(()=>window.__pvpBrowserTest.historyCloudBossFeedback());
    assert.deepEqual(cloudFeedback,{texts:1,flash:true});
    const bossCamera=await page.evaluate(()=>window.__pvpBrowserTest.historyBossAndCamera());
    assert.equal(bossCamera.boss.hp,350);assert.equal(bossCamera.boss.shield,50);assert.equal(bossCamera.boss.pushed,true);
    assert.equal(bossCamera.boss.move,'move_u7t8wnue');assert(bossCamera.boss.image.includes('map-v7/')&&bossCamera.boss.image.includes('gifStart='));
    assert.deepEqual(bossCamera.camera,{x:587,y:388,zoom:1,returned:true,once:true,shake:10});
+   const v9=await page.evaluate(()=>window.__pvpBrowserTest.historyV9Visuals());
+   assert.deepEqual(v9,{hit:10,continuous:true,slowing:.45,normal:1,damagedBoss:true,fixedHud:true,visibleNumbers:true,comboShown:true,cameraSafe:true,one:true,two:true,death:true,bodyOnly:true});
    const checkpoint=await page.evaluate(()=>window.__pvpBrowserTest.historyLocalCheckpoint());
    assert.deepEqual(checkpoint,{id:'event3',x:611,y:774},'reaching checkpoint 1 must update the local respawn point');
    assert(await page.evaluate(()=>window.__pvpBrowserTest.leaveLocalHistory()),'local History must disconnect without a cloud room');

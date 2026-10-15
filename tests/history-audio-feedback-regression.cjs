@@ -8,10 +8,10 @@ const ctx={window:{},Audio:FakeAudio};
 vm.runInNewContext(fs.readFileSync('assets/history/rules.js','utf8'),ctx);vm.runInNewContext(fs.readFileSync('assets/history/audio.js','utf8'),ctx);
 vm.runInNewContext(fs.readFileSync('assets/history/map-config.js','utf8'),ctx);
 const map=ctx.window.RAMPAGE_HISTORY_MAP,rules=ctx.RampageHistoryRules,tracks=map.events.filter(e=>e.kind==='sound');
-assert.equal(tracks.length,3);
+assert.equal(tracks.length,1);
 for(const event of tracks){assert(event.sound.src.startsWith('assets/history/'));assert(fs.existsSync(event.sound.src));assert.equal(event.sound.clipStart,0);assert.equal(event.sound.clipEnd,0);}
-const plain=x=>JSON.parse(JSON.stringify(x)),base={kind:'sound',id:'sample',x:50,y:50,area:{x:0,y:0,w:100,h:100},sound:{src:'sample.mp3',trigger:'area',mode:'spatial',volume:100,playMode:'loop',clipStart:5,clipEnd:10}};
-assert.equal(rules.soundMix(base,{bosses:[]},{},{x:0,y:0},[]).volume,.08,'the whole rectangle, including its corners, remains audible');
+const plain=x=>JSON.parse(JSON.stringify(x)),base={kind:'sound',id:'sample',x:50,y:50,area:{x:0,y:0,w:100,h:100},sound:{src:'sample.mp3',trigger:'area',mode:'spatial',volume:100,playMode:'loop',fadeIn:0,fadeOut:0,clipStart:5,clipEnd:10}};
+assert.equal(rules.soundMix(base,{bosses:[]},{},{x:0,y:0},[]).volume,.06000000000000005,'the whole rectangle, including its corners, remains audible');
 assert.equal(rules.soundMix(base,{bosses:[]},{},{x:-1,y:0},[]).volume,0);
 assert.equal(rules.soundMix(base,{bosses:[]},{},{x:50,y:50},[]).volume,1);
 const player={x:50,y:50},foe={alive:true,x:40,y:40};

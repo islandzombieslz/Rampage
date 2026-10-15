@@ -289,31 +289,76 @@ globalThis.RampageHistoryRules = (() => {
     }
     return {...pose,scripted,shake:rt.shake&&now<rt.shake.until?rt.shake.intensity:0};
   }
+  function safeCamera(map,vw,vh,cx,cy,zoom,shakeX=0,shakeY=0) {
+    zoom=Math.max(zoom,vw/map.width,vh/map.height);
+    const viewW=vw/zoom,viewH=vh/zoom;
+    return {zoom,left:clamp(cx-viewW/2+shakeX/zoom,0,Math.max(0,map.width-viewW)),top:clamp(cy-viewH/2+shakeY/zoom,0,Math.max(0,map.height-viewH))};
+  }
+  function queuePush(entity,push) {
+    const distance=Math.hypot(push.x,push.y);if(!distance)return;
+    const duration=clamp(.14+distance*.00042,.14,.48);
+    (entity.historyPushQueue ||= []).push({x:push.x/distance,y:push.y/distance,remaining:distance,speed:distance/duration});
+  }
+  function stepPush(entity,dt,move) {
+    const queue=entity.historyPushQueue;if(!queue?.length)return false;
+    let remainingTime=Math.max(0,dt),guard=0;
+    while(queue.length&&remainingTime>0&&guard++<8) {
+      const k=queue[0],step=Math.min(k.remaining,k.speed*remainingTime),steps=Math.max(1,Math.ceil(step/8));
+      for(let i=0;i<steps;i++)move(entity,k.x*step/steps,k.y*step/steps);
+      k.remaining-=step;remainingTime-=step/k.speed;
+      if(k.remaining<=.05)queue.shift();else break;
+    }
+    return true;
+  }
+  function attackMovement(entity,now,server=false) {
+    const active=server ? Math.max(Number(entity.singleUntil)||0,Number(entity.comboUntil)||0) :
+      Math.max(Number(entity.pvpWarriorSingleUntil)||0,Number(entity.pvpWarriorComboUntil)||0,Number(entity.pvpMeleeVisualUntil)||0);
+    return active>now?.45:1;
+  }
+  function soldierTick(e,target,now,config,canHit,hit) {
+    if(!e.alive)return false;
+    if(!(e.soldierUntil>now)&&!(e.soldierStartedAt>0)) {
+      if(!target||now<(e.soldierNextAt||0)||!canHit(e,target))return false;
+      e.soldierSerial=(e.soldierSerial||0)+1;e.soldierVariant=(e.soldierSerial-1)%2+1;
+      e.soldierStartedAt=now;e.soldierUntil=now+config.sprites['combo'+e.soldierVariant].durationMs;e.soldierHitIndex=0;
+      e.soldierNextAt=e.soldierUntil+500;e.attackSerial=e.soldierSerial;
+    }
+    if(e.soldierStartedAt>0) {
+      const duration=e.soldierUntil-e.soldierStartedAt;
+      while(e.soldierHitIndex<config.hitFractions.length&&now>=e.soldierStartedAt+duration*config.hitFractions[e.soldierHitIndex]) {
+        if(target?.alive&&canHit(e,target))hit(target,config.damage);
+        e.soldierHitIndex++;
+      }
+      if(now>=e.soldierUntil)e.soldierStartedAt=0;
+      else {e.moving=false;return true;}
+    }
+    return false;
+  }
   function soundMix(event, map, objects, player, enemies) {
     const a=event.sound,area=event.area;
     const inside=(p,r)=>!!p&&!!r&&p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h;
     if(!a||!player)return {active:false,volume:0};
-    const foes=[...(enemies||[]).filter(e=>e.alive),...(map.bosses||map.destructibles||[])
-      .filter(o=>o.kind==='boss'&&!objects[o.id]?.broken&&(objects[o.id]?.hp??o.hp)>0)
-      .map(o=>({x:o.x+o.w/2,y:o.y+o.h/2}))];
-    const near=foes.some(e=>Math.hypot(e.x-player.x,e.y-player.y)<=520),inArea=foes.some(e=>inside(e,area));
-    const conditions={none:true,in_area:inArea,no_in_area:!inArea,near_player:near,no_near_player:!near,in_area_not_near:inArea&&!near};
-    const triggers={area:inside(player,area),enemies_near:near,enemies_in_area:inArea,no_enemies_in_area:!inArea,
-      no_enemies_near:!near,enemies_in_area_not_near:inArea&&!near};
-    const active=!!triggers[a.trigger||'area']&&!!conditions[a.enemyCondition||(a.requireEnemiesInArea?'in_area':'none')];
+    const bosses=(map.bosses||map.destructibles||[]).filter(o=>o.kind==='boss'&&!objects[o.id]?.broken&&(objects[o.id]?.hp??o.hp)>0).map(o=>({x:o.x+o.w/2,y:o.y+o.h/2}));
+    const foes=[...(enemies||[]).filter(e=>e.alive),...bosses];
+    const radius=clamp(Number(a.combatRadius)||520,50,3000);
+    const near=foes.some(e=>Math.hypot(e.x-player.x,e.y-player.y)<=radius),inArea=foes.some(e=>inside(e,area)),bossInArea=bosses.some(e=>inside(e,area));
+    const conditions={none:true,in_area:inArea,no_in_area:!inArea,near_player:near,no_near_player:!near,in_area_not_near:inArea&&!near,boss_alive_in_area:bossInArea};
+    const triggers={always:true,area:inside(player,area),enemies_near:near,enemies_in_area:inArea,no_enemies_in_area:!inArea,no_enemies_near:!near,enemies_in_area_not_near:inArea&&!near,boss_alive_in_area:bossInArea};
+    const active=(a.scope==='map'||inside(player,area))&&!!triggers[a.trigger||'area']&&!!conditions[a.enemyCondition||(a.requireEnemiesInArea?'in_area':'none')];
     let spatial=1;
-    if(a.mode==='spatial') {
+    if(a.scope!=='map'&&a.mode==='spatial') {
       spatial=0;
       if(inside(player,area)) {
         const x=clamp(event.x,area.x,area.x+area.w),y=clamp(event.y,area.y,area.y+area.h),dx=player.x-x,dy=player.y-y;
         let t=Infinity;
         if(dx>0)t=Math.min(t,(area.x+area.w-x)/dx);else if(dx<0)t=Math.min(t,(area.x-x)/dx);
         if(dy>0)t=Math.min(t,(area.y+area.h-y)/dy);else if(dy<0)t=Math.min(t,(area.y-y)/dy);
-        spatial=clamp(1-(Number.isFinite(t)&&t>0?1/t:0)*.92,.08,1);
+        const u=clamp(Number.isFinite(t)&&t>0?1/t:0,0,1),smooth=u*u*(3-2*u);
+        spatial=Math.max(.06,1-smooth*.94);
       }
     }
     return {active,volume:clamp((Number(a.volume)||0)/100,0,1)*spatial};
   }
   return {obstacles, rectHitTime, firstWallHit, circleHitTime, spawnCount, createNavigator, initialObjects, hitObject,
-    bossMoveArea, updateBosses, createCameraState, cameraFrame, soundMix};
+    bossMoveArea, updateBosses, createCameraState, cameraFrame, soundMix, safeCamera, queuePush, stepPush, attackMovement, soldierTick};
 })();

@@ -9,14 +9,14 @@ vm.runInContext(shared+'\n'+fs.readFileSync('history-server/src/map.js','utf8').
 function cloud(){const r=Object.create(worker.Room.prototype);r.room=r.createRoom();r.broadcast=()=>{};r.projectileSeq=0;return r;}
 const r=cloud();r.updateSpawnEvents(clock);
 const alive=()=>r.room.dragons.filter(e=>e.alive);
-assert.equal(alive().length,15);
+assert.equal(alive().length,20);
 for(let i=0;i<20;i++)r.updateSpawnEvents(clock+=60000);
-assert.equal(alive().length,15,'endless waves must not accumulate living troops');
-const killed=alive().find(e=>e.type==='dragon'&&e.historySpawnEventId==='event2');killed.alive=false;
-const killedAnubis=alive().find(e=>e.type==='anubis');killedAnubis.alive=false;
-r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,15,'only missing types are replaced');
-assert.equal(alive().filter(e=>e.type==='dragon'&&e.historySpawnEventId==='event2').length,3);
-assert.equal(alive().filter(e=>e.type==='anubis'&&e.historySpawnEventId==='event6').length,2);
+assert.equal(alive().length,20,'endless waves must not accumulate living troops');
+const killed=alive().find(e=>e.type==='soldier_enemy'&&e.historySpawnEventId==='event2');killed.alive=false;
+const killedAnubis=alive().find(e=>e.type==='naja');killedAnubis.alive=false;
+r.updateSpawnEvents(clock+=60000);assert.equal(alive().length,20,'only missing types are replaced');
+assert.equal(alive().filter(e=>e.type==='soldier_enemy'&&e.historySpawnEventId==='event2').length,5);
+assert.equal(alive().filter(e=>e.type==='naja'&&e.historySpawnEventId==='event6').length,1);
 const free={id:'free',x:600,y:1400,troops:{naja:2},limitAlive:false,intervalMs:1000};
 r.spawnEditorWave(free,clock);r.spawnEditorWave(free,clock);assert.equal(alive().filter(e=>e.historySpawnEventId==='free').length,4,'disabled limit allows explicit free waves');
 const finite=vm.runInContext('HISTORY_MAP_EVENTS.find(e=>e.id==="event2")',worker),oldMode=finite.spawnMode;
@@ -25,7 +25,7 @@ assert.equal(finiteRoom.room.dragons.filter(e=>e.alive&&e.historySpawnEventId===
 const local=vm.createContext({Date:{now:()=>clock},performance:{now:()=>clock},console,
  state:{historyActive:true,historyLocal:true,historyDoorState:{},historyObjectState:{},world:{w:3200,h:2200},entities:[],players:[{id:'me'}],dragonProjectiles:[]},
  historyMapData:()=>map,historyNavigationMap:null,historyNavigationCache:null,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
- PVP_ENEMY_HEROES:Object.fromEntries(['naja','poseidon','anubis','golem','dragon','seahorse'].map(type=>[type,{type}])),
+ PVP_ENEMY_HEROES:Object.fromEntries(['naja','poseidon','anubis','golem','dragon','seahorse','soldier_enemy'].map(type=>[type,{type}])),
  beginDragonTakeoff:()=>{},flash:()=>{},warEntityById:new Map()});
 vm.runInContext(shared,local);
 const functionSource=name=>{
@@ -39,9 +39,9 @@ local.pvpBaseEntity=(hero,x,y,team)=>{const e={id:local.state.entities.length+1,
 const a=html.indexOf('const HISTORY_LOCAL_ENEMY_STATS='),b=html.indexOf('function renderHistoryServers',a);
 vm.runInContext(html.slice(a,b)+'\nglobalThis.adapter=HistoryLocalAdapter;',local);
 for(let i=0;i<20;i++)local.adapter.updateSpawns(clock+=60000);
-assert.equal(local.state.entities.filter(e=>e.alive).length,15,'local host enforces the same cap');
-local.state.entities.find(e=>e.type==='anubis').alive=false;local.adapter.updateSpawns(clock+=60000);
-assert.equal(local.state.entities.filter(e=>e.alive&&e.type==='anubis').length,2);
+assert.equal(local.state.entities.filter(e=>e.alive).length,20,'local host enforces the same cap');
+local.state.entities.find(e=>e.type==='naja').alive=false;local.adapter.updateSpawns(clock+=60000);
+assert.equal(local.state.entities.filter(e=>e.alive&&e.type==='naja').length,1);
 // Navigate a wall and a U-shaped enclosure: no teleporting, corner clipping or lost leash.
 function walk(map,start,goal,area){
  const nav=rules.createNavigator(map),e={...start,historyLeashArea:area};let reached=false,detour=false;

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import "../../assets/history/rules.js";
-import { HISTORY_MAP_ID, HISTORY_MAP_WORLD, HISTORY_MAP_SPAWN, HISTORY_MAP_PLAY_BOUNDS, HISTORY_MAP_COLLIDERS, HISTORY_MAP_DOORS, HISTORY_MAP_EVENTS, HISTORY_MAP_OBJECTS } from "./map.js";
+import { HISTORY_MAP_ID, HISTORY_MAP_WORLD, HISTORY_MAP_SPAWN, HISTORY_MAP_PLAY_BOUNDS, HISTORY_MAP_COLLIDERS, HISTORY_MAP_DOORS, HISTORY_MAP_EVENTS, HISTORY_MAP_OBJECTS, HISTORY_MAP_SOLDIER } from "./map.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +12,7 @@ const SERVER_CATALOG = Object.freeze([
   { id: "history-1", name: "Servidor História 1", map: HISTORY_MAP_ID, maxPlayers: 8 }
 ]);
 
-const HISTORY_SCHEMA_VERSION = 13;
+const HISTORY_SCHEMA_VERSION = 14;
 const HistoryRules = globalThis.RampageHistoryRules;
 const HISTORY_GEOMETRY = {width:HISTORY_MAP_WORLD.width,height:HISTORY_MAP_WORLD.height,colliders:HISTORY_MAP_COLLIDERS,doors:HISTORY_MAP_DOORS,destructibles:HISTORY_MAP_OBJECTS};
 const historyNavigation = HistoryRules.createNavigator(HISTORY_GEOMETRY);
@@ -79,6 +79,7 @@ const HISTORY_HEROES = Object.freeze({
   mageFemale: { id: "mageFemale", type: "mage", clan: "warriors", variant: "female" }
 });
 const HISTORY_ENEMY_STATS = Object.freeze({
+  soldier_enemy: Object.freeze({hp:100,shield:50,speed:117,damage:10,range:112,cooldown:4770}),
   naja: Object.freeze({ hp: 300, shield: 250, speed: 117, damage: 25, range: 112, cooldown: 1450 }),
   poseidon: Object.freeze({ hp: 300, shield: 250, speed: 117, damage: 22, range: 255, cooldown: 1750 }),
   anubis: Object.freeze({ hp: 100, shield: 50, speed: 97.5, damage: 20, range: 285, cooldown: 1550 }),
@@ -278,8 +279,10 @@ export class HistoryRoom extends DurableObject {
     HistoryRules.updateBosses(HISTORY_GEOMETRY,this.room.objectState,this.room.doorState,
       Object.values(this.room.players),now,(boss,move,player,push)=>{
         const protectedCharge=now<Number(player.specialActiveUntil||0);
-        const steps=Math.max(1,Math.ceil(Math.hypot(push.x,push.y)/18));
-        if(!protectedCharge)for(let i=0;i<steps;i++)moveHistoryPlayer(player,push.x/steps,push.y/steps,COMBAT_ENTITY_RADIUS,this.room.doorState,this.room.objectState);
+        if(!protectedCharge&&Math.hypot(push.x,push.y)>0){
+          HistoryRules.queuePush(player,push);player.historyPushSerial=(player.historyPushSerial||0)+1;
+          this.broadcast({type:'history_push',uid:player.id,push,serial:player.historyPushSerial,at:now});
+        }
         const origin={id:boss.id,x:boss.x+boss.w/2,y:boss.y+boss.h/2};
         this.applyDamage("player",player,protectedCharge&&move.damage>0?2:Number(move.damage)||0,"boss_attack",boss.id,
           move.hitEffect?.enabled===false?null:normalizedImpact(origin,player,6));
@@ -449,7 +452,26 @@ export class HistoryRoom extends DurableObject {
     }
   }
 
+  updateSoldier(enemy,dt,now) {
+    if(!enemy.alive)return;
+    const knocked=this.stepKnockback(enemy,dt,now);
+    const players=Object.values(this.room.players).filter(p=>p.alive&&pointInArea(p.x,p.y,enemy.historyLeashArea));
+    const target=players.reduce((best,p)=>!best||distance(enemy,p)<distance(enemy,best)?p:best,null);
+    const canHit=(e,p)=>distance(e,p)<=HISTORY_MAP_SOLDIER.range+COMBAT_ENTITY_RADIUS*.36&&historyLineOfSight(e,p,this.room.doorState,0,this.room.objectState);
+    const active=(!knocked||enemy.soldierStartedAt>0)&&HistoryRules.soldierTick(enemy,target,now,HISTORY_MAP_SOLDIER,canHit,(p,damage)=>{
+      const impact=this.armKnockback(p,p.x-enemy.x,p.y-enemy.y,82,75);
+      this.applyDamage('player',p,damage,'soldier_combo',enemy.id,impact);this.defeatPlayer(p,now);
+    });
+    enemy.attackUntil=enemy.soldierUntil||0;
+    if(active||knocked){enemy.moving=false;return}
+    if(!target){enemy.moving=false;return}
+    enemy.heading=Math.atan2(target.y-enemy.y,target.x-enemy.x);enemy.facing=target.x<enemy.x?-1:1;
+    if(!canHit(enemy,target))pursueHistoryEnemy(enemy,target,dt,this.room.doorState,now,this.room.objectState);
+    else enemy.moving=false;
+  }
+
   updateGroundEnemy(enemy, dt, now) {
+    if(enemy?.type==='soldier_enemy'){this.updateSoldier(enemy,dt,now);return}
     if (!enemy?.alive) return;
     if (this.stepKnockback(enemy, dt, now)) return;
     const stats = HISTORY_ENEMY_STATS[enemy.type] || HISTORY_ENEMY_STATS.naja;
@@ -589,7 +611,7 @@ export class HistoryRoom extends DurableObject {
 
   applyClientPose(player, pose, seq) {
     const now = Date.now();
-    if (!player?.alive || !pose || now < Number(player.knockUntil || 0) || now < Number(player.specialActiveUntil || 0)) return false;
+    if (!player?.alive || !pose || now < Number(player.knockUntil || 0) || now < Number(player.specialActiveUntil || 0) || player.historyPushQueue?.length) return false;
     if (!Number.isFinite(Number(pose.x)) || !Number.isFinite(Number(pose.y)) || seq <= Number(player.lastPoseSeq || 0)) return false;
 
     const previousAt = Number(player.lastPoseAt) || now - 95;
@@ -597,7 +619,7 @@ export class HistoryRoom extends DurableObject {
     let targetX = clamp(Number(pose.x), PVP_PLAY_BOUNDS.left, PVP_PLAY_BOUNDS.right);
     let targetY = clamp(Number(pose.y), PVP_PLAY_BOUNDS.top, PVP_PLAY_BOUNDS.bottom);
     const dx = targetX - player.x, dy = targetY - player.y, d = Math.hypot(dx, dy);
-    const normalAllowance = PLAYER_SPEED * (stepMs / 1000) * CLIENT_POSE_SPEED_FACTOR + 22;
+    const normalAllowance = PLAYER_SPEED * HistoryRules.attackMovement(player,now,true) * (stepMs / 1000) * CLIENT_POSE_SPEED_FACTOR + 22;
     const allowance = Number(player.lastPoseSeq) ? normalAllowance : Math.max(normalAllowance, CLIENT_POSE_FIRST_ALLOWANCE_PX);
     if (d > allowance && d > 0) {
       const scale = allowance / d;
@@ -623,6 +645,8 @@ export class HistoryRoom extends DurableObject {
   }
 
   stepKnockback(target, dt, now) {
+    if(target?.alive&&HistoryRules.stepPush(target,dt,(p,dx,dy)=>moveHistoryPlayer(p,dx,dy,COMBAT_ENTITY_RADIUS,this.room.doorState,this.room.objectState)))return true;
+
     if (!target?.alive || now >= Number(target.knockUntil || 0)) {
       if (target) { target.knockUntil = 0; target.knockVX = 0; target.knockVY = 0; }
       return false;
@@ -661,6 +685,7 @@ export class HistoryRoom extends DurableObject {
 
   defeatPlayer(player, now = Date.now()) {
     if (!player?.alive || player.hp > 0) return;
+    player.historyPushQueue=[];
     player.alive = false;
     player.moving = false;
     player.respawnAt = now + PLAYER_RESPAWN_MS;
@@ -818,7 +843,7 @@ export class HistoryRoom extends DurableObject {
       return;
     }
 
-    if (now < Number(player.specialActiveUntil || 0) || now < Number(player.knockUntil || 0)) return;
+    if (now < Number(player.specialActiveUntil || 0)) return;
 
     if (Number(player.comboUntil) > now) {
       player.comboRequestUntil = now + WARRIOR_COMBO_CONTINUE_MS;
@@ -871,7 +896,7 @@ export class HistoryRoom extends DurableObject {
     }
     if (dragon.hp <= 0) {
       const defeatedAt = Date.now();
-      dragon.alive = false; dragon.moving = false; dragon.removeAt = defeatedAt + 1400;
+      dragon.alive = false; dragon.moving = false; dragon.removeAt = defeatedAt + (dragon.type==='soldier_enemy'?HISTORY_MAP_SOLDIER.sprites.death.durationMs+100:1400);
       this.registerDoorDefeat(dragon, defeatedAt);
     }
     return dealt;
@@ -1104,17 +1129,17 @@ export class HistoryRoom extends DurableObject {
       }
 
       this.updateWarriorCombo(player, now);
-      if (this.stepKnockback(player, dt, now)) continue;
+      const knocked=this.stepKnockback(player, dt, now);
       const specialActive = now < Number(player.specialActiveUntil || 0);
       let dx = Number(player.input?.dx) || 0, dy = Number(player.input?.dy) || 0;
       if (specialActive) {
         const angle = Number(player.specialAngle) || 0;
         dx = Math.cos(angle); dy = Math.sin(angle);
       }
-      const moving = specialActive || Math.hypot(dx, dy) > 0.05;
+      const moving = !knocked&&(specialActive || Math.hypot(dx, dy) > 0.05);
       player.moving = moving;
       if (moving) {
-        const speed = PLAYER_SPEED * (specialActive ? WARRIOR_SPECIAL_SPEED_MULTIPLIER : 1);
+        const speed = PLAYER_SPEED * (specialActive ? WARRIOR_SPECIAL_SPEED_MULTIPLIER : HistoryRules.attackMovement(player,now,true));
         moveHistoryPlayer(player, dx * speed * dt, dy * speed * dt, COMBAT_ENTITY_RADIUS, this.room.doorState,this.room.objectState);
       }
 

@@ -77,4 +77,4 @@ assert.equal(rules.firstWallHit(wall,{},60,80,260,80,8,state),null);
 Object.assign(state.crate,{hp:20,broken:false});
 assert.equal(nav.direction(npc,goal,16,{},2,state).x,0,'barrel respawn restores collision and navigation');
 const ellipse=[100,100,80,80,'circle'];assert.equal(rules.rectHitTime(100,100,100,100,ellipse),null);assert.equal(rules.rectHitTime(140,140,140,140,ellipse),0);
-console.log('MAP V8 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and exact editor attack sequence.');
+console.log('MAP V9 PASS: exact editor artwork/geometry/events, cloud/local parity, four combined-condition doors, dynamic collisions, exact 105-frame boss GIF, boss shield/HP and exact editor attack sequence.');

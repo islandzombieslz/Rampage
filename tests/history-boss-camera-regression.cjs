@@ -36,7 +36,7 @@ vm.runInContext(shared+'\n'+fs.readFileSync('history-server/src/map.js','utf8').
 const room=Object.create(worker.Room.prototype);room.room=room.createRoom();room.room.doorState=doors;const emitted=[];room.broadcast=e=>emitted.push(e);
 const hero={...p,hp:350,shield:100};room.room.players={hero};room.updateBosses(clock);
 clock+=3500;room.updateBosses(clock);clock+=1200;room.updateBosses(clock);
-assert.equal(hero.hp,350);assert.equal(hero.shield,50);assert(hero.y>1780);
+assert.equal(hero.hp,350);assert.equal(hero.shield,50);assert.equal(hero.y,1780,'push starts without a teleport');room.stepKnockback(hero,.033,clock+33);assert(hero.y>1780&&hero.y<1800);
 assert(emitted.some(e=>e.type==='damage'&&e.kind==='boss_attack'&&e.amount===50));
 const camEvents=map.events.filter(e=>e.kind==='camera');assert.equal(camEvents.length,2);
 const rt=rules.createCameraState(),heroCamera={alive:true,x:559,y:1950},base={x:559,y:1950,zoom:1};
